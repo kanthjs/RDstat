@@ -224,10 +224,100 @@ test_that("star_read_table detects delimiter, encoding and reads xlsx as text", 
   expect_equal(names(d1), c("g", "y")); expect_equal(d1$y, c("1,5", "2,5"))
   d2 <- star_read_table(w("t,y\ncafé,1\nb,2\n", "latin1"), "a.csv")
   expect_equal(d2$t[1], "café")
+  # Thai Windows-874 / TIS-620, as Excel on a Thai Windows saves "CSV (Comma delimited)"
+  tis <- function(txt) { u <- utf8ToInt(txt); th <- u >= 0x0E01 & u <= 0x0E5B; u[th] <- u[th] - 0x0E01 + 0xA1
+    f <- tempfile(fileext = ".csv"); writeBin(as.raw(u), f); f }
+  d3 <- star_read_table(tis("พันธุ์,ซ้ำที่ 1,ซ้ำที่ 2\nกข41,5557,5706\nปทุมธานี 1,4652,4965\n"), "a.csv")
+  expect_equal(names(d3), c("พันธุ์", "ซ้ำที่ 1", "ซ้ำที่ 2"))
+  expect_equal(d3[[1]], c("กข41", "ปทุมธานี 1"))
+  expect_equal(d3[[3]], c("5706", "4965"))
+  # UTF-16 with a BOM, as Excel saves "Unicode Text" (tab-delimited)
+  u16 <- function(txt, le = TRUE) { u <- utf8ToInt(txt); lo <- u %% 256; hi <- u %/% 256
+    f <- tempfile(fileext = ".txt"); writeBin(as.raw(c(if (le) c(0xFF, 0xFE) else c(0xFE, 0xFF), rbind(if (le) lo else hi, if (le) hi else lo))), f); f }
+  d4 <- star_read_table(u16("พันธุ์\tYield\r\nกข41\t5557\r\n"), "a.txt")
+  expect_equal(names(d4), c("พันธุ์", "Yield")); expect_equal(d4[[1]], "กข41")
+  expect_equal(star_read_table(u16("g\ty\nกข41\t1\n", le = FALSE), "a.txt")$g, "กข41")
+  # UTF-8 with a BOM
+  d5 <- star_read_table(w("﻿พันธุ์,y\nกข41,1\n"), "a.csv")
+  expect_equal(names(d5)[1], "พันธุ์")
+  # an ordinary file gives no notes
+  expect_length(attr(d1, "notes"), 0)
   skip_if_not_installed("openxlsx")
   f <- tempfile(fileext = ".xlsx"); openxlsx::write.xlsx(data.frame(g = c("a", "b"), y = c(1.5, 2.5)), f)
   expect_equal(star_read_table(f, "a.xlsx")$y, c("1.5", "2.5"))
   expect_error(star_read_table(w("only\n1\n"), "a.csv"), "at least two columns")
+})
+
+test_that("star_read_table skips title lines above the header and summary rows below the data", {
+  w <- function(txt) { f <- tempfile(fileext = ".csv"); writeLines(txt, f, useBytes = TRUE); f }
+  d <- star_read_table(w(c("Rice yield trial, Suphan Buri 2025", "", "Variety,Rep,Yield", "RD41,1,5557", "RD41,2,5706",
+                           "RD47,1,4652", "RD47,2,4965", ",,", "Mean,,5220", "CV (%),,4.1", "LSD 0.05,,310")), "a.csv")
+  expect_equal(names(d), c("Variety", "Rep", "Yield"))
+  expect_equal(nrow(d), 4)
+  expect_equal(d$Yield, c("5557", "5706", "4652", "4965"))
+  n <- attr(d, "notes")
+  expect_length(n, 2)
+  expect_match(n[1], "Skipped 1 line above the column names: “Rice yield trial Suphan Buri 2025”", fixed = TRUE)
+  expect_match(n[2], "Skipped 3 summary rows below the data: “Mean”, “CV (%)”, “LSD 0.05”", fixed = TRUE)
+  # Thai labels, a summary label inside the data is kept, and a semicolon file with decimal commas under a title
+  th <- star_read_table(w(c("การทดลอง;ปี 2568", "พันธุ์;ซ้ำ;ผลผลิต", "รวม;1;1,5", "กข41;1;2,5", "เฉลี่ย;;2,0")), "a.csv")
+  expect_equal(names(th), c("พันธุ์", "ซ้ำ", "ผลผลิต"))
+  expect_equal(th[[1]], c("รวม", "กข41"))
+  expect_equal(th[[3]], c("1,5", "2,5"))
+  # a missing value in the first data row does not make the header look like a title
+  m <- star_read_table(w(c("g,y,z", "a,,1", "b,2,3")), "a.csv")
+  expect_equal(names(m), c("g", "y", "z")); expect_true(is.na(m$y[1])); expect_length(attr(m, "notes"), 0)
+  # empty columns before and after the table (it starts in column B, or rows end in extra commas)
+  e <- star_read_table(w(c(",g,y,,", ",a,1,,", ",b,2,,")), "a.csv")
+  expect_equal(names(e), c("g", "y")); expect_equal(e$y, c("1", "2"))
+  expect_true(star_is_summary_label("Grand mean:")); expect_false(star_is_summary_label("RD41"))
+  skip_if_not_installed("writexl")
+  f <- tempfile(fileext = ".xlsx")
+  writexl::write_xlsx(data.frame(a = c("Trial 1", "Variety", "RD41", "RD47", "Average"), b = c(NA, "Yield", "5557", "4652", "5105")), f, col_names = FALSE)
+  x <- star_read_table(f, "a.xlsx")
+  expect_equal(names(x), c("Variety", "Yield")); expect_equal(x$Variety, c("RD41", "RD47"))
+  expect_length(attr(x, "notes"), 2)
+})
+
+test_that("star_read_table repeats labels typed once for several rows (merged cells)", {
+  w <- function(txt) { f <- tempfile(fileext = ".csv"); writeLines(txt, f, useBytes = TRUE); f }
+  # CSV saved from a sheet with merged variety cells: the name is on the first row of each group only
+  d <- star_read_table(w(c("Variety,Rep,Yield", "RD41,1,5557", ",2,5706", ",3,5410", "RD47,1,4652", ",2,4965", ",3,4810")), "a.csv")
+  expect_equal(d$Variety, rep(c("RD41", "RD47"), each = 3))
+  expect_match(attr(d, "notes"), "Column Variety: each label was typed once for 3 rows", fixed = TRUE)
+  # replication numbers merged over the varieties (sorted by replication)
+  r <- star_read_table(w(c("Rep,Variety,Yield", "1,A,5", ",B,6", "2,A,5.5", ",B,6.2")), "a.csv")
+  expect_equal(r$Rep, c("1", "1", "2", "2"))
+  # not filled: a response measured on every other plot, and blank labels in groups of different sizes
+  y <- star_read_table(w(c("g,y", "a,1.5", "b,", "c,2.7", "d,")), "a.csv")
+  expect_true(all(is.na(y$y[c(2, 4)]))); expect_length(attr(y, "notes"), 0)
+  u <- star_read_table(w(c("g,y", "a,1", ",2", "b,3", ",4", ",5")), "a.csv")
+  expect_equal(sum(is.na(u$g)), 3)
+  skip_if_not_installed("openxlsx")
+  # Excel: a title merged across the table, the variety merged over its replications
+  wb <- openxlsx::createWorkbook(); openxlsx::addWorksheet(wb, "Data")
+  openxlsx::writeData(wb, "Data", "Rice trial 2025", startRow = 1)
+  openxlsx::writeData(wb, "Data", data.frame(Variety = c("RD41", NA, NA, "RD47", NA, NA), Rep = rep(1:3, 2), Yield = c(5557, 5706, 5410, 4652, 4965, 4810)), startRow = 2)
+  openxlsx::mergeCells(wb, "Data", cols = 1:3, rows = 1); openxlsx::mergeCells(wb, "Data", cols = 1, rows = 3:5); openxlsx::mergeCells(wb, "Data", cols = 1, rows = 6:8)
+  f <- tempfile(fileext = ".xlsx"); openxlsx::saveWorkbook(wb, f)
+  x <- star_read_table(f, "a.xlsx")
+  expect_equal(names(x), c("Variety", "Rep", "Yield"))
+  expect_equal(x$Variety, rep(c("RD41", "RD47"), each = 3))
+  n <- attr(x, "notes")
+  expect_match(n[1], "Repeated the label of 2 merged cells on every row they cover (4 cells filled in).", fixed = TRUE)
+  expect_match(n[2], "Skipped 1 line above the column names", fixed = TRUE)
+  # a two-row heading: "พันธุ์" merged down two rows, "ผลผลิต" merged across the replications above ซ้ำที่ 1, 2, 3
+  wb <- openxlsx::createWorkbook(); openxlsx::addWorksheet(wb, "S")
+  openxlsx::writeData(wb, "S", t(c("พันธุ์", "ผลผลิต", NA, NA)), colNames = FALSE, startRow = 1)
+  openxlsx::writeData(wb, "S", t(c(NA, "ซ้ำที่ 1", "ซ้ำที่ 2", "ซ้ำที่ 3")), colNames = FALSE, startRow = 2)
+  openxlsx::writeData(wb, "S", data.frame(a = c("กข41", "กข47"), b = c(5557, 4652), c = c(5706, 4965), d = c(5410, 4810)), colNames = FALSE, startRow = 3)
+  openxlsx::mergeCells(wb, "S", cols = 1, rows = 1:2); openxlsx::mergeCells(wb, "S", cols = 2:4, rows = 1)
+  f2 <- tempfile(fileext = ".xlsx"); openxlsx::saveWorkbook(wb, f2)
+  h <- star_read_table(f2, "a.xlsx")
+  expect_equal(names(h), c("พันธุ์", "ซ้ำที่ 1", "ซ้ำที่ 2", "ซ้ำที่ 3"))
+  expect_equal(h[["ซ้ำที่ 3"]], c("5410", "4810"))
+  # a file that is not a valid zip gives no merges rather than an error
+  expect_equal(nrow(star_xlsx_merges(w("not a zip"))), 0)
 })
 
 test_that("diagnostics: outliers are found (row 5 of Insecticides is borderline, a x6 value is clear), a clean set is not flagged", {

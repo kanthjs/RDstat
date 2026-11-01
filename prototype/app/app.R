@@ -232,6 +232,30 @@ wide_rep_cols <- function(d) {
   cols <- cols[vapply(cols, function(cc) { v <- d[[cc]][!star_is_blank(d[[cc]])]; length(v) > 0 && mean(!is.na(star_parse_number(v))) > 0.5 }, NA)]
   if (length(cols) >= 2 && length(cols) < ncol(d)) cols else character()
 }
+# first choices of the variables for an uploaded file, from the column names rather than their order (a file laid
+# out Variety, Rep, Yield must not get Variety as the block): a column named like Rep, Block, ซ้ำ or บล็อก is the
+# block, one named like Site, Season, Year, สถานที่ or ฤดู the environment, and the treatments are the other columns
+# that hold labels (text, or numbers with few distinct values such as rates), in file order (main plot before sub
+# plot); never the response
+guess_roles <- function(d, resp) {
+  nm <- names(d)
+  match1 <- function(rx) nm[grepl(rx, trimws(nm), ignore.case = TRUE, perl = TRUE) & nm != resp][1]
+  blk <- match1("^(rep(lication)?s?|r|block|blocks|blk|b|ซ้ำ(ที่)?|บล็อ[กค](ที่)?)\\s*(no\\.?|number|#)?$")
+  env <- match1("^(env(ironment)?|site|location|loc|year|season|trial|สถานที่|ปี|ฤดู(กาล)?|ฤดูปลูก|จังหวัด)$")
+  rest <- setdiff(nm, c(resp, blk, env))
+  num <- numeric_cols(d)
+  few <- vapply(rest, function(cc) length(unique(d[[cc]][!star_is_blank(d[[cc]])])) <= max(2, nrow(d) %/% 2), NA)
+  trt <- rest[!rest %in% num | few]
+  # no column is named like a block: one numbered 1, 2, ..., k is most likely the replication
+  if (is.na(blk)) for (cc in intersect(trt, num)) {
+    v <- sort(unique(star_parse_number(d[[cc]][!star_is_blank(d[[cc]])])))
+    if (length(v) >= 2 && all(v == seq_along(v))) { blk <- cc; trt <- setdiff(trt, cc); break }
+  }
+  if (!length(trt)) trt <- c(rest, stats::na.omit(env))
+  if (is.na(blk)) blk <- setdiff(nm, c(resp, trt[1], env))[1]
+  list(blk = if (is.na(blk)) nm[1] else blk, env = if (is.na(env)) nm[1] else env,
+       trt = if (length(trt)) trt else nm[min(2, length(nm))])
+}
 # wide -> long: the replication columns are stacked into a Rep column (their number) and one value column
 wide_to_long <- function(d, cols, value = "Value") {
   ids <- setdiff(names(d), cols)
@@ -371,7 +395,14 @@ reg_setup <- list(cars_multi = list(file = "example_cars.csv", resp = "mpg", pre
 data_source_ui <- function(p, examples, help = NULL) tagList(
   radioButtons(paste0(p, "_src"), NULL, c("Built-in example" = "ex", "Upload file" = "up"), inline = TRUE),
   conditionalPanel(sprintf("input.%s_src == 'ex'", p), selectInput(paste0(p, "_example"), "Example", examples)),
-  conditionalPanel(sprintf("input.%s_src == 'up'", p), fileInput(paste0(p, "_file"), "Data file (.csv, .txt, .xlsx)", accept = c(".csv", ".txt", ".tsv", ".xlsx")), help))
+  conditionalPanel(sprintf("input.%s_src == 'up'", p), fileInput(paste0(p, "_file"), "Data file (.csv, .txt, .xlsx)", accept = c(".csv", ".txt", ".tsv", ".xlsx")),
+                   uiOutput(paste0(p, "_read_note")), help))
+# what the file reader skipped (title lines above the column names, summary rows below the data), so it is not a surprise
+read_note_ui <- function(d) {
+  notes <- attr(d, "notes")
+  if (length(notes)) div(class = "alert alert-info small", icon("circle-info"), " ", strong("Read from the file: "),
+                         tags$ul(class = "mb-0", lapply(notes, tags$li)))
+}
 # the label boxes are folded away until wanted, so that the plot comes first on a small screen
 plot_labels_ui <- function(p) tags$details(class = "plot-labels",
   tags$summary("Title and axis labels (optional)"),
@@ -811,7 +842,7 @@ ui <- bslib::page_navbar(
         conditionalPanel("input.src == 'up'", fileInput("file", "Data file (.csv, .txt, .xlsx)", accept = c(".csv", ".txt", ".tsv", ".xlsx")),
                          div(style = "margin: -6px 0 10px;",
                              downloadLink("dl_template", tagList(icon("file-arrow-down"), " Download blank Excel template (", textOutput("template_label", inline = TRUE), ")"))),
-                         long_format_help(), uiOutput("wide_note"))),
+                         uiOutput("read_note"), long_format_help(), uiOutput("wide_note"))),
       side_step(3, "Variables", uiOutput("var_pickers")),
       advanced_box(
         selectInput("transform", "Data transformation",
@@ -1047,28 +1078,31 @@ observeEvent(input$cp_mrefs, session$sendCustomMessage("copy_text", list(what = 
         sprintf("the columns %s each hold one replication. The analysis needs one row per plot (long format).", paste(cols, collapse = ", ")),
         div(class = "mt-2", actionButton("wide_convert", "Convert to long format", class = "btn-warning btn-sm")))
   })
+  output$read_note <- renderUI(if (input$src == "up") read_note_ui(raw_dat()))
   output$data_ui <- renderUI(data_preview_ui(dat()))
   output$var_pickers <- renderUI({
     d <- dat(); nm <- names(d); s <- setup()
     num <- numeric_cols(d)
     resp_choices <- if (length(num)) num else nm
     resp_sel <- if (!is.null(s) && s$resp %in% resp_choices) s$resp else tail(resp_choices, 1)
+    # an example brings its own choices; for an uploaded file they are guessed from the column names
+    g <- if (is.null(s)) guess_roles(d, resp_sel) else list(blk = s$blk, env = s$env, trt = s$trt)
     tagList(
       selectInput("resp", "Response variable (numeric)", resp_choices, selected = resp_sel),
       if (is_split(input$design)) tagList(
-        selectInput("trt_main", "Main-plot factor", nm, selected = if (!is.null(s)) s$trt[1] else nm[min(2, length(nm))]),
-        selectInput("trt_sub", "Sub-plot factor", nm, selected = if (!is.null(s)) s$trt[2] else nm[min(3, length(nm))]))
+        selectInput("trt_main", "Main-plot factor", nm, selected = g$trt[1]),
+        selectInput("trt_sub", "Sub-plot factor", nm, selected = if (length(g$trt) > 1) g$trt[2] else nm[min(3, length(nm))]))
       else if (is_comb(input$design)) tagList(
-        selectInput("trt", "Treatment factor (one)", nm, selected = if (!is.null(s)) s$trt else nm[min(2, length(nm))]),
-        selectInput("env", "Environment: site, season or year", nm, selected = if (!is.null(s)) s$env else nm[1]))
+        selectInput("trt", "Treatment factor (one)", nm, selected = g$trt[1]),
+        selectInput("env", "Environment: site, season or year", nm, selected = g$env))
       else selectizeInput("trt", "Treatment factor(s): one or two", nm, multiple = TRUE,
-                     selected = if (!is.null(s)) s$trt else nm[min(2, length(nm))], options = list(maxItems = 2)),
-      if (input$design == "CombRCBD") tagList(selectInput("blk", "Block / replication within each environment", nm, selected = if (!is.null(s)) s$blk else nm[1]),
+                     selected = if (is.null(s)) g$trt[1] else s$trt, options = list(maxItems = 2)),
+      if (input$design == "CombRCBD") tagList(selectInput("blk", "Block / replication within each environment", nm, selected = g$blk),
                                               helpText("Blocks are numbered within each environment (block 1 at one site is not block 1 at another); the analysis nests them in the environment.")),
-      if (input$design == "SplitCRD") tagList(selectInput("blk", "Replication: main-plot number within each main-plot level", nm, selected = if (!is.null(s)) s$blk else nm[1]),
+      if (input$design == "SplitCRD") tagList(selectInput("blk", "Replication: main-plot number within each main-plot level", nm, selected = g$blk),
                                               helpText("1, 2, 3, ... for the main plots of each level of the main-plot factor. Not a block: in CRD the main plots are not grouped.")),
-      if (input$design == "RCBD") selectInput("blk", "Block / replication", nm, selected = if (!is.null(s)) s$blk else nm[1]),
-      if (input$design == "SplitRCBD") tagList(selectInput("blk", "Block: group of main plots holding every main-plot level", nm, selected = if (!is.null(s)) s$blk else nm[1]),
+      if (input$design == "RCBD") selectInput("blk", "Block / replication", nm, selected = g$blk),
+      if (input$design == "SplitRCBD") tagList(selectInput("blk", "Block: group of main plots holding every main-plot level", nm, selected = g$blk),
                                                helpText("The block (replication) each main plot is in, not a number of the main plot itself.")),
       if (is_split(input$design)) tagList(uiOutput("split_check"),
         help_box("Block or main-plot number?",
@@ -1328,12 +1362,16 @@ observeEvent(input$cp_mrefs, session$sendCustomMessage("copy_text", list(what = 
   })
 
   # ---- shared by the correlation and regression screens ----
-  use_data <- function(p, setups) reactive({
-    if (input[[paste0(p, "_src")]] == "ex") { s <- setups[[input[[paste0(p, "_example")]]]]; req(s); return(read.csv(s$file)) }
-    f <- input[[paste0(p, "_file")]]; req(f)
-    tryCatch(star_read_table(f$datapath, f$name),
-             error = function(e) { showNotification(paste("Could not read the file:", conditionMessage(e)), type = "error"); req(FALSE) })
-  })
+  use_data <- function(p, setups) {
+    d <- reactive({
+      if (input[[paste0(p, "_src")]] == "ex") { s <- setups[[input[[paste0(p, "_example")]]]]; req(s); return(read.csv(s$file)) }
+      f <- input[[paste0(p, "_file")]]; req(f)
+      tryCatch(star_read_table(f$datapath, f$name),
+               error = function(e) { showNotification(paste("Could not read the file:", conditionMessage(e)), type = "error"); req(FALSE) })
+    })
+    output[[paste0(p, "_read_note")]] <- renderUI(if (input[[paste0(p, "_src")]] == "up") read_note_ui(d()))
+    d
+  }
   example_of <- function(p, setups) if (input[[paste0(p, "_src")]] == "ex") setups[[input[[paste0(p, "_example")]]]]
   as_error <- function(e) structure(list(message = conditionMessage(e)), class = "star_error")
   plot_download <- function(p, plot_fn) downloadHandler(
