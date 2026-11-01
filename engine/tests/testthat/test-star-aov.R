@@ -279,6 +279,47 @@ test_that("star_read_table skips title lines above the header and summary rows b
   expect_length(attr(x, "notes"), 2)
 })
 
+test_that("star_read_table repeats labels typed once for several rows (merged cells)", {
+  w <- function(txt) { f <- tempfile(fileext = ".csv"); writeLines(txt, f, useBytes = TRUE); f }
+  # CSV saved from a sheet with merged variety cells: the name is on the first row of each group only
+  d <- star_read_table(w(c("Variety,Rep,Yield", "RD41,1,5557", ",2,5706", ",3,5410", "RD47,1,4652", ",2,4965", ",3,4810")), "a.csv")
+  expect_equal(d$Variety, rep(c("RD41", "RD47"), each = 3))
+  expect_match(attr(d, "notes"), "Column Variety: each label was typed once for 3 rows", fixed = TRUE)
+  # replication numbers merged over the varieties (sorted by replication)
+  r <- star_read_table(w(c("Rep,Variety,Yield", "1,A,5", ",B,6", "2,A,5.5", ",B,6.2")), "a.csv")
+  expect_equal(r$Rep, c("1", "1", "2", "2"))
+  # not filled: a response measured on every other plot, and blank labels in groups of different sizes
+  y <- star_read_table(w(c("g,y", "a,1.5", "b,", "c,2.7", "d,")), "a.csv")
+  expect_true(all(is.na(y$y[c(2, 4)]))); expect_length(attr(y, "notes"), 0)
+  u <- star_read_table(w(c("g,y", "a,1", ",2", "b,3", ",4", ",5")), "a.csv")
+  expect_equal(sum(is.na(u$g)), 3)
+  skip_if_not_installed("openxlsx")
+  # Excel: a title merged across the table, the variety merged over its replications
+  wb <- openxlsx::createWorkbook(); openxlsx::addWorksheet(wb, "Data")
+  openxlsx::writeData(wb, "Data", "Rice trial 2025", startRow = 1)
+  openxlsx::writeData(wb, "Data", data.frame(Variety = c("RD41", NA, NA, "RD47", NA, NA), Rep = rep(1:3, 2), Yield = c(5557, 5706, 5410, 4652, 4965, 4810)), startRow = 2)
+  openxlsx::mergeCells(wb, "Data", cols = 1:3, rows = 1); openxlsx::mergeCells(wb, "Data", cols = 1, rows = 3:5); openxlsx::mergeCells(wb, "Data", cols = 1, rows = 6:8)
+  f <- tempfile(fileext = ".xlsx"); openxlsx::saveWorkbook(wb, f)
+  x <- star_read_table(f, "a.xlsx")
+  expect_equal(names(x), c("Variety", "Rep", "Yield"))
+  expect_equal(x$Variety, rep(c("RD41", "RD47"), each = 3))
+  n <- attr(x, "notes")
+  expect_match(n[1], "Repeated the label of 2 merged cells on every row they cover (4 cells filled in).", fixed = TRUE)
+  expect_match(n[2], "Skipped 1 line above the column names", fixed = TRUE)
+  # a two-row heading: "พันธุ์" merged down two rows, "ผลผลิต" merged across the replications above ซ้ำที่ 1, 2, 3
+  wb <- openxlsx::createWorkbook(); openxlsx::addWorksheet(wb, "S")
+  openxlsx::writeData(wb, "S", t(c("พันธุ์", "ผลผลิต", NA, NA)), colNames = FALSE, startRow = 1)
+  openxlsx::writeData(wb, "S", t(c(NA, "ซ้ำที่ 1", "ซ้ำที่ 2", "ซ้ำที่ 3")), colNames = FALSE, startRow = 2)
+  openxlsx::writeData(wb, "S", data.frame(a = c("กข41", "กข47"), b = c(5557, 4652), c = c(5706, 4965), d = c(5410, 4810)), colNames = FALSE, startRow = 3)
+  openxlsx::mergeCells(wb, "S", cols = 1, rows = 1:2); openxlsx::mergeCells(wb, "S", cols = 2:4, rows = 1)
+  f2 <- tempfile(fileext = ".xlsx"); openxlsx::saveWorkbook(wb, f2)
+  h <- star_read_table(f2, "a.xlsx")
+  expect_equal(names(h), c("พันธุ์", "ซ้ำที่ 1", "ซ้ำที่ 2", "ซ้ำที่ 3"))
+  expect_equal(h[["ซ้ำที่ 3"]], c("5410", "4810"))
+  # a file that is not a valid zip gives no merges rather than an error
+  expect_equal(nrow(star_xlsx_merges(w("not a zip"))), 0)
+})
+
 test_that("diagnostics: outliers are found (row 5 of Insecticides is borderline, a x6 value is clear), a clean set is not flagged", {
   clean <- star_aov(rcbd, "Yield", "Nitrogen", "Rep", design = "RCBD")$diagnostics
   expect_s3_class(clean, "star_diagnostics")

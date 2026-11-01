@@ -271,6 +271,29 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   session$setInputs(file = list(datapath = f2, name = "titled.csv", size = file.size(f2), type = "text/csv"))
   check(nrow(dat()) == 3 && identical(names(dat())[1], "Variety") && grepl("Rice yield trial 2025", html(output$read_note)) && grepl("Mean", html(output$read_note)),
         "Read note: title line and summary row are skipped and shown")
+  # first choices of the variables for an upload come from the column names, not their order
+  g <- guess_roles(setNames(data.frame(c("A", "A", "B", "B"), c(1, 2, 1, 2), c(5, 6, 4, 5)), c("พันธุ์", "ซ้ำ", "ผลผลิต")), "ผลผลิต")
+  check(identical(g$blk, "ซ้ำ") && identical(g$trt[1], "พันธุ์"), "Roles: Thai variety first, ซ้ำ second gives ซ้ำ as the block")
+  sp <- read.csv("example_split.csv"); g <- guess_roles(sp, "Yield")
+  check(identical(g$blk, "Rep") && identical(g$trt[1:2], c("Nitrogen", "Variety")), "Roles: split plot file gives Rep as block and the factors in file order (main plot first)")
+  cb <- read.csv("example_comb_rcbd.csv"); g <- guess_roles(cb, "GrainYield")
+  check(identical(g$env, "Season") && identical(g$blk, "Rep") && identical(g$trt[1], "NitrogenRate"), "Roles: combined trial gives Season as environment")
+  g <- guess_roles(data.frame(Treatment = rep(c("a", "b", "c"), 4), Height = c(5.1, 6.2, 4.3, 5.5, 6.1, 4.9, 5.2, 6.6, 4.1, 5.8, 6.3, 4.4), Yield = 1:12 + 0.5), "Yield")
+  check(identical(g$trt[1], "Treatment") && !"Height" %in% g$trt, "Roles: another measured trait is not offered as a treatment")
+  g <- guess_roles(data.frame(x = rep(1:3, 2), z = rep(c("a", "b"), each = 3), y = c(1.1, 2, 3.3, 4.2, 5, 6.7)), "y")
+  check(identical(g$trt[1], "z") && identical(g$blk, "x"), "Roles: with no recognised names the block is the remaining label column")
+  f4 <- tempfile(fileext = ".csv"); writeLines(c("พันธุ์,ซ้ำ,ผลผลิต", "กข41,1,5557", "กข41,2,5706", "กข47,1,4652", "กข47,2,4965"), f4)
+  session$setInputs(design = "RCBD", src = "up", file = list(datapath = f4, name = "thai.csv", size = file.size(f4), type = "text/csv"))
+  vp <- html(output$var_pickers)
+  check(grepl("<option value=\"ซ้ำ\" selected>", sub(".*id=\"blk\"", "", vp)) && grepl("<option value=\"พันธุ์\" selected>", sub(".*id=\"trt\"(.*)id=\"blk\".*", "\\1", vp)),
+        "Roles: shown as the first choices on the screen")
+  # variety names typed once per group (merged cells in Excel, saved as CSV): every plot is kept and analysed
+  f3 <- tempfile(fileext = ".csv")
+  writeLines(c("Variety,Rep,Yield", "RD41,1,5557", ",2,5706", ",3,5410", "RD47,1,4652", ",2,4965", ",3,4810", "RD49,1,5120", ",2,5302", ",3,5050"), f3)
+  session$setInputs(design = "RCBD", file = list(datapath = f3, name = "merged.csv", size = file.size(f3), type = "text/csv"))
+  check(identical(dat()$Variety, rep(c("RD41", "RD47", "RD49"), each = 3)) && grepl("typed once", html(output$read_note)), "Merged labels: repeated on every row and shown")
+  session$setInputs(resp = "Yield", trt = "Variety", blk = "Rep"); run(pw = "LSD")
+  check(!inherits(res(), "star_error") && ok()$anova$DF[ok()$anova$Source == "Error"] == 4, "Merged labels: all 9 plots analysed as RCBD (error df 4)")
   session$setInputs(src = "ex")
 
   # ---- split plot: the block / replication column is checked before running ----

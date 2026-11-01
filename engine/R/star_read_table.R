@@ -7,12 +7,24 @@
 ## The table need not start in the first row: title lines above the column names (an experiment name, a date) are
 ## skipped, as are empty columns and summary rows below the data (Mean, Total, CV, LSD, เฉลี่ย, รวม, ...). What was
 ## skipped is described in attr(result, "notes"), so that the user can see it.
+##
+## Labels typed once for several rows are repeated on every row: cells merged down a column in Excel (a variety
+## name merged over its replications), and in any file a label column whose blanks come in equal runs under each
+## label (what is left of merged cells after saving as CSV). Without this the rows with a blank label were dropped.
 
 star_read_table <- function(path, name = path) {
   ext <- tolower(sub(".*[.]", "", name))
+  notes <- character()
   raw <- if (ext %in% c("xlsx", "xlsm")) {
     if (!requireNamespace("readxl", quietly = TRUE)) stop("Reading Excel files needs the 'readxl' package.")
-    as.data.frame(readxl::read_excel(path, sheet = 1, col_names = FALSE, col_types = "text", .name_repair = "minimal"))
+    # from cell A1, blank rows and columns included, so that row and column numbers match the merged ranges
+    cells <- as.data.frame(readxl::read_excel(path, sheet = 1, col_names = FALSE, col_types = "text", .name_repair = "minimal",
+                                              range = readxl::cell_limits(c(1, 1), c(NA, NA))))
+    filled <- star_fill_merged(cells, star_xlsx_merges(path))
+    if (filled$n) notes <- sprintf("Repeated the label of %d merged cell%s on every row %s cover%s (%d cell%s filled in).",
+                                   filled$ranges, if (filled$ranges > 1) "s" else "", if (filled$ranges > 1) "they" else "it",
+                                   if (filled$ranges > 1) "" else "s", filled$n, if (filled$n > 1) "s" else "")
+    filled$cells
   } else if (ext == "xls") {
     stop("Old .xls files are not supported; save the sheet as .xlsx or .csv.")
   } else {
@@ -28,7 +40,70 @@ star_read_table <- function(path, name = path) {
       strip.white = TRUE, na.strings = c("", "NA"), fill = TRUE, encoding = "UTF-8"
     )
   }
-  star_table_from_cells(raw)
+  star_table_from_cells(raw, notes)
+}
+
+## merged ranges of the first sheet of an .xlsx file, as a matrix with columns r1, c1, r2, c2 (none if the file
+## cannot be read this way). An .xlsx file is a zip of XML files; the ranges are <mergeCell ref="A2:A4"/> elements.
+star_xlsx_merges <- function(path) {
+  none <- matrix(integer(), 0, 4, dimnames = list(NULL, c("r1", "c1", "r2", "c2")))
+  tryCatch({
+    d <- tempfile("xlsx"); on.exit(unlink(d, recursive = TRUE))
+    read_part <- function(part) { utils::unzip(path, part, exdir = d); paste(readLines(file.path(d, part), warn = FALSE, encoding = "UTF-8"), collapse = "") }
+    wb <- read_part("xl/workbook.xml")
+    sheet <- regmatches(wb, regexpr("<sheet\\s[^>]*>", wb))
+    rid <- sub(".*\\s[A-Za-z0-9_]+:id=\"([^\"]+)\".*", "\\1", sheet)
+    rels <- read_part("xl/_rels/workbook.xml.rels")
+    rels <- regmatches(rels, gregexpr("<Relationship\\s[^>]*>", rels))[[1]]
+    rel <- rels[grepl(sprintf("\\sId=\"%s\"", rid), rels)][1]
+    target <- sub(".*\\sTarget=\"([^\"]+)\".*", "\\1", rel)
+    target <- if (startsWith(target, "/")) substring(target, 2) else paste0("xl/", target)
+    xml <- read_part(target)
+    refs <- regmatches(xml, gregexpr("<mergeCell\\s[^>]*ref=\"[A-Z]+[0-9]+:[A-Z]+[0-9]+\"", xml))[[1]]
+    if (!length(refs)) return(none)
+    refs <- sub(".*ref=\"([^\"]+)\"", "\\1", refs)
+    ends <- do.call(rbind, strsplit(refs, ":", fixed = TRUE))
+    col_num <- function(a) vapply(strsplit(sub("[0-9]+$", "", a), ""), \(ch) Reduce(\(n, k) n * 26L + k, match(ch, LETTERS), 0L), 0L)
+    row_num <- function(a) as.integer(sub("^[A-Z]+", "", a))
+    cbind(r1 = row_num(ends[, 1]), c1 = col_num(ends[, 1]), r2 = row_num(ends[, 2]), c2 = col_num(ends[, 2]))
+  }, error = function(e) none, warning = function(w) none)
+}
+
+## copy the value of each merged range spanning several rows into its empty cells. Ranges within one row (a heading
+## over several columns) are left alone: those are headings, not labels of rows.
+star_fill_merged <- function(cells, merges) {
+  n <- 0L; ranges <- 0L
+  for (i in seq_len(nrow(merges))) {
+    g <- merges[i, ]
+    if (g[["r2"]] <= g[["r1"]] || g[["r1"]] > nrow(cells) || g[["c1"]] > ncol(cells)) next
+    rows <- g[["r1"]]:min(g[["r2"]], nrow(cells)); cols <- g[["c1"]]:min(g[["c2"]], ncol(cells))
+    v <- cells[[g[["c1"]]]][g[["r1"]]]
+    if (is.na(v) || !nzchar(trimws(v))) next
+    hit <- 0L
+    for (j in cols) { e <- is.na(cells[[j]][rows]) | !nzchar(trimws(cells[[j]][rows])); cells[[j]][rows[e]] <- v; hit <- hit + sum(e) }
+    if (hit) { n <- n + hit; ranges <- ranges + 1L }
+  }
+  list(cells = cells, n = n, ranges = ranges)
+}
+
+## a column whose labels are typed once and left blank below for the rest of their group (2, 3, ... rows each, all
+## groups the same size) gets them repeated. Only label columns: text, or whole numbers counting up (1, 2, 3, ...),
+## so that a response measured on every other plot is not filled in.
+star_fill_down <- function(m, nm) {
+  notes <- character()
+  for (j in seq_len(ncol(m))) {
+    v <- m[, j]; blank <- !nzchar(v)
+    if (!any(blank) || blank[1]) next
+    starts <- which(!blank)
+    runs <- diff(c(starts, length(v) + 1L))
+    if (length(starts) < 2 || length(unique(runs)) != 1 || runs[1] < 2) next
+    num <- suppressWarnings(as.numeric(v[starts]))
+    if (mean(!is.na(num)) > 0.5 && !(all(!is.na(num)) && all(diff(num) == 1) && all(num == round(num)))) next
+    m[, j] <- rep(v[starts], runs)
+    notes <- c(notes, sprintf("Column %s: each label was typed once for %d rows (cells merged in Excel?), so it was repeated on the %d blank rows below it.",
+                              nm[j], runs[1], sum(blank)))
+  }
+  list(m = m, notes = notes)
 }
 
 ## the delimiter that splits the most lines into the same number of fields (a title line above the table, or
@@ -47,11 +122,10 @@ star_guess_sep <- function(lines) {
 }
 
 ## a grid of cells (all text, no header yet) -> the data frame under its header row, with notes on what was dropped
-star_table_from_cells <- function(raw) {
+star_table_from_cells <- function(raw, notes = character()) {
   if (!is.data.frame(raw) || !nrow(raw) || !ncol(raw)) stop("The file is empty.")
   m <- vapply(raw, \(v) { v <- trimws(as.character(v)); v[is.na(v)] <- ""; v }, character(nrow(raw)))
   if (!is.matrix(m)) m <- matrix(m, nrow = nrow(raw))
-  notes <- character()
   m <- m[, colSums(m != "") > 0, drop = FALSE]
   m <- m[rowSums(m != "") > 0, , drop = FALSE]
   if (!nrow(m)) stop("The file is empty.")
@@ -84,6 +158,8 @@ star_table_from_cells <- function(raw) {
                               paste0("“", lab[rows], "”", collapse = ", ")))
     m <- m[-rows, , drop = FALSE]
   }
+  fd <- star_fill_down(m, nm)
+  m <- fd$m; notes <- c(notes, fd$notes)
   if (length(nm) < 2 || nrow(m) < 1) stop("The file needs a header row, at least two columns and one data row.")
   if (anyDuplicated(nm) || any(!nzchar(nm))) stop("Column names must be non-empty and unique.")
   m[m == ""] <- NA
