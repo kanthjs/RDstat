@@ -4,6 +4,8 @@ Changes to the RDstat web app that can affect results are marked **(results)**. 
 
 ## 0.1.0 (unreleased)
 - First public build: ANOVA (CRD, RCBD, split plot), correlation and linear regression.
+- Uploaded files: Thai CSV files saved by Excel on Windows (Windows-874 / TIS-620) and Excel's "Unicode Text" (UTF-16) files are read correctly; title lines above the column names and empty columns are skipped, and the app says what it skipped.
+- **(results)** Summary rows typed below the data (Mean, Total, CV (%), LSD 0.05, SE, เฉลี่ย, รวม, ...) are no longer read as plots; earlier builds analysed such a row as one more treatment.
 - Only the engine files the app uses are bundled, so the app opens faster.
 - About tab with license, citation and problem-reporting link; app version written to Excel and TXT downloads.
 - Home page ("What do you want to do?"), Methods page with a copyable methods sentence, collapsible "What does this mean?" help, maintainer and disclaimer in About, app name kept in one place (`app_name`), deployment notes for IT in `docs/DEPLOY.md`.

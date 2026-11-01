@@ -367,7 +367,14 @@ reg_setup <- list(cars_multi = list(file = "example_cars.csv", resp = "mpg", pre
 data_source_ui <- function(p, examples, help = NULL) tagList(
   radioButtons(paste0(p, "_src"), NULL, c("Built-in example" = "ex", "Upload file" = "up"), inline = TRUE),
   conditionalPanel(sprintf("input.%s_src == 'ex'", p), selectInput(paste0(p, "_example"), "Example", examples)),
-  conditionalPanel(sprintf("input.%s_src == 'up'", p), fileInput(paste0(p, "_file"), "Data file (.csv, .txt, .xlsx)", accept = c(".csv", ".txt", ".tsv", ".xlsx")), help))
+  conditionalPanel(sprintf("input.%s_src == 'up'", p), fileInput(paste0(p, "_file"), "Data file (.csv, .txt, .xlsx)", accept = c(".csv", ".txt", ".tsv", ".xlsx")),
+                   uiOutput(paste0(p, "_read_note")), help))
+# what the file reader skipped (title lines above the column names, summary rows below the data), so it is not a surprise
+read_note_ui <- function(d) {
+  notes <- attr(d, "notes")
+  if (length(notes)) div(class = "alert alert-info small", icon("circle-info"), " ", strong("Read from the file: "),
+                         tags$ul(class = "mb-0", lapply(notes, tags$li)))
+}
 # the label boxes are folded away until wanted, so that the plot comes first on a small screen
 plot_labels_ui <- function(p) tags$details(class = "plot-labels",
   tags$summary("Title and axis labels (optional)"),
@@ -726,7 +733,7 @@ ui <- bslib::page_navbar(
         conditionalPanel("input.src == 'up'", fileInput("file", "Data file (.csv, .txt, .xlsx)", accept = c(".csv", ".txt", ".tsv", ".xlsx")),
                          div(style = "margin: -6px 0 10px;",
                              downloadLink("dl_template", tagList(icon("file-arrow-down"), " Download blank Excel template (", textOutput("template_label", inline = TRUE), ")"))),
-                         long_format_help(), uiOutput("wide_note"))),
+                         uiOutput("read_note"), long_format_help(), uiOutput("wide_note"))),
       side_step(3, "Variables", uiOutput("var_pickers")),
       advanced_box(
         selectInput("transform", "Data transformation",
@@ -908,6 +915,7 @@ observeEvent(input$cp_mrefs, session$sendCustomMessage("copy_text", list(what = 
         sprintf("the columns %s each hold one replication. The analysis needs one row per plot (long format).", paste(cols, collapse = ", ")),
         div(class = "mt-2", actionButton("wide_convert", "Convert to long format", class = "btn-warning btn-sm")))
   })
+  output$read_note <- renderUI(if (input$src == "up") read_note_ui(raw_dat()))
   output$data_ui <- renderUI(data_preview_ui(dat()))
   output$var_pickers <- renderUI({
     d <- dat(); nm <- names(d); s <- setup()
@@ -1183,12 +1191,16 @@ observeEvent(input$cp_mrefs, session$sendCustomMessage("copy_text", list(what = 
   })
 
   # ---- shared by the correlation and regression screens ----
-  use_data <- function(p, setups) reactive({
-    if (input[[paste0(p, "_src")]] == "ex") { s <- setups[[input[[paste0(p, "_example")]]]]; req(s); return(read.csv(s$file)) }
-    f <- input[[paste0(p, "_file")]]; req(f)
-    tryCatch(star_read_table(f$datapath, f$name),
-             error = function(e) { showNotification(paste("Could not read the file:", conditionMessage(e)), type = "error"); req(FALSE) })
-  })
+  use_data <- function(p, setups) {
+    d <- reactive({
+      if (input[[paste0(p, "_src")]] == "ex") { s <- setups[[input[[paste0(p, "_example")]]]]; req(s); return(read.csv(s$file)) }
+      f <- input[[paste0(p, "_file")]]; req(f)
+      tryCatch(star_read_table(f$datapath, f$name),
+               error = function(e) { showNotification(paste("Could not read the file:", conditionMessage(e)), type = "error"); req(FALSE) })
+    })
+    output[[paste0(p, "_read_note")]] <- renderUI(if (input[[paste0(p, "_src")]] == "up") read_note_ui(d()))
+    d
+  }
   example_of <- function(p, setups) if (input[[paste0(p, "_src")]] == "ex") setups[[input[[paste0(p, "_example")]]]]
   as_error <- function(e) structure(list(message = conditionMessage(e)), class = "star_error")
   plot_download <- function(p, plot_fn) downloadHandler(

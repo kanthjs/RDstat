@@ -240,10 +240,43 @@ test_that("star_read_table detects delimiter, encoding and reads xlsx as text", 
   # UTF-8 with a BOM
   d5 <- star_read_table(w("﻿พันธุ์,y\nกข41,1\n"), "a.csv")
   expect_equal(names(d5)[1], "พันธุ์")
+  # an ordinary file gives no notes
+  expect_length(attr(d1, "notes"), 0)
   skip_if_not_installed("openxlsx")
   f <- tempfile(fileext = ".xlsx"); openxlsx::write.xlsx(data.frame(g = c("a", "b"), y = c(1.5, 2.5)), f)
   expect_equal(star_read_table(f, "a.xlsx")$y, c("1.5", "2.5"))
   expect_error(star_read_table(w("only\n1\n"), "a.csv"), "at least two columns")
+})
+
+test_that("star_read_table skips title lines above the header and summary rows below the data", {
+  w <- function(txt) { f <- tempfile(fileext = ".csv"); writeLines(txt, f, useBytes = TRUE); f }
+  d <- star_read_table(w(c("Rice yield trial, Suphan Buri 2025", "", "Variety,Rep,Yield", "RD41,1,5557", "RD41,2,5706",
+                           "RD47,1,4652", "RD47,2,4965", ",,", "Mean,,5220", "CV (%),,4.1", "LSD 0.05,,310")), "a.csv")
+  expect_equal(names(d), c("Variety", "Rep", "Yield"))
+  expect_equal(nrow(d), 4)
+  expect_equal(d$Yield, c("5557", "5706", "4652", "4965"))
+  n <- attr(d, "notes")
+  expect_length(n, 2)
+  expect_match(n[1], "Skipped 1 line above the column names: “Rice yield trial Suphan Buri 2025”", fixed = TRUE)
+  expect_match(n[2], "Skipped 3 summary rows below the data: “Mean”, “CV (%)”, “LSD 0.05”", fixed = TRUE)
+  # Thai labels, a summary label inside the data is kept, and a semicolon file with decimal commas under a title
+  th <- star_read_table(w(c("การทดลอง;ปี 2568", "พันธุ์;ซ้ำ;ผลผลิต", "รวม;1;1,5", "กข41;1;2,5", "เฉลี่ย;;2,0")), "a.csv")
+  expect_equal(names(th), c("พันธุ์", "ซ้ำ", "ผลผลิต"))
+  expect_equal(th[[1]], c("รวม", "กข41"))
+  expect_equal(th[[3]], c("1,5", "2,5"))
+  # a missing value in the first data row does not make the header look like a title
+  m <- star_read_table(w(c("g,y,z", "a,,1", "b,2,3")), "a.csv")
+  expect_equal(names(m), c("g", "y", "z")); expect_true(is.na(m$y[1])); expect_length(attr(m, "notes"), 0)
+  # empty columns before and after the table (it starts in column B, or rows end in extra commas)
+  e <- star_read_table(w(c(",g,y,,", ",a,1,,", ",b,2,,")), "a.csv")
+  expect_equal(names(e), c("g", "y")); expect_equal(e$y, c("1", "2"))
+  expect_true(star_is_summary_label("Grand mean:")); expect_false(star_is_summary_label("RD41"))
+  skip_if_not_installed("writexl")
+  f <- tempfile(fileext = ".xlsx")
+  writexl::write_xlsx(data.frame(a = c("Trial 1", "Variety", "RD41", "RD47", "Average"), b = c(NA, "Yield", "5557", "4652", "5105")), f, col_names = FALSE)
+  x <- star_read_table(f, "a.xlsx")
+  expect_equal(names(x), c("Variety", "Yield")); expect_equal(x$Variety, c("RD41", "RD47"))
+  expect_length(attr(x, "notes"), 2)
 })
 
 test_that("diagnostics: outliers are found (row 5 of Insecticides is borderline, a x6 value is clear), a clean set is not flagged", {

@@ -265,6 +265,12 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   session$setInputs(resp = "Value", trt = "Variety", blk = "Rep"); run(pw = "LSD")
   check(!inherits(res(), "star_error") && ok()$anova$DF[ok()$anova$Source == "Error"] == 4, "Wide: converted data analysed as RCBD (error df 4)")
   session$setInputs(wide_undo = 1); check(ncol(dat()) == 4, "Wide: conversion can be undone")
+  check(is.null(output$read_note) || !grepl("Skipped", html(output$read_note)), "Read note: none for a plain file")
+  # a title line above the column names and summary rows below the data, as typed in Excel
+  f2 <- tempfile(fileext = ".csv"); writeLines(c("Rice yield trial 2025", readLines(f), "\"Mean\",5.9,6,6.2"), f2)
+  session$setInputs(file = list(datapath = f2, name = "titled.csv", size = file.size(f2), type = "text/csv"))
+  check(nrow(dat()) == 3 && identical(names(dat())[1], "Variety") && grepl("Rice yield trial 2025", html(output$read_note)) && grepl("Mean", html(output$read_note)),
+        "Read note: title line and summary row are skipped and shown")
   session$setInputs(src = "ex")
 
   # ---- split plot: the block / replication column is checked before running ----
