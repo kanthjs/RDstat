@@ -224,6 +224,22 @@ test_that("star_read_table detects delimiter, encoding and reads xlsx as text", 
   expect_equal(names(d1), c("g", "y")); expect_equal(d1$y, c("1,5", "2,5"))
   d2 <- star_read_table(w("t,y\ncafé,1\nb,2\n", "latin1"), "a.csv")
   expect_equal(d2$t[1], "café")
+  # Thai Windows-874 / TIS-620, as Excel on a Thai Windows saves "CSV (Comma delimited)"
+  tis <- function(txt) { u <- utf8ToInt(txt); th <- u >= 0x0E01 & u <= 0x0E5B; u[th] <- u[th] - 0x0E01 + 0xA1
+    f <- tempfile(fileext = ".csv"); writeBin(as.raw(u), f); f }
+  d3 <- star_read_table(tis("พันธุ์,ซ้ำที่ 1,ซ้ำที่ 2\nกข41,5557,5706\nปทุมธานี 1,4652,4965\n"), "a.csv")
+  expect_equal(names(d3), c("พันธุ์", "ซ้ำที่ 1", "ซ้ำที่ 2"))
+  expect_equal(d3[[1]], c("กข41", "ปทุมธานี 1"))
+  expect_equal(d3[[3]], c("5706", "4965"))
+  # UTF-16 with a BOM, as Excel saves "Unicode Text" (tab-delimited)
+  u16 <- function(txt, le = TRUE) { u <- utf8ToInt(txt); lo <- u %% 256; hi <- u %/% 256
+    f <- tempfile(fileext = ".txt"); writeBin(as.raw(c(if (le) c(0xFF, 0xFE) else c(0xFE, 0xFF), rbind(if (le) lo else hi, if (le) hi else lo))), f); f }
+  d4 <- star_read_table(u16("พันธุ์\tYield\r\nกข41\t5557\r\n"), "a.txt")
+  expect_equal(names(d4), c("พันธุ์", "Yield")); expect_equal(d4[[1]], "กข41")
+  expect_equal(star_read_table(u16("g\ty\nกข41\t1\n", le = FALSE), "a.txt")$g, "กข41")
+  # UTF-8 with a BOM
+  d5 <- star_read_table(w("﻿พันธุ์,y\nกข41,1\n"), "a.csv")
+  expect_equal(names(d5)[1], "พันธุ์")
   skip_if_not_installed("openxlsx")
   f <- tempfile(fileext = ".xlsx"); openxlsx::write.xlsx(data.frame(g = c("a", "b"), y = c(1.5, 2.5)), f)
   expect_equal(star_read_table(f, "a.xlsx")$y, c("1.5", "2.5"))
