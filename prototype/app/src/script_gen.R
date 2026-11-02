@@ -138,10 +138,10 @@ script_reg <- function(r, file = NULL) {
   paste(c(head, "", body), collapse = "\n")
 }
 
-# CRD and RCBD with one or two factors, and the split plot. The analysis combined over sites and RCBD data with a missing
+# CRD and RCBD with one or two factors, the split plot and the analysis combined over environments. RCBD data with a missing
 # response (the app estimates the missing values) return NULL, and the screen says the script is not available.
 script_aov_supported <- function(r) {
-  r$design %in% c("SplitCRD", "SplitRCBD") || (r$design %in% c("CRD", "RCBD") && !(r$design == "RCBD" && anyNA(r$data[[r$response]])))
+  r$design %in% c("SplitCRD", "SplitRCBD", "CombCRD", "CombRCBD") || (r$design %in% c("CRD", "RCBD") && !(r$design == "RCBD" && anyNA(r$data[[r$response]])))
 }
 
 script_compare <- function(test, y, tr, alpha, dfe = "dfe", mse = "mse") {
@@ -158,6 +158,7 @@ script_compare <- function(test, y, tr, alpha, dfe = "dfe", mse = "mse") {
 script_aov <- function(r, file = NULL) {
   if (!script_aov_supported(r)) return(NULL)
   if (r$design %in% c("SplitCRD", "SplitRCBD")) return(script_split(r, file))
+  if (r$design %in% c("CombCRD", "CombRCBD")) return(script_combined(r, file))
   f <- r$factors; blk <- r$block
   resp <- if (!is.null(r$transform)) r$original_response else r$response
   title <- sprintf("%s of %s by %s%s", r$design, resp, paste(f, collapse = " x "), if (!is.null(blk)) paste(", block", blk) else "")
@@ -247,6 +248,75 @@ script_split <- function(r, file = NULL) {
       sprintf("  simple[[paste(%s, \"within\", %s, \"=\", lv)]] <- %s", r_str(main), r_str(sub),
               script_compare(r$tests_used[[main]], "s$y", sprintf("droplevels(s[[%s]])", r_str(main)), r$alpha, "pooled_df", "pooled_ms")),
       "}", "simple")
+  }
+  paste(c(head, "", body), collapse = "
+")
+}
+
+# Combined analysis of one treatment factor over environments (sites, seasons, years), environments fixed as in STAR.
+# RCBD: y ~ env + env:block + trt + trt:env, with the environment tested against block within environment and the other
+# terms against the pooled error. CRD: y ~ env + trt + trt:env. Each environment is also analysed on its own and the
+# error variances are compared with Bartlett's test.
+script_combined <- function(r, file = NULL) {
+  trt <- r$treatment; env <- r$env; blk <- r$block; rcbd <- r$design == "CombRCBD"
+  resp <- if (!is.null(r$transform)) r$original_response else r$response
+  head <- script_header(sprintf("Combined %s of %s: %s over %s", if (rcbd) "RCBD" else "CRD", resp, trt, env), file)
+  trans <- if (!is.null(r$transform)) sprintf("y <- switch(%s, log = log(y + 1), sqrt = sqrt(y + 0.5), arcsin = asin(sqrt(y / 100)) * 180 / pi)   # transformed response", r_str(r$transform))
+  bt <- function(x) sprintf("`%s`", x)
+  fml <- if (rcbd) sprintf("y ~ %s + %s:%s + %s + %s:%s", bt(env), bt(env), bt(blk), bt(trt), bt(trt), bt(env)) else sprintf("y ~ %s + %s + %s:%s", bt(env), bt(trt), bt(trt), bt(env))
+  fml_env <- if (rcbd) sprintf("y ~ %s + %s", bt(blk), bt(trt)) else sprintf("y ~ %s", bt(trt))
+  a <- r_num(r$alpha)
+  body <- c(
+    "# mean comparisons use the agricolae package: install.packages(\"agricolae\")",
+    sprintf("y <- suppressWarnings(as.numeric(d[[%s]]))", r_str(resp)),
+    trans,
+    "d$y <- y",
+    sprintf("for (v in %s) d[[v]] <- factor(trimws(as.character(d[[v]])))", r_vec(c(trt, env, blk))),
+    sprintf("d <- d[complete.cases(d[c(\"y\", %s)]), ]   # rows with a missing value are left out", paste(r_str(c(trt, env, blk)), collapse = ", ")),
+    "",
+    sprintf("fit <- aov(%s, data = d)", fml),
+    "tab <- summary(fit)[[1]]; rn <- gsub(\"`\", \"\", trimws(rownames(tab)), fixed = TRUE)",
+    "i_err <- nrow(tab)                   # pooled error",
+    sprintf("i_env <- match(%s, rn); i_trt <- match(%s, rn); i_int <- which(rn %%in%% c(%s, %s))", r_str(env), r_str(trt),
+            r_str(paste(trt, env, sep = ":")), r_str(paste(env, trt, sep = ":"))),
+    if (rcbd) sprintf("i_rep <- which(rn %%in%% c(%s, %s))   # block within environment", r_str(paste(env, blk, sep = ":")), r_str(paste(blk, env, sep = ":"))),
+    "dfe <- tab$Df[i_err]; mse <- tab[[\"Mean Sq\"]][i_err]",
+    if (rcbd) c(
+      "df_rep <- tab$Df[i_rep]; ms_rep <- tab[[\"Mean Sq\"]][i_rep]",
+      "# the environment is tested against block within environment",
+      "f_env <- tab[[\"Mean Sq\"]][i_env] / ms_rep",
+      "p_env <- pf(f_env, tab$Df[i_env], df_rep, lower.tail = FALSE)"),
+    "tab                                  # the F tests in this table use the pooled error",
+    if (rcbd) "c(F = f_env, p = p_env)           # environment, against block within environment",
+    "cv <- 100 * sqrt(mse) / mean(d$y)",
+    "",
+    "# each environment on its own, and Bartlett's test of equal error variances",
+    sprintf("by_env <- do.call(rbind, lapply(levels(d[[%s]]), function(lv) {", r_str(env)),
+    sprintf("  s <- droplevels(d[d[[%s]] == lv, ])", r_str(env)),
+    sprintf("  t1 <- summary(aov(%s, data = s))[[1]]; k <- match(%s, gsub(\"`\", \"\", trimws(rownames(t1)), fixed = TRUE))", fml_env, r_str(trt)),
+    sprintf("  data.frame(Environment = lv, ErrorMS = t1[[\"Mean Sq\"]][nrow(t1)], ErrorDF = t1$Df[nrow(t1)], F = t1[[\"F value\"]][k], P = t1[[\"Pr(>F)\"]][k], stringsAsFactors = FALSE)"),
+    "}))",
+    "by_env",
+    "k <- nrow(by_env); pooled <- sum(by_env$ErrorDF * by_env$ErrorMS) / sum(by_env$ErrorDF)",
+    "chi <- (sum(by_env$ErrorDF) * log(pooled) - sum(by_env$ErrorDF * log(by_env$ErrorMS))) / (1 + (sum(1 / by_env$ErrorDF) - 1 / sum(by_env$ErrorDF)) / (3 * (k - 1)))",
+    "bartlett_p <- pchisq(chi, k - 1, lower.tail = FALSE)   # a small p means the pooled error may not be valid",
+    "c(chi_square = chi, df = k - 1, p = bartlett_p)",
+    "",
+    "# mean comparisons: use them for effects that are significant (the main effects when the interaction is not)",
+    "cmp <- list()",
+    sprintf("cmp[[%s]] <- %s", r_str(trt), script_compare(r$tests_used[[trt]], "d$y", sprintf("d[[%s]]", r_str(trt)), r$alpha, "dfe", "mse")),
+    sprintf("cmp[[%s]] <- %s", r_str(env), script_compare(r$tests_used[[env]], "d$y", sprintf("d[[%s]]", r_str(env)), r$alpha, if (rcbd) "df_rep" else "dfe", if (rcbd) "ms_rep" else "mse")),
+    "cmp")
+  if (isTRUE(r$interaction_significant)) {
+    sim <- unlist(lapply(c(trt, env), function(cmp_f) {
+      at_f <- setdiff(c(trt, env), cmp_f)
+      c(sprintf("for (lv in levels(d[[%s]])) {", r_str(at_f)),
+        sprintf("  s <- d[d[[%s]] == lv, ]", r_str(at_f)),
+        sprintf("  simple[[paste(%s, \"within\", %s, \"=\", lv)]] <- %s", r_str(cmp_f), r_str(at_f),
+                script_compare(r$tests_used[[cmp_f]], "s$y", sprintf("droplevels(s[[%s]])", r_str(cmp_f)), r$alpha)),
+        "}")
+    }))
+    body <- c(body, "", "# the interaction is significant: each factor is compared within the levels of the other (pooled error)", "simple <- list()", sim, "simple")
   }
   paste(c(head, "", body), collapse = "
 ")

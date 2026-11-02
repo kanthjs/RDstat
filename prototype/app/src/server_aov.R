@@ -254,7 +254,7 @@
                     p(class = "text-muted small mb-0", "Means with the same letter (within a column) are not significantly different."))
       }),
       result_card("APA-style report", lapply(r$apa, p), copy = "cp_apa"),
-      result_card("R code to repeat this analysis", if (is.null(code <- aov_script())) p(class = "text-muted mb-0", "R code is not available yet for the analysis combined over sites, or for an RCBD with missing responses.") else tags$pre(class = "small mb-0", style = "white-space: pre-wrap;", code),
+      result_card("R code to repeat this analysis", if (is.null(code <- aov_script())) p(class = "text-muted mb-0", "R code is not available yet for an RCBD with missing responses (the app estimates the missing values).") else tags$pre(class = "small mb-0", style = "white-space: pre-wrap;", code),
                   copy = if (!is.null(code)) "cp_aov_script", copy_label = "Copy code")
     )
   })

@@ -13,8 +13,13 @@ testServer(app, {
   # the R code offered on the ANOVA screen, run on its own, must give the same table, means, letters and simple effects
   aov_script_check <- function(label) {
     r <- ok(); e <- run_script(aov_script())
-    pv <- if (inherits(e$fit, "aovlist")) unlist(lapply(summary(e$fit), function(s) s[[1]][["Pr(>F)"]])) else summary(e$fit)[[1]][["Pr(>F)"]]
-    same_table <- isTRUE(all.equal(unname(pv[!is.na(pv)]), r$anova$P[!is.na(r$anova$P)])) && (if (!is.null(e$cv_a)) isTRUE(all.equal(c(e$cv_a, e$cv_b), c(r$cv_a, r$cv_b))) else isTRUE(all.equal(e$cv, r$cv)))
+    pv <- if (!is.null(r$by_env)) NULL else if (inherits(e$fit, "aovlist")) unlist(lapply(summary(e$fit), function(s) s[[1]][["Pr(>F)"]])) else summary(e$fit)[[1]][["Pr(>F)"]]
+    same_table <- if (is.null(r$by_env)) (isTRUE(all.equal(unname(pv[!is.na(pv)]), r$anova$P[!is.na(r$anova$P)])) && (if (!is.null(e$cv_a)) isTRUE(all.equal(c(e$cv_a, e$cv_b), c(r$cv_a, r$cv_b))) else isTRUE(all.equal(e$cv, r$cv)))) else {
+      ai <- function(src) r$anova$P[r$anova$Source == src]; tr <- r$treatment
+      p_env <- if (!is.null(e$p_env)) unname(e$p_env) else e$tab[["Pr(>F)"]][e$i_env]
+      isTRUE(all.equal(e$tab[["Pr(>F)"]][c(e$i_trt, e$i_int)], c(ai(tr), ai(paste(tr, r$env, sep = ":"))))) && isTRUE(all.equal(p_env, ai(r$env))) && isTRUE(all.equal(e$cv, r$cv)) &&
+        isTRUE(all.equal(e$by_env$ErrorMS, r$by_env$ErrorMS)) && isTRUE(all.equal(e$by_env$ErrorDF, r$by_env$ErrorDF)) && isTRUE(all.equal(e$by_env$P, r$by_env$P)) && isTRUE(all.equal(unname(e$bartlett_p), r$bartlett$p))
+    }
     same_means <- all(vapply(r$factors, function(f) { m <- r$means[[f]]; g <- trimws(e$cmp[[f]]$groups[m$Treatment, "groups"])
       isTRUE(all.equal(unname(e$cmp[[f]]$means[m$Treatment, 1]), m$Mean)) && (r$interaction_significant || identical(unname(g), m$Group)) }, NA))
     same_simple <- all(vapply(names(r$simple), function(nm) { sm <- r$simple[[nm]]; cf <- attr(sm, "compare"); af <- attr(sm, "at")
@@ -119,6 +124,7 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   run(pw = "LSD")
   r <- ok()
   check(identical(r$anova$Source, c("Season", "Rep within Season", "NitrogenRate", "NitrogenRate:Season", "Error", "Total")), "Combined RCBD: ANOVA rows")
+  aov_script_check("combined RCBD over seasons")
   check(identical(round(r$anova$F[1:4], 2), c(14.25, 0.71, 10.62, 5.47)) && round(r$cv, 2) == 12.05, "Combined RCBD: F and CV match STAR")
   ui <- html(output$results_ui)
   check(grepl("Analysis of each Season", ui) && grepl("Bartlett", ui), "Combined RCBD: each environment and Bartlett's test")
@@ -128,6 +134,7 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   session$setInputs(design = "CombCRD", example = "comb_crd1", resp = "Tillers", trt = "Variety", env = "Site")
   run(pw = "LSD")
   check(identical(ok()$anova$DF, c(2, 3, 6, 36, 47)), "Combined CRD: ANOVA df")
+  aov_script_check("combined CRD over sites")
 
   # ---- Thai summary and Word report ----
   session$setInputs(design = "SplitRCBD", example = "split1", resp = "Yield", trt_main = "Nitrogen", trt_sub = "Variety", blk = "Rep"); run(pw = "auto")
