@@ -68,10 +68,19 @@ methods_sections <- tagList(
     "ถ้ามีน้อยกว่า 15 ค่าต่อกลุ่ม แอปเตือนว่า Shapiro-Wilk test มีอำนาจการทดสอบต่ำ ",
     "(2) ถ้าไม่ปกติ แอปดูก่อนว่าเกิดจากค่าผิดปกติหรือไม่ (ANOVA: ตัดค่าที่ |studentized residual| > 3 แล้วทดสอบใหม่; สองกลุ่ม: ค่าที่อยู่นอก 1.5 x IQR) และแนะนำให้ตรวจค่าเหล่านั้นก่อน ",
     "ถ้าข้อมูลเป็นบวกและเบ้ขวา แนะนำการแปลงข้อมูลด้วย แล้วจึงแนะนำการทดสอบแบบ rank ",
-    "(3) ถ้าปกติแต่ความแปรปรวนไม่เท่ากัน (Levene แบบ Brown-Forsythe): CRD แนะนำ Welch's ANOVA, RCBD (ไม่มี Welch แบบมีบล็อก) แนะนำการแปลงข้อมูลหรือ Friedman test, ",
-    "สองกลุ่มที่เลือก pooled t-test แนะนำ Welch t-test ซึ่งเป็นค่าเริ่มต้นอยู่แล้ว "),
+    "(3) ความแปรปรวน: CRD ปัจจัยเดียวและสองกลุ่มแนะนำ Welch's test เสมอโดยไม่ดูผล Levene (ดูหัวข้อถัดไป) ผล Levene แบบ Brown-Forsythe แสดงเป็นข้อมูลประกอบเท่านั้น ",
+    "RCBD ซึ่งไม่มี Welch แบบมีบล็อก ถ้าความแปรปรวนไม่เท่ากันแนะนำการแปลงข้อมูลหรือ Friedman test"),
   p("แอปแสดงผลเฉพาะวิธีที่เลือก ไม่แสดงผลของวิธีอื่นคู่กัน เพื่อไม่ให้เลือกวิธีจากค่า p ที่ได้ ",
     "การเลือกวิธีจากผลการทดสอบข้อสมมติบนข้อมูลชุดเดียวกันทำให้ค่า p คลาดเคลื่อนได้บ้าง จึงควรตัดสินใจจากลักษณะของข้อมูลและการออกแบบการทดลองเป็นหลัก"),
+
+  h4("ค่าเริ่มต้น: Welch's test โดยไม่ตรวจความแปรปรวนก่อน"),
+  p("การเปรียบเทียบสองกลุ่มอิสระใช้ Welch's t-test และ CRD ปัจจัยเดียวใช้ Welch's ANOVA เป็นค่าเริ่มต้น โดยไม่รอผลการทดสอบความเท่ากันของความแปรปรวน (Levene หรือ F test) ก่อน ",
+    "เหตุผล: (1) การใช้ผลการทดสอบความแปรปรวนมาเลือกระหว่าง Student's กับ Welch's เป็นการทดสอบซ้อนสองชั้น ทำให้ความน่าจะเป็นของ Type I error ของการทดสอบที่ตามมาคลาดเคลื่อนจากที่ตั้งไว้ (Zimmerman, 2004) ",
+    "(2) เมื่อความแปรปรวนเท่ากันจริง Welch's test ให้ผลแทบไม่ต่างจากวิธีดั้งเดิม แต่เมื่อไม่เท่ากัน โดยเฉพาะเมื่อจำนวนข้อมูลแต่ละกลุ่มไม่เท่ากัน วิธีดั้งเดิมให้ค่า p ผิดได้มาก (Delacre et al., 2017; Delacre et al., 2019) ",
+    "(3) R ก็ใช้ ", code("var.equal = FALSE"), " เป็นค่าเริ่มต้นของ ", code("t.test()"), " และ ", code("oneway.test()"), " ",
+    "ผู้ใช้ยังเลือก Student's t-test หรือ ANOVA แบบดั้งเดิมได้ แอปจะแนะนำ Welch พร้อมปุ่มสลับ และแสดงผล Levene หรือ F test เป็นข้อมูลประกอบเท่านั้น ไม่ใช้ตัดสินใจ ",
+    "Welch's ANOVA มีเฉพาะ CRD ปัจจัยเดียว แผนแบบมีบล็อก (RCBD) สองปัจจัย split plot และ combined analysis ไม่มีรูปแบบของ Welch จึงใช้ ANOVA แบบดั้งเดิม ",
+    "Welch's ANOVA ไม่มีตารางค่าเฉลี่ยแบบตีพิมพ์ที่ใช้ SE(m), SED, LSD และ CV จากความแปรปรวนร่วม เพราะไม่ได้สมมติว่าความแปรปรวนเท่ากัน ถ้าต้องการตารางแบบนั้นให้เลือก ANOVA แบบดั้งเดิม"),
 
   h4("Welch's ANOVA"),
   p("ใช้ ", code("oneway.test(var.equal = FALSE)"), " (Welch, 1951) สำหรับ CRD ปัจจัยเดียว ไม่สมมติว่าความแปรปรวนเท่ากัน ",
@@ -80,7 +89,7 @@ methods_sections <- tagList(
 
   h4("การทดสอบที (t-test)"),
   p("ใช้ ", code("t.test()"), " สองกลุ่มอิสระ: แสดงทั้ง t-test แบบรวมความแปรปรวน (pooled, Student, 1908) และแบบไม่สมมติว่าความแปรปรวนเท่ากันของ Welch (Welch, 1947) ซึ่งใช้องศาอิสระของ Satterthwaite (Satterthwaite, 1946) เหมือน STAR ต้นฉบับ ",
-    "ผู้ใช้เลือกได้ว่าจะสรุปผลจากแบบใด ค่าเริ่มต้นคือ Welch ความเท่ากันของความแปรปรวนทดสอบด้วย F test (", code("var.test()"), ") ",
+    "ผู้ใช้เลือกได้ว่าจะสรุปผลจากแบบใด ค่าเริ่มต้นคือ Welch (ดูหัวข้อค่าเริ่มต้นด้านบน) ความเท่ากันของความแปรปรวนทดสอบด้วย F test (", code("var.test()"), ") แสดงเป็นข้อมูลประกอบ ไม่ใช้เลือกวิธี ",
     "แบบจับคู่ (paired): ทดสอบค่าเฉลี่ยของผลต่าง (ค่าแรก - ค่าที่สอง) ของแต่ละหน่วย ใช้เฉพาะแถวที่มีค่าทั้งสอง แบบกลุ่มเดียว (one sample): เปรียบเทียบค่าเฉลี่ยกับค่าที่กำหนด ",
     "ช่วงความเชื่อมั่นของผลต่างอยู่ที่ระดับ 1 - alpha ขนาดอิทธิพล Cohen's d (Cohen, 1988) = ผลต่างของค่าเฉลี่ย / SD รวม (สองกลุ่มอิสระ), ค่าเฉลี่ยของผลต่าง / SD ของผลต่าง (dz, แบบจับคู่) หรือ (ค่าเฉลี่ย - ค่าที่กำหนด) / SD (กลุ่มเดียว) ",
     "คำว่า เล็ก ปานกลาง และใหญ่ ใช้เกณฑ์ 0.2, 0.5 และ 0.8 ของ Cohen การแจกแจงปกติตรวจด้วย Shapiro-Wilk test ของแต่ละกลุ่ม หรือของผลต่างในแบบจับคู่"),
@@ -130,6 +139,8 @@ method_refs <- c(
   "Cohen J (1988). Statistical Power Analysis for the Behavioral Sciences, 2nd edition. Lawrence Erlbaum, Hillsdale, NJ.",
   "Conover WJ (1999). Practical Nonparametric Statistics, 3rd edition. John Wiley & Sons, New York.",
   "Cook RD (1977). Detection of influential observation in linear regression. Technometrics, 19(1), 15-18. https://doi.org/10.1080/00401706.1977.10489493",
+  "Delacre M, Lakens D, Leys C (2017). Why psychologists should by default use Welch's t-test instead of Student's t-test. International Review of Social Psychology, 30(1), 92-101. https://doi.org/10.5334/irsp.82",
+  "Delacre M, Leys C, Mora YL, Lakens D (2019). Taking parametric assumptions seriously: arguments for the use of Welch's F-test instead of the classical F-test in one-way ANOVA. International Review of Social Psychology, 32(1), 13. https://doi.org/10.5334/irsp.198",
   "Duncan DB (1955). Multiple range and multiple F tests. Biometrics, 11(1), 1-42. https://doi.org/10.2307/3001478",
   "Dunn OJ (1964). Multiple comparisons using rank sums. Technometrics, 6(3), 241-252. https://doi.org/10.1080/00401706.1964.10490181",
   "Fisher RA (1921). On the 'probable error' of a coefficient of correlation deduced from a small sample. Metron, 1(4), 3-32.",
@@ -155,5 +166,6 @@ method_refs <- c(
   "Welch BL (1947). The generalization of 'Student's' problem when several different population variances are involved. Biometrika, 34(1-2), 28-35. https://doi.org/10.2307/2332510",
   "Welch BL (1951). On the comparison of several mean values: an alternative approach. Biometrika, 38(3-4), 330-336. https://doi.org/10.2307/2332579",
   "Wilcoxon F (1945). Individual comparisons by ranking methods. Biometrics Bulletin, 1(6), 80-83. https://doi.org/10.2307/3001968",
-  "Wilkinson GN, Rogers CE (1973). Symbolic description of factorial models for analysis of variance. Applied Statistics, 22(3), 392-399. https://doi.org/10.2307/2346786"
+  "Wilkinson GN, Rogers CE (1973). Symbolic description of factorial models for analysis of variance. Applied Statistics, 22(3), 392-399. https://doi.org/10.2307/2346786",
+  "Zimmerman DW (2004). A note on preliminary tests of equality of variances. British Journal of Mathematical and Statistical Psychology, 57(1), 173-181. https://doi.org/10.1348/000711004849222"
 )

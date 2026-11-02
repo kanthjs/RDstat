@@ -314,17 +314,18 @@ result_card <- function(title, ..., copy = NULL, copy_label = "Copy") bslib::car
 # shown, `kept` TRUE once the user chose to keep it, `current_label` names it.
 advice_ui <- function(rc, current, switch_id, stay_id, kept, current_label) {
   if (is.null(rc)) return(NULL)
-  if (rc$level != "warn") return(div(class = paste("alert small py-2", if (rc$level == "ok") "alert-light" else "alert-info"),
-    icon(if (rc$level == "ok") "circle-check" else "circle-info"), " ", strong("Data check: "), rc$observed, " ", rc$advice))
   if (identical(current, rc$switch_to)) return(div(class = "alert alert-success small py-2", icon("circle-check"), " ", strong("Data check: "), rc$observed,
                                                    " You are using the recommended method; the choice remains yours."))
+  if (is.null(rc$switch_to)) return(div(class = paste("alert small py-2", if (rc$level == "ok") "alert-light" else "alert-info"),
+    icon(if (rc$level == "ok") "circle-check" else "circle-info"), " ", strong("Data check: "), rc$observed, " ", rc$advice))
   if (isTRUE(kept)) return(div(class = "alert alert-light small py-2", icon("circle-info"), " ", strong("Data check: "), rc$observed,
-                               sprintf(" You chose to continue with the %s.", current_label)))
-  div(class = "alert alert-warning",
-      div(icon("triangle-exclamation"), " ", strong("Observation: "), rc$observed),
+                               sprintf(" You chose to continue with %s.", current_label)))
+  warn <- rc$level == "warn"
+  div(class = if (warn) "alert alert-warning" else "alert alert-info",
+      div(icon(if (warn) "triangle-exclamation" else "circle-info"), " ", strong("Observation: "), rc$observed),
       div(class = "mt-1", icon("lightbulb"), " ", strong("Recommendation: "), rc$advice),
-      div(class = "mt-2 d-flex flex-wrap gap-2", actionButton(switch_id, rc$switch_label, class = "btn-warning btn-sm"),
-          actionButton(stay_id, rc$stay_label, class = "btn-outline-secondary btn-sm")),
+      div(class = "mt-2 d-flex flex-wrap gap-2", actionButton(switch_id, rc$switch_label, class = if (warn) "btn-warning btn-sm" else "btn-info btn-sm"),
+          actionButton(stay_id, sprintf("Continue with %s", current_label), class = "btn-outline-secondary btn-sm")),
       div(class = "small text-muted mt-1", "Advice only: the analyst decides which method to report."))
 }
 # settings changed after the last run: the results on the screen no longer match the controls

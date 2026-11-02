@@ -71,8 +71,12 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
         grepl("transformation is not used", html(output$results_ui)), "Rank method: medians in the original unit when a transformation is set")
   session$setInputs(transform = "none"); run(aov_method = "anova")
   check(!aov_rank() && grepl("Analysis of variance", html(output$results_ui)), "Rank method: back to ANOVA")
-  check(!is.null(aov_rec()) && grepl("Data check", html(output$results_ui)) && !grepl("Check with", html(output$results_ui)),
+  check(!is.null(aov_rec()) && grepl("Data check|Observation", html(output$results_ui)) && !grepl("Check with", html(output$results_ui)),
         "Guidance: data check under the ANOVA, with no result of another method beside it")
+  # Welch's ANOVA is recommended for a one-factor CRD whatever Levene's test says (here the variances look similar)
+  rc <- aov_rec()
+  check(identical(rc$switch_to, "welch") && rc$level == "note" && grepl("look similar", rc$observed) && grepl("without first testing the variances", rc$advice) &&
+        grepl("Switch to Welch", html(output$results_ui)), "Welch default: recommended for a CRD even when the variances look similar")
   # Welch's ANOVA with Games-Howell letters; switching method needs no new run
   session$setInputs(aov_method = "welch")
   w <- welch_try(); ref <- oneway.test(GrainYield ~ Insecticide, crd)
@@ -108,6 +112,8 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   r <- ok()
   check(identical(r$anova$Source, c("supp", "dose", "supp:dose", "Error", "Total")), "CRD 2 factors: ANOVA rows")
   run(aov_method = "rank"); check(grepl("needs exactly one treatment factor", html(output$results_ui)), "Rank method: two factors give a reason, not a blank screen")
+  run(aov_method = "welch"); check(aov_mode() == "anova" && grepl("Welch's ANOVA needs exactly one treatment factor", html(output$results_ui)) && grepl("Analysis of variance", html(output$results_ui)),
+                                   "Welch default: two factors get the standard ANOVA, with the reason")
   run(aov_method = "anova")
   check(r$interaction_significant, "CRD 2 factors: interaction significant")
   check(setequal(names(tables()$simple), c("supp within dose", "dose within supp")), "CRD 2 factors: simple-effect tables")
@@ -294,6 +300,10 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(grepl("Data check|Observation", html(output$tt_results_ui)) && !grepl("Check with", html(output$tt_results_ui)) && !is.null(tt_rec()), "Guidance: t-test screen has the data check, with no Wilcoxon result beside it")
   rc <- star_recommend_tt(star_ttest(skew[skew$T != "c", ], "independent", response = "y", group = "T"))
   check(identical(rc$switch_to, "wilcox") && grepl("1.5 x IQR", rc$observed), "Guidance: skewed groups suggest Wilcoxon and point to values beyond 1.5 x IQR")
+  rc <- star_recommend_tt(star_ttest(read.csv("example_crd2.csv", stringsAsFactors = FALSE), "independent", response = "len", group = "supp", var_equal = TRUE))
+  check(identical(rc$switch_to, "welch_var") && grepl("without first testing the variances", rc$advice), "Welch default: the pooled t-test gets Welch recommended whatever Levene's test says")
+  check(is.null(star_recommend_tt(star_ttest(read.csv("example_crd2.csv", stringsAsFactors = FALSE), "independent", response = "len", group = "supp"))$switch_to),
+        "Welch default: no switch offered when Welch's t-test is already used")
   e <- run_script(tt_script()); check(isTRUE(all.equal(unname(e$tt$statistic), r$test$t)) && isTRUE(all.equal(e$tt$p.value, r$p)) && isTRUE(all.equal(e$wilcox$p.value, r$nonparametric$P)), "t-test script: one sample reproduces the app")
   check(grepl("t.test(v, mu = mu", tt_script(), fixed = TRUE) && grepl("R code to repeat", html(output$tt_results_ui)), "t-test script: shown on the results screen")
   # scripts must not depend on the app: example data are carried inside, files are read as the app reads them

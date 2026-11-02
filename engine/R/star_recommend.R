@@ -5,8 +5,11 @@
 ## The order of the checks: normality of the residuals (or of each group, for two groups), with a mixed rule for large
 ## samples (30 or more per group with |skewness| <= 1 and |excess kurtosis| <= 2 is robust by the central limit theorem)
 ## and a warning for small ones (fewer than 15 per group: the test has little power); outliers are checked before a rank
-## test is suggested; then equal variances (Levene, Brown-Forsythe). Unequal variances lead to Welch's ANOVA (CRD) or to
-## a transformation or the Friedman test (RCBD, where no Welch version exists), not straight to a rank test.
+## test is suggested. Welch's ANOVA (CRD, one factor) and Welch's t-test are recommended by default, without first testing
+## the variances: a preliminary Levene test distorts the error rate of the test that follows, and Welch's test loses
+## almost nothing when the variances are equal (Delacre et al. 2017, 2019; Zimmerman 2004). Levene's result is reported
+## for information. In an RCBD, where no Welch version exists, unequal variances lead to a transformation or the Friedman
+## test.
 
 ## sample skewness (g1) and excess kurtosis (g2)
 .star_shape <- function(x) {
@@ -118,22 +121,25 @@ star_recommend_aov <- function(r) {
       sprintf("Consider the %s test (rank-based), which does not assume a normal distribution.%s", rank_name, tf),
       "rank", sprintf("Switch to %s (recommended)", rank_name), "Continue with ANOVA"))
   }
+  lev_txt <- sprintf("Levene p %s%s", .star_fmt_p(lev_p), if (is.finite(dg$homogeneity$ratio)) sprintf(", largest/smallest variance = %.1f", dg$homogeneity$ratio) else "")
+  note <- if (clt) sprintf(" The residuals depart from normal (Shapiro-Wilk p %s), but with %d or more per treatment and a moderate shape (%s) the means-based analysis is robust (central limit theorem).",
+                           .star_fmt_p(sw_p), n_min, trimws(shape)) else ""
+  norm_txt <- if (clt) "" else sprintf("Residuals are consistent with a normal distribution (Shapiro-Wilk p %s).", .star_fmt_p(sw_p))
+  if (r$design == "CRD")
+    return(.star_advice(if (var_fail) "warn" else "note",
+      paste0(norm_txt, note, sprintf(" The variances %s (%s).", if (var_fail) "differ among the treatments" else "look similar", lev_txt), small),
+      paste("Welch's ANOVA is recommended by default: it does not assume equal variances and gives almost the same result when they are equal,",
+            "so it is used without first testing the variances. Its means are compared with the Games-Howell test."),
+      "welch", "Switch to Welch's ANOVA (recommended)", "Continue with the standard ANOVA"))
   if (var_fail) {
-    obs <- sprintf("The variances differ among the treatments (Levene p %s%s).", .star_fmt_p(lev_p),
-                   if (is.finite(dg$homogeneity$ratio)) sprintf("; largest/smallest = %.1f", dg$homogeneity$ratio) else "")
-    if (r$design == "CRD")
-      return(.star_advice("warn", obs, "Consider Welch's ANOVA, which does not assume equal variances; its means are compared with the Games-Howell test.",
-                          "welch", "Switch to Welch's ANOVA (recommended)", "Continue with standard ANOVA"))
+    obs <- sprintf("The variances differ among the treatments (%s).", lev_txt)
     return(.star_advice("warn", obs,
       sprintf("There is no Welch version for blocks. A transformation (Advanced options) often makes the variances equal%s; otherwise the Friedman test (rank-based) can be used.", if (positive) ", for example log for yields or counts" else ""),
       "rank", "Switch to Friedman", "Continue with ANOVA"))
   }
-  note <- if (clt) sprintf(" The residuals depart from normal (Shapiro-Wilk p %s), but with %d or more per treatment and a moderate shape (%s) the ANOVA is robust (central limit theorem).",
-                           .star_fmt_p(sw_p), n_min, trimws(shape)) else ""
   .star_advice(if (clt || n_min < 15) "note" else "ok",
-    paste0(sprintf("Residuals are consistent with a normal distribution (Shapiro-Wilk p %s) and the variances are similar (Levene p %s).", .star_fmt_p(sw_p), .star_fmt_p(lev_p)),
-           note, small),
-    "The standard ANOVA suits these data.")
+    paste0(norm_txt, note, sprintf(" The variances look similar (%s).", lev_txt), small),
+    "The ANOVA suits these data.")
 }
 
 ## guidance for a t-test result of star_ttest()
@@ -157,11 +163,12 @@ star_recommend_tt <- function(r) {
               if (iqr_out) sprintf("; %d value(s) lie beyond 1.5 x IQR, so check them for errors first", iqr_out) else ""),
       sprintf("Consider the %s test, which does not assume a normal distribution.", wname),
       "wilcox", "Switch to Wilcoxon (recommended)", "Continue with the t-test"))
-  if (r$type == "independent") {
+  if (r$type == "independent" && isTRUE(r$var_equal)) {
     lev <- .star_levene(d$Value, d$Group)
-    if (isTRUE(lev[["p"]] < a) && isTRUE(r$var_equal))
-      return(.star_advice("warn", sprintf("The variances of the two groups differ (Levene p %s).", .star_fmt_p(lev[["p"]])),
-                          "Use Welch's t-test, which does not assume equal variances.", "welch_var", "Switch to Welch (recommended)", "Keep the pooled t-test"))
+    return(.star_advice(if (isTRUE(lev[["p"]] < a)) "warn" else "note",
+      sprintf("The pooled (Student's) t-test is chosen; the variances of the two groups %s (Levene p %s).", if (isTRUE(lev[["p"]] < a)) "differ" else "look similar", .star_fmt_p(lev[["p"]])),
+      "Welch's t-test is recommended by default: it does not assume equal variances and gives almost the same result when they are equal, so it is used without first testing the variances.",
+      "welch_var", "Switch to Welch (recommended)", "Keep the pooled t-test"))
   }
   .star_advice(if (clt || n_min < 15) "note" else "ok",
     paste0(if (clt) sprintf("The data depart from normal, but with %d or more values per group and a moderate shape the t-test is robust (central limit theorem).", n_min)

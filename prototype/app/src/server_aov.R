@@ -175,8 +175,18 @@
   # every method is computed from the same data; only CRD and RCBD have the alternatives
   aov_mode <- reactive({
     r <- ok(); m <- input$aov_method %||% "anova"
-    if (m %in% c("rank", "welch") && r$design %in% c("CRD", "RCBD")) m else "anova"
+    if (m == "rank" && r$design %in% c("CRD", "RCBD")) "rank"
+    else if (m == "welch" && identical(r$design, "CRD") && length(r$factors) == 1) "welch"
+    else "anova"
   })
+  # Welch's ANOVA is the default where it exists (CRD, one factor) and the standard ANOVA elsewhere
+  observeEvent(input$design, {
+    m <- input$aov_method %||% "welch"
+    if (input$design == "CRD" && m == "anova") updateRadioButtons(session, "aov_method", selected = "welch")
+    if (input$design != "CRD" && m == "welch") updateRadioButtons(session, "aov_method", selected = "anova")
+  }, ignoreInit = TRUE)
+  # Welch's ANOVA chosen where it does not apply: the standard ANOVA is shown, and the screen says why
+  welch_fallback <- reactive(identical(input$aov_method, "welch") && aov_mode() == "anova")
   aov_rank <- reactive(aov_mode() == "rank")
   aov_welch <- reactive(aov_mode() == "welch")
   # rank-based test for one treatment factor in a CRD (Kruskal-Wallis) or an RCBD (Friedman); NULL for other designs,
@@ -201,7 +211,7 @@
   observeEvent(input$go_aov, rec_kept(FALSE))
   observeEvent(input$rec_stay, rec_kept(TRUE))
   observeEvent(input$rec_switch, { rc <- aov_rec(); if (!is.null(rc$switch_to)) updateRadioButtons(session, "aov_method", selected = rc$switch_to) })
-  method_names <- c(anova = "ANOVA", welch = "Welch's ANOVA", rank = "rank-based test")
+  method_names <- c(anova = "the standard ANOVA", welch = "Welch's ANOVA", rank = "the rank-based test")
   np_display <- function(np) {
     m <- np$means
     out <- data.frame(m$Treatment, fmt_n(m$Median), formatC(m$N, format = "d"), fmt_n(m$Rank), stringsAsFactors = FALSE)
@@ -318,6 +328,9 @@
     }
     tagList(
       advice,
+      if (welch_fallback()) div(class = "alert alert-light small py-2", icon("circle-info"),
+        if (identical(r$design, "CRD")) " Welch's ANOVA needs exactly one treatment factor, so the standard ANOVA is shown."
+        else " Welch's ANOVA exists only for CRD with one factor (there is no version for blocks or split plots), so the standard ANOVA is shown."),
       notes_ui(r$data_notes),
       div(class = if (r$significant || r$interaction_significant) "alert alert-success" else "alert alert-info", r$summary),
       key_stats(

@@ -64,7 +64,8 @@
     else if (rc$switch_to == "welch_var") updateRadioButtons(session, "tt_var", selected = "welch")   # needs a new run: the screen says so
   })
   tt_current <- reactive(if (tt_rank()) "wilcox" else if (isTRUE(tt_ok()$var_equal)) "pooled" else "welch_var")
-  tt_advice <- reactive(advice_ui(tt_rec(), tt_current(), "tt_rec_switch", "tt_rec_stay", tt_kept(), if (tt_rank()) "Wilcoxon test" else "t-test"))
+  tt_advice <- reactive(advice_ui(tt_rec(), tt_current(), "tt_rec_switch", "tt_rec_stay", tt_kept(),
+                                  if (tt_rank()) "the Wilcoxon test" else if (isTRUE(tt_ok()$var_equal)) "the pooled t-test" else "Welch's t-test"))
   output$tt_msg <- renderUI({
     if (!isTRUE(input$go_tt > 0)) return(run_hint("Run test"))
     r <- tt_res()
@@ -122,7 +123,7 @@
         copy = "cp_tt_test", copy_label = "Copy table"),
       result_card("Assumption checks", html_table(tb$normal),
         if (!is.null(r$variance)) p(sprintf("Equality of variances, F test: F(%d, %d) = %.2f, p %s. %s", r$variance$DF1, r$variance$DF2, r$variance$F, .star_fmt_p(r$variance$P),
-                                            if (r$variance$P < r$alpha) "The variances differ, so use the Welch test." else "No evidence that the variances differ.")),
+                                            "For information only: Welch's test is the default whatever this result, because choosing the test from a variance test distorts its error rate.")),
         p(class = "text-muted small mb-0",
           if (length(bad_norm) && small) "The data depart from a normal distribution and the sample is small, so the t-test may be unreliable; check the plot for outliers, or choose the Wilcoxon test under Kind of comparison."
           else if (length(bad_norm)) "The data depart somewhat from a normal distribution, but with 30 or more observations per group the t-test is usually still reliable."
