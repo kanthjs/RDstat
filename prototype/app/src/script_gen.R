@@ -138,25 +138,26 @@ script_reg <- function(r, file = NULL) {
   paste(c(head, "", body), collapse = "\n")
 }
 
-# CRD and RCBD with one or two factors. Other designs (split plot, combined over sites) and RCBD data with a missing
+# CRD and RCBD with one or two factors, and the split plot. The analysis combined over sites and RCBD data with a missing
 # response (the app estimates the missing values) return NULL, and the screen says the script is not available.
 script_aov_supported <- function(r) {
-  r$design %in% c("CRD", "RCBD") && !(r$design == "RCBD" && anyNA(r$data[[r$response]]))
+  r$design %in% c("SplitCRD", "SplitRCBD") || (r$design %in% c("CRD", "RCBD") && !(r$design == "RCBD" && anyNA(r$data[[r$response]])))
 }
 
-script_compare <- function(test, y, tr, alpha) {
+script_compare <- function(test, y, tr, alpha, dfe = "dfe", mse = "mse") {
   a <- r_num(alpha)
   switch(test,
-    LSD = sprintf("agricolae::LSD.test(%s, %s, dfe, mse, %s, console = FALSE)", y, tr, a),
-    bonferroni = sprintf("agricolae::LSD.test(%s, %s, dfe, mse, %s, p.adj = \"bonferroni\", console = FALSE)", y, tr, a),
-    HSD = sprintf("agricolae::HSD.test(%s, %s, dfe, mse, %s, unbalanced = length(unique(table(%s))) > 1, console = FALSE)", y, tr, a, tr),
-    duncan = sprintf("agricolae::duncan.test(%s, %s, dfe, mse, %s, console = FALSE)", y, tr, a),
-    SNK = sprintf("agricolae::SNK.test(%s, %s, dfe, mse, %s, console = FALSE)", y, tr, a),
-    scheffe = sprintf("agricolae::scheffe.test(%s, %s, dfe, mse, Fc = NA_real_, alpha = %s, console = FALSE)", y, tr, a))
+    LSD = sprintf("agricolae::LSD.test(%s, %s, %s, %s, %s, console = FALSE)", y, tr, dfe, mse, a),
+    bonferroni = sprintf("agricolae::LSD.test(%s, %s, %s, %s, %s, p.adj = \"bonferroni\", console = FALSE)", y, tr, dfe, mse, a),
+    HSD = sprintf("agricolae::HSD.test(%s, %s, %s, %s, %s, unbalanced = length(unique(table(%s))) > 1, console = FALSE)", y, tr, dfe, mse, a, tr),
+    duncan = sprintf("agricolae::duncan.test(%s, %s, %s, %s, %s, console = FALSE)", y, tr, dfe, mse, a),
+    SNK = sprintf("agricolae::SNK.test(%s, %s, %s, %s, %s, console = FALSE)", y, tr, dfe, mse, a),
+    scheffe = sprintf("agricolae::scheffe.test(%s, %s, %s, %s, Fc = NA_real_, alpha = %s, console = FALSE)", y, tr, dfe, mse, a))
 }
 
 script_aov <- function(r, file = NULL) {
   if (!script_aov_supported(r)) return(NULL)
+  if (r$design %in% c("SplitCRD", "SplitRCBD")) return(script_split(r, file))
   f <- r$factors; blk <- r$block
   resp <- if (!is.null(r$transform)) r$original_response else r$response
   title <- sprintf("%s of %s by %s%s", r$design, resp, paste(f, collapse = " x "), if (!is.null(blk)) paste(", block", blk) else "")
@@ -197,4 +198,56 @@ script_aov <- function(r, file = NULL) {
     body <- c(body, "", "# the interaction is significant, so each factor is compared within the levels of the other", "simple <- list()", sim, "simple")
   }
   paste(c(head, "", body), collapse = "\n")
+}
+
+# Split plot: whole plots are block x main-plot level; Error(a) tests the main-plot factor, Error(b) the sub-plot
+# factor and the interaction. Sub-plot means use Error(b), main-plot means Error(a); with a significant interaction the
+# main factor is compared within sub-plot levels with the pooled error and Satterthwaite df, as in the app.
+script_split <- function(r, file = NULL) {
+  main <- r$main; sub <- r$sub; blk <- r$block; crd <- r$design == "SplitCRD"
+  resp <- if (!is.null(r$transform)) r$original_response else r$response
+  head <- script_header(sprintf("Split plot (%s) of %s: main plot %s, sub plot %s", if (crd) "CRD" else "RCBD", resp, main, sub), file)
+  trans <- if (!is.null(r$transform)) sprintf("y <- switch(%s, log = log(y + 1), sqrt = sqrt(y + 0.5), arcsin = asin(sqrt(y / 100)) * 180 / pi)   # transformed response", r_str(r$transform))
+  bt <- function(x) sprintf("`%s`", x)
+  fml <- if (crd) sprintf("y ~ %s * %s + Error(.wp)", bt(main), bt(sub)) else sprintf("y ~ %s + %s * %s + Error(.wp)", bt(blk), bt(main), bt(sub))
+  body <- c(
+    "# mean comparisons use the agricolae package: install.packages(\"agricolae\")",
+    sprintf("y <- suppressWarnings(as.numeric(d[[%s]]))", r_str(resp)),
+    trans,
+    "d$y <- y",
+    sprintf("for (v in %s) d[[v]] <- factor(trimws(as.character(d[[v]])))", r_vec(c(main, sub, blk))),
+    sprintf("d <- d[complete.cases(d[c(\"y\", %s)]), ]", paste(r_str(c(main, sub, blk)), collapse = ", ")),
+    sprintf("d$.wp <- interaction(d[[%s]], d[[%s]], drop = TRUE)   # whole plot = %s x main-plot level", r_str(blk), r_str(main), if (crd) "replication" else "block"),
+    "",
+    sprintf("fit <- aov(%s, data = d)", fml),
+    "st <- summary(fit)",
+    "st                                   # Error(a) is the first stratum, Error(b) the Within stratum",
+    "a <- st[[1]][[1]]; b <- st[[2]][[1]]",
+    "dfa <- a[[\"Df\"]][nrow(a)]; msa <- a[[\"Mean Sq\"]][nrow(a)]   # Error(a)",
+    "dfb <- b[[\"Df\"]][nrow(b)]; msb <- b[[\"Mean Sq\"]][nrow(b)]   # Error(b)",
+    "cv_a <- 100 * sqrt(msa) / mean(d$y); cv_b <- 100 * sqrt(msb) / mean(d$y)",
+    sprintf("nb <- nlevels(d[[%s]])", r_str(sub)),
+    "pooled_ms <- (msa + (nb - 1) * msb) / nb",
+    "pooled_df <- floor((msa + (nb - 1) * msb)^2 / (msa^2 / dfa + ((nb - 1) * msb)^2 / dfb))",
+    "",
+    "# mean comparisons: use them for effects that are significant (compare the main effects when the interaction is not)",
+    "cmp <- list()",
+    sprintf("cmp[[%s]] <- %s", r_str(main), script_compare(r$tests_used[[main]], "d$y", sprintf("d[[%s]]", r_str(main)), r$alpha, "dfa", "msa")),
+    sprintf("cmp[[%s]] <- %s", r_str(sub), script_compare(r$tests_used[[sub]], "d$y", sprintf("d[[%s]]", r_str(sub)), r$alpha, "dfb", "msb")),
+    "cmp")
+  if (isTRUE(r$interaction_significant)) {
+    body <- c(body, "", "# the interaction is significant, so each factor is compared within the levels of the other", "simple <- list()",
+      sprintf("for (lv in levels(d[[%s]])) {   # sub-plot factor within each main-plot level (Error(b))", r_str(main)),
+      sprintf("  s <- d[d[[%s]] == lv, ]", r_str(main)),
+      sprintf("  simple[[paste(%s, \"within\", %s, \"=\", lv)]] <- %s", r_str(sub), r_str(main),
+              script_compare(r$tests_used[[sub]], "s$y", sprintf("droplevels(s[[%s]])", r_str(sub)), r$alpha, "dfb", "msb")),
+      "}",
+      sprintf("for (lv in levels(d[[%s]])) {   # main-plot factor within each sub-plot level (pooled error)", r_str(sub)),
+      sprintf("  s <- d[d[[%s]] == lv, ]", r_str(sub)),
+      sprintf("  simple[[paste(%s, \"within\", %s, \"=\", lv)]] <- %s", r_str(main), r_str(sub),
+              script_compare(r$tests_used[[main]], "s$y", sprintf("droplevels(s[[%s]])", r_str(main)), r$alpha, "pooled_df", "pooled_ms")),
+      "}", "simple")
+  }
+  paste(c(head, "", body), collapse = "
+")
 }

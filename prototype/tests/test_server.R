@@ -13,8 +13,8 @@ testServer(app, {
   # the R code offered on the ANOVA screen, run on its own, must give the same table, means, letters and simple effects
   aov_script_check <- function(label) {
     r <- ok(); e <- run_script(aov_script())
-    pv <- summary(e$fit)[[1]][["Pr(>F)"]]
-    same_table <- isTRUE(all.equal(pv[!is.na(pv)], r$anova$P[!is.na(r$anova$P)])) && isTRUE(all.equal(e$cv, r$cv))
+    pv <- if (inherits(e$fit, "aovlist")) unlist(lapply(summary(e$fit), function(s) s[[1]][["Pr(>F)"]])) else summary(e$fit)[[1]][["Pr(>F)"]]
+    same_table <- isTRUE(all.equal(unname(pv[!is.na(pv)]), r$anova$P[!is.na(r$anova$P)])) && (if (!is.null(e$cv_a)) isTRUE(all.equal(c(e$cv_a, e$cv_b), c(r$cv_a, r$cv_b))) else isTRUE(all.equal(e$cv, r$cv)))
     same_means <- all(vapply(r$factors, function(f) { m <- r$means[[f]]; g <- trimws(e$cmp[[f]]$groups[m$Treatment, "groups"])
       isTRUE(all.equal(unname(e$cmp[[f]]$means[m$Treatment, 1]), m$Mean)) && (r$interaction_significant || identical(unname(g), m$Group)) }, NA))
     same_simple <- all(vapply(names(r$simple), function(nm) { sm <- r$simple[[nm]]; cf <- attr(sm, "compare"); af <- attr(sm, "at")
@@ -75,7 +75,7 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   run(pw = "auto")
   r <- ok()
   check(identical(r$anova$Source, c("Rep", "Nitrogen", "Error(a)", "Variety", "Nitrogen:Variety", "Error(b)", "Total")), "Split plot: ANOVA rows")
-  check(is.null(aov_script()), "ANOVA script: not offered for a split plot")
+  aov_script_check("split plot (RCBD), significant interaction")
   check(round(c(r$cv_a, r$cv_b), 2)[2] == 10.79 && round(r$cv_a, 2) == 6.88, "Split plot: CV(a) = 6.88, CV(b) = 10.79")
   check(identical(tables()$simple[["Nitrogen within Variety"]][["Variety = IR8"]][1:2], c("4,252.67 d", "5,672.00 c")), "Split plot: Nitrogen within IR8 letters (original STAR)")
   check(grepl("Error (a) / Error (b)", html(output$results_ui), fixed = TRUE), "Split plot: CV(a) and CV(b) in the key numbers")
@@ -94,6 +94,7 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(identical(r$anova$DF, c(2, 9, 3, 6, 27, 47)), "Split plot CRD: DF a(r-1) = 9 and a(r-1)(b-1) = 27")
   check(round(r$anova$F[1], 2) == 29.80 && round(r$cv_a, 2) == 7.56 && round(r$cv_b, 2) == 5.15, "Split plot CRD: F = 29.80, CV(a) = 7.56, CV(b) = 5.15 (original STAR)")
   check(identical(tables()$means$Irrigation$Group, c("b", "a", "c")) && identical(tables()$means$Variety$Group, c("d", "c", "b", "a")), "Split plot CRD: letters match the original STAR")
+  aov_script_check("split plot (CRD)")
   check(grepl("Split Plot in Completely Randomized Design", output$report), "Split plot CRD: classic STAR report")
   check(grepl("not available for split-plot", html(output$diag_ui)), "Split plot CRD: no assumption checks yet")
   check(identical(tables()$agronomy$Irrigation[[1]][4:9], c("F test (Irrigation)", "Grand mean", "CV (%)", "SE(m)", "SED", "LSD (0.05)")),
