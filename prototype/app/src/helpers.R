@@ -300,6 +300,10 @@ result_card <- function(title, ..., copy = NULL, copy_label = "Copy") bslib::car
   bslib::card_header(class = "d-flex justify-content-between align-items-center", span(title),
                      if (!is.null(copy)) actionButton(copy, tagList(icon("copy"), " ", copy_label), class = "btn-sm")),
   bslib::card_body(...))
+# the Thai summary card, with a reminder that the text is generated and must be read against the real context of the data
+thai_card <- function(text, copy) result_card("สรุปผล (ภาษาไทย)", p(lang = "th", text),
+  p(lang = "th", class = "text-muted small mb-0 mt-2", strong("ข้อเสนอแนะ:"), " สรุปนี้สร้างจากโปรแกรม ผู้วิจัยควรนำไปแปลความหมายด้วยความรอบคอบ โดยพิจารณาร่วมกับบริบทและสภาพแวดล้อมที่แท้จริงของข้อมูล"),
+  copy = copy, copy_label = "คัดลอก")
 # what the data checks suggest (from star_recommend_aov / star_recommend_tt), as advice the analyst may follow or not:
 # the traffic light of the assumption checks, an observation, a recommendation, and a button for each method offered
 # (on red, one per reporting goal: ranks or medians, or means without the normal curve) plus one to keep the current
