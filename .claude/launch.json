@@ -4,20 +4,38 @@
     {
       "name": "star-app",
       "runtimeExecutable": "C:/Program Files/R/R-4.5.2/bin/Rscript.exe",
-      "runtimeArgs": ["-e", "shiny::runApp('prototype/app', port=4321, launch.browser=FALSE)"],
+      "runtimeArgs": [
+        "-e",
+        "shiny::runApp('prototype/app', port=4321, launch.browser=FALSE)"
+      ],
       "port": 4321
     },
     {
       "name": "star-app-graphics",
       "runtimeExecutable": "C:/Program Files/R/R-4.5.2/bin/Rscript.exe",
-      "runtimeArgs": ["-e", "shiny::runApp('prototype/app', port=4322, launch.browser=FALSE)"],
+      "runtimeArgs": [
+        "-e",
+        "shiny::runApp('prototype/app', port=4322, launch.browser=FALSE)"
+      ],
       "port": 4322
     },
     {
       "name": "star-app-dev",
       "runtimeExecutable": "C:/Program Files/R/R-4.5.2/bin/Rscript.exe",
-      "runtimeArgs": ["-e", "shiny::runApp('prototype/app', port=as.integer(Sys.getenv('PORT', '4324')), launch.browser=FALSE)"],
+      "runtimeArgs": [
+        "-e",
+        "shiny::runApp('prototype/app', port=as.integer(Sys.getenv('PORT', '4324')), launch.browser=FALSE)"
+      ],
       "port": 4324
+    },
+    {
+      "name": "star-app-r46",
+      "runtimeExecutable": "C:/Program Files/R/R-4.6.1/bin/Rscript.exe",
+      "runtimeArgs": [
+        "-e",
+        "shiny::runApp('prototype/app', port=as.integer(Sys.getenv('PORT', '4325')), launch.browser=FALSE)"
+      ],
+      "port": 4325
     }
   ]
 }

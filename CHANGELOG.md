@@ -3,11 +3,15 @@
 Changes to the RDstat web app that can affect results are marked **(results)**. The version is shown in the app's About tab and in every downloaded file.
 
 ## 0.1.0 (unreleased)
+- "R code to repeat this analysis" card at the end of each results screen (t-test, correlation, regression, analysis of variance including the split plot and the analysis combined over sites) with a Copy button. The script uses base R and agricolae only, carries the example data (or reads your file with its separator and the same number parsing as the app) and gives the same numbers as the screen. Not available for an RCBD with missing responses.
+- The app code is split into `prototype/app/src/` (helpers, screens, one server file per screen); behaviour is unchanged. Notes on the problems met are in `docs/DEV_NOTES.md`.
 - First public build: ANOVA (CRD, RCBD, split plot), correlation and linear regression.
 - Uploaded files: Thai CSV files saved by Excel on Windows (Windows-874 / TIS-620) and Excel's "Unicode Text" (UTF-16) files are read correctly; title lines above the column names and empty columns are skipped, and the app says what it skipped.
 - **(results)** Summary rows typed below the data (Mean, Total, CV (%), LSD 0.05, SE, เฉลี่ย, รวม, ...) are no longer read as plots; earlier builds analysed such a row as one more treatment.
 - **(results)** Labels typed once for several rows are repeated on every row: cells merged down a column in Excel (e.g. a variety name merged over its replications), and in CSV files a label column left blank under each label in groups of equal size. Earlier builds dropped the rows with a blank label, so most of the plots were left out of the analysis. A heading of two rows with merged cells now gives the column names of the second row.
 - For an uploaded file, the first choices of block, environment and treatment on the ANOVA screen come from the column names (Rep, Block, ซ้ำ, บล็อก; Site, Season, Year, สถานที่, ฤดู) instead of the column order, so a file laid out Variety, Rep, Yield no longer starts with Variety as the block. Another measured trait is not offered first as a treatment.
+- **(results)** Uploaded files: a note typed beside one plot (in an extra column without a name) no longer moves the header down to a data row, which dropped the column names and the plots above the note; the notes column is left out and listed. A title merged over a block of cells in Excel (several rows and columns) is no longer copied into every cell, which made the upload fail.
+- A column named B (factor B next to a factor A) is no longer guessed as the block; a column named Rep or Block is preferred.
 - Only the engine files the app uses are bundled, so the app opens faster.
 - About tab with license, citation and problem-reporting link; app version written to Excel and TXT downloads.
 - Home page ("What do you want to do?"), Methods page with a copyable methods sentence, collapsible "What does this mean?" help, maintainer and disclaimer in About, app name kept in one place (`app_name`), deployment notes for IT in `docs/DEPLOY.md`.
