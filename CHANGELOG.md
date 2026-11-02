@@ -3,6 +3,8 @@
 Changes to the RDstat web app that can affect results are marked **(results)**. The version is shown in the app's About tab and in every downloaded file.
 
 ## 0.1.0 (unreleased)
+- "R code to repeat this analysis" card at the end of each results screen (t-test, correlation, regression, analysis of variance including the split plot and the analysis combined over sites) with a Copy button. The script uses base R and agricolae only, carries the example data (or reads your file with its separator and the same number parsing as the app) and gives the same numbers as the screen. Not available for an RCBD with missing responses.
+- The app code is split into `prototype/app/src/` (helpers, screens, one server file per screen); behaviour is unchanged. Notes on the problems met are in `docs/DEV_NOTES.md`.
 - First public build: ANOVA (CRD, RCBD, split plot), correlation and linear regression.
 - Uploaded files: Thai CSV files saved by Excel on Windows (Windows-874 / TIS-620) and Excel's "Unicode Text" (UTF-16) files are read correctly; title lines above the column names and empty columns are skipped, and the app says what it skipped.
 - **(results)** Summary rows typed below the data (Mean, Total, CV (%), LSD 0.05, SE, เฉลี่ย, รวม, ...) are no longer read as plots; earlier builds analysed such a row as one more treatment.
