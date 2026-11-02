@@ -394,7 +394,22 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   session$setInputs(home_aov = 1, home_corr = 1, home_reg = 1, cp_methods = 1)
   check(grepl("R [0-9]+[.][0-9]+", methods_sentence("3.5.0")) && grepl("ggplot2 3.5.0", methods_sentence("3.5.0")), "Methods sentence names R and ggplot2 versions")
   check(nzchar(version_label()) && nzchar(app_name), "App name and version label exist")
-  check(grepl("ผลแต่ละส่วนคำนวณจากอะไร", paste(as.character(output$methods_text$html), collapse = "")), "Methods page renders")
+  check(grepl("เอกสารอ้างอิงของซอฟต์แวร์", paste(as.character(output$methods_text$html), collapse = "")), "Methods page renders")
+  # Methods page by topic: each topic's references resolve, and hold only what that topic uses
+  topic_of <- function(id) Filter(function(t) t$id == id, method_topics)[[1]]
+  check(all(vapply(method_topics, function(t) all(nzchar(topic_refs(t))), NA)) && !anyDuplicated(vapply(method_topics, `[[`, "", "id")) &&
+        all(vapply(method_topics, `[[`, "", "group") %in% names(method_groups)), "Methods topics: every reference key matches one reference, ids are unique, groups exist")
+  ph <- topic_refs(topic_of("posthoc"))
+  check(any(startsWith(ph, "Tukey JW (1949)")) && any(grepl("agricolae", ph, ignore.case = TRUE)) && !any(startsWith(ph, "Welch BL")) && any(startsWith(ph, "R Core Team")),
+        "Methods topics: post hoc lists Tukey, agricolae and R, not Welch")
+  tt_txt <- topic_copy_text(topic_of("ttest"))
+  check(grepl("^t-test
+Software: R [0-9.]+
+Functions: stats::t.test", tt_txt) && grepl("Student (1908)", tt_txt, fixed = TRUE) && !grepl("agricolae", tt_txt), "Methods topics: copy text of the t-test topic")
+  check(any(startsWith(topic_refs(topic_of("rcbd")), "International Rice Research Institute")) && !length(topic_refs(topic_of("advice"))), "Methods topics: STAR cited where its code is used; no references where none apply")
+  mt <- paste(as.character(output$methods_topics$html), collapse = "")
+  check(grepl("accordion", mt) && grepl("cp_topic_posthoc", mt) && grepl(method_groups[["alt"]], mt, fixed = TRUE), "Methods topics: the page shows the topics in groups with copy buttons")
+  session$setInputs(cp_topic_posthoc = 1, cp_topic_ttest = 1)
 
   # ---- mean comparison comes from agricolae: letters must agree with the critical difference ----
   d <- read.csv("example_crd.csv"); d$Insecticide <- factor(d$Insecticide)
@@ -414,7 +429,7 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(identical(trimws(sub("^.*[0-9] +", "", rl)), rep_sc$means$Insecticide$Group), "Classic report and tables give the same Scheffe letters")
   session$setInputs(cp_mrefs = 1)
   check(length(method_refs) >= 20 && all(grepl("[0-9]{4}", method_refs)), "Method references are listed")
-  check(any(grepl("Error(Block:A)", paste(as.character(methods_sections), collapse = ""), fixed = TRUE)), "Methods page describes the split-plot model")
+  check(any(grepl("Error(Block:A)", paste(as.character(lapply(method_topics, `[[`, "body")), collapse = ""), fixed = TRUE)), "Methods page describes the split-plot model")
 
   # ---- missing letters are explained, and Excel agrees with the screen ----
   session$setInputs(src = "ex", design = "CRD", example = "crd2", resp = "len", trt = c("supp", "dose")); run(pw = "auto")

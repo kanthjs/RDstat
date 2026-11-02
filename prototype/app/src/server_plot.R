@@ -76,11 +76,11 @@
     tagList(
       div(class = "well well-sm", sentence), actionButton("cp_methods", "คัดลอกประโยค"),
       h4("เอกสารอ้างอิงของซอฟต์แวร์"), tags$ul(lapply(package_refs(), tags$li)), actionButton("cp_refs", "คัดลอกเอกสารอ้างอิง"),
-      h4("ผลแต่ละส่วนคำนวณจากอะไร"),
-      html_table(data.frame(`ผลลัพธ์` = c("ตาราง ANOVA (CRD, RCBD, split plot)", "อักษรเปรียบเทียบค่าเฉลี่ย", "การทดสอบที (t-test)", "การวิเคราะห์ร่วมหลายสถานที่ และ Bartlett's test", "การทดสอบแบบไม่อิงพารามิเตอร์", "SE(m), SED, LSD", "สหสัมพันธ์และค่า p", "การถดถอย ตาราง ANOVA และสัมประสิทธิ์", "การตรวจสอบการแจกแจงปกติ ความแปรปรวน และค่าผิดปกติ", "กราฟ"),
-                            `คำนวณโดย` = c("R stats::aov", "agricolae (LSD.test, HSD.test, duncan.test)", "R stats::t.test, stats::var.test, stats::shapiro.test", "R stats::aov, Bartlett's test computed from the error mean squares", "agricolae (kruskal, friedman), R stats::wilcox.test", "error mean square and df from the ANOVA, stats::qt", "R stats::cor.test", "R stats::lm", "R stats::shapiro.test, nortest::lillie.test, lmtest::bptest, studentized residuals from stats", "ggplot2 and R graphics"), check.names = FALSE, stringsAsFactors = FALSE)),
       p(class = "text-muted", sprintf("รุ่นที่ใช้ในการใช้งานครั้งนี้: %s, ggplot2 %s",R.version.string, gg_version())))
   })
+  output$methods_topics <- renderUI(methods_topics_ui())
+  for (t in method_topics) local({ tp <- t
+    observeEvent(input[[paste0("cp_topic_", tp$id)]], session$sendCustomMessage("copy_text", list(what = tp$title, text = topic_copy_text(tp)))) })
   observeEvent(input$cp_refs, session$sendCustomMessage("copy_text", list(what = "References", text = paste(package_refs(), collapse = "\n\n"))))
 observeEvent(input$cp_mrefs, session$sendCustomMessage("copy_text", list(what = "Method references", text = paste(method_refs, collapse = "
 

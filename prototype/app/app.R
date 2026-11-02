@@ -134,7 +134,7 @@ home_ui <- div(
   )
 )
 
-source("methods.R", local = TRUE) # methods_sections, method_refs
+source("methods.R", local = TRUE) # method_topics, method_refs
 source("report.R", local = TRUE) # Thai summaries, Word report
 
 methods_ui <- div(
@@ -147,7 +147,8 @@ methods_ui <- div(
   h3("ซอฟต์แวร์"),
   uiOutput("methods_text"),
   h3("แต่ละการวิเคราะห์ทำอะไร"),
-  methods_sections,
+  p("เลือกหัวข้อที่ตรงกับการวิเคราะห์ที่ใช้ แต่ละหัวข้ออธิบายว่าโปรแกรมคำนวณอย่างไร ใช้ฟังก์ชันและ package ใด และมีเอกสารอ้างอิงใดบ้าง ใช้เป็นข้อมูลประกอบการเขียนวิธีการวิเคราะห์ของคุณเอง"),
+  uiOutput("methods_topics"),
   h3("เอกสารอ้างอิงของวิธีการ"),
   tags$ul(lapply(method_refs, tags$li)),
   actionButton("cp_mrefs", "คัดลอกเอกสารอ้างอิงของวิธีการ")
@@ -164,7 +165,7 @@ about_ui <- div(
   div(
     class = "alert alert-warning",
     strong("รุ่นทดลอง (beta) "),
-    "ผลลัพธ์ได้ตรวจเทียบกับ STAR ด้วยข้อมูลตัวอย่างในแอปแล้ว แต่อยู่ระหว่างการพัฒนา ผลที่สำคัญ (เช่น ก่อนตีพิมพ์) ควรตรวจสอบด้วยโปรแกรมอื่นหรือปรึกษานักสถิติ และแจ้งเมื่อพบผลที่ดูผิดปกติ"
+    "ผลลัพธ์ได้ตรวจเทียบกับโปรแกรม STAR ด้วยข้อมูลตัวอย่างในแอปแล้ว แต่อยู่ระหว่างการพัฒนา ผลวิเคราะห์ควรตรวจสอบด้วยโปรแกรมอื่นหรือปรึกษานักสถิติ และสามารถแจ้งเมื่อพบผลที่ดูผิดปกติ"
   ),
   h4("ข้อมูลของคุณ"),
   p("ไฟล์ของคุณถูกอ่านและวิเคราะห์ภายในเบราว์เซอร์ ไม่ได้ถูกอัปโหลดไปยังเซิร์ฟเวอร์ใด"),
@@ -174,9 +175,7 @@ about_ui <- div(
   p(app_maintainer, " ปัญหาจะได้รับการแก้ไขเมื่อมีเวลา ไม่มีการรับประกันระยะเวลาตอบกลับ"),
   h4("การอ้างอิง"),
   p(
-    "International Rice Research Institute (IRRI). STAR: Statistical Tools for Agricultural Research, version 2.0.2, and this web version",
-    version_label(),
-    "(https://github.com/kanthjs/RDstat). ดูเพิ่มเติมที่หน้า Methods"
+    "โปรดอ้างอิงจาก Info > Methods"
   ),
   h4("ส่งข้อเสนอแนะและแจ้งปัญหา"),
   p(
@@ -210,7 +209,7 @@ about_ui <- div(
   ),
   h4("ฟอนต์"),
   p(
-    "ข้อความในแอปนี้ใช้ฟอนต์ จุฬาภรณ์ลิขิต (Chulabhorn Likhit) ฟอนต์แห่งชาติจากราชวิทยาลัยจุฬาภรณ์ กราฟใช้ฟอนต์มาตรฐานของ R"
+    "ข้อความในแอปนี้ใช้ฟอนต์ จุฬาภรณ์ลิขิต (Chulabhorn Likhit) ส่วน กราฟใช้ฟอนต์มาตรฐานของ R"
   ),
   h4("สัญญาอนุญาต"),
   p(
