@@ -6,9 +6,9 @@ r_vec <- function(x) if (length(x) == 1) r_str(x) else paste0("c(", paste(r_str(
 r_num <- function(x) format(x, digits = 15)
 
 script_header <- function(title, file) {
-  read <- if (is.null(file) || is.na(file)) "# d <- read.csv(\"your_file.csv\", check.names = FALSE, strip.white = TRUE)"
+  read <- if (is.null(file) || is.na(file)) "# d <- read.csv(\"your_file.csv\", check.names = FALSE, strip.white = TRUE, stringsAsFactors = FALSE)"
           else if (grepl("[.]xlsx?$", file, ignore.case = TRUE)) sprintf("d <- as.data.frame(readxl::read_excel(%s))", r_str(file))
-          else sprintf("d <- read.csv(%s, check.names = FALSE, strip.white = TRUE)", r_str(file))
+          else sprintf("d <- read.csv(%s, check.names = FALSE, strip.white = TRUE, stringsAsFactors = FALSE)", r_str(file))
   c(sprintf("# %s", title),
     sprintf("# Made by %s %s on %s. Runs with base R; set the working directory to the folder that holds the data file.", app_name, version_label(), format(Sys.Date())),
     "# If the file has title lines above the column names, add skip = <number of lines> to the read function.",
@@ -70,5 +70,31 @@ script_tt <- function(r, file = NULL) {
       sprintf("wilcox <- suppressWarnings(wilcox.test(v, mu = mu, conf.int = TRUE, %s))   # rank-based alternative", args),
       "wilcox",
       "(mean(v) - mu) / sd(v)               # Cohen's d"))
+  paste(c(head, "", body), collapse = "\n")
+}
+
+script_corr <- function(r, file = NULL) {
+  head <- script_header(sprintf("%s correlation of %d variables", r$method_name, length(r$vars)), file)
+  body <- c(
+    sprintf("vars <- %s", r_vec(r$vars)),
+    "d[vars] <- lapply(d[vars], function(x) suppressWarnings(as.numeric(x)))",
+    "",
+    "# one test per pair of variables, using the rows where both values are present",
+    "idx <- t(combn(length(vars), 2))",
+    "pairs <- do.call(rbind, lapply(seq_len(nrow(idx)), function(s) {",
+    "  x <- d[[vars[idx[s, 1]]]]; y <- d[[vars[idx[s, 2]]]]",
+    "  ok <- complete.cases(x, y)",
+    sprintf("  ct <- suppressWarnings(cor.test(x[ok], y[ok], method = %s, alternative = %s, exact = FALSE, conf.level = %s))",
+            r_str(r$method), r_str(r$alternative), r_num(1 - r$alpha)),
+    "  data.frame(Variable1 = vars[idx[s, 1]], Variable2 = vars[idx[s, 2]], r = unname(ct$estimate), N = sum(ok), P = ct$p.value, stringsAsFactors = FALSE)",
+    "}))",
+    sprintf("pairs$PAdj <- p.adjust(pairs$P, method = %s)   # \"none\" leaves the p values as they are", r_str(r$adjust)),
+    sprintf("pairs$Significant <- pairs$PAdj < %s", r_num(r$alpha)),
+    "pairs",
+    "",
+    "# correlation matrix",
+    "r_matrix <- matrix(1, length(vars), length(vars), dimnames = list(vars, vars))",
+    "for (s in seq_len(nrow(pairs))) r_matrix[pairs$Variable1[s], pairs$Variable2[s]] <- r_matrix[pairs$Variable2[s], pairs$Variable1[s]] <- pairs$r[s]",
+    "round(r_matrix, 3)")
   paste(c(head, "", body), collapse = "\n")
 }
