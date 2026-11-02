@@ -44,7 +44,7 @@
       result_card("Analysis of variance", html_table(tb$anova), copy = "cp_reg_anova", copy_label = "Copy table"),
       result_card("Parameter estimates", html_table(tb$coef), copy = "cp_reg_coef", copy_label = "Copy table"),
       result_card("APA-style report", p(r$apa), copy = "cp_reg_apa"),
-      result_card("R code to repeat this analysis", tags$pre(class = "small mb-0", style = "white-space: pre-wrap;", reg_script()), copy = "cp_reg_script", copy_label = "Copy code"))
+      code_card(reg_script(), "cp_reg_script"))
   })
   gg_reg <- reactive(apply_plot_customizations(do.call(star_ggplot_regression, c(list(reg_ok(), main = input$reg_title, xlab = input$reg_xlab, ylab = input$reg_ylab), plot_style("reg"))), "reg"))
   output$reg_plot <- renderPlot(print(gg_reg()),

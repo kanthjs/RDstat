@@ -93,7 +93,7 @@
             "with tied values (or zero differences) the p value and the interval use a normal approximation."),
         copy = "cp_tt_np", copy_label = "Copy table"),
       result_card("APA-style report", p(r$apa), copy = "cp_tt_apa"),
-      result_card("R code to repeat this analysis", tags$pre(class = "small mb-0", style = "white-space: pre-wrap;", tt_script()), copy = "cp_tt_script", copy_label = "Copy code"))
+      code_card(tt_script(), "cp_tt_script"))
   })
   gg_tt <- reactive(apply_plot_customizations(do.call(star_ggplot_ttest, c(list(tt_ok(), main = input$tt_title, xlab = input$tt_xlab, ylab = input$tt_ylab), plot_style("tt"))), "tt"))
   output$tt_plot <- renderPlot(print(gg_tt()),
