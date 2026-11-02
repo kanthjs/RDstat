@@ -167,23 +167,43 @@
     bindCache(dat(), input$design, input$resp, input$transform, input$trt, input$env, input$trt_main, input$trt_sub, input$blk, input$pw, input$alpha, cache = star_cache) |>
     bindEvent(input$go_aov)
   ok <- reactive({ r <- res(); req(!inherits(r, "star_error")); r })
-  # the method and the untransformed data at the time Run was pressed (ranks are taken of the original values, so that
-  # the medians are in the original unit); priority so that they are set before the results are drawn
-  aov_rank <- reactiveVal(FALSE)
+  # the untransformed data at the time Run was pressed: ranks are taken of the original values, so that the medians are
+  # in the original unit; priority so that they are stored before the results are drawn
   run_data <- reactiveVal(NULL)
-  observeEvent(input$go_aov, {
-    aov_rank(identical(input$aov_method, "rank") && input$design %in% c("CRD", "RCBD"))
-    run_data(tryCatch(dat(), error = function(e) NULL))
-  }, priority = 10)
+  observeEvent(input$go_aov, run_data(tryCatch(dat(), error = function(e) NULL)), priority = 10)
+  # the method shown. It follows the Analysis buttons (or a recommendation's switch) at once, with no new run, because
+  # every method is computed from the same data; only CRD and RCBD have the alternatives
+  aov_mode <- reactive({
+    r <- ok(); m <- input$aov_method %||% "anova"
+    if (m %in% c("rank", "welch") && r$design %in% c("CRD", "RCBD")) m else "anova"
+  })
+  aov_rank <- reactive(aov_mode() == "rank")
+  aov_welch <- reactive(aov_mode() == "welch")
   # rank-based test for one treatment factor in a CRD (Kruskal-Wallis) or an RCBD (Friedman); NULL for other designs,
   # a star_error when it cannot be run (two factors, or a block without every treatment exactly once)
   np_try <- reactive({
     r <- ok()
     if (!r$design %in% c("CRD", "RCBD")) return(NULL)
     d <- run_data(); req(d)
-    tryCatch(star_nonparametric(d, r$original_response %||% r$response, r$factors, r$block, r$alpha), error = as_error)
+    tryCatch(star_nonparametric(d, r$original_response %||% r$response, r$factors, r$block, r$alpha,
+                                posthoc = if (is.null(r$block)) input$np_posthoc %||% "conover" else "conover"), error = as_error)
   })
   np_res <- reactive({ np <- np_try(); if (inherits(np, "star_error")) NULL else np })
+  # Welch's ANOVA, on the analysed (possibly transformed) values like the standard ANOVA; CRD only
+  welch_try <- reactive({
+    r <- ok(); d <- used_data(); req(d)
+    if (!identical(r$design, "CRD")) return(structure(list(message = "Welch's ANOVA has no version for blocks (RCBD). A transformation (Advanced options) or the Friedman test (rank-based) can be used instead."), class = "star_error"))
+    tryCatch(star_welch(d, r$response, r$factors, r$alpha), error = as_error)
+  })
+  # which method suits the data (advice only; see star_recommend_aov), and whether the user chose to keep their method
+  aov_rec <- reactive(tryCatch(star_recommend_aov(ok()), error = function(e) NULL))
+  rec_kept <- reactiveVal(FALSE)
+  observeEvent(input$go_aov, rec_kept(FALSE))
+  observeEvent(input$rec_stay, rec_kept(TRUE))
+  observeEvent(input$rec_switch, { rc <- aov_rec(); if (!is.null(rc$switch_to)) updateRadioButtons(session, "aov_method", selected = rc$switch_to) })
+  method_names <- c(anova = "ANOVA", welch = "Welch's ANOVA", rank = "rank-based test")
+  # the main effect's F test of the standard ANOVA (one factor), for the comparison lines
+  anova_p <- function(r) r$effects$P[r$effects$Effect == r$factors[1]]
   np_display <- function(np) {
     m <- np$means
     out <- data.frame(m$Treatment, fmt_n(m$Median), formatC(m$N, format = "d"), fmt_n(m$Rank), stringsAsFactors = FALSE)
@@ -196,6 +216,40 @@
     html_table(np_display(np)),
     p(class = "text-muted small mb-0", if (np$significant) sprintf("Treatments with the same letter do not differ (comparison of %s, agricolae). ", tolower(np$rank_label)) else "",
       "The rank-based test does not assume normal residuals or equal variances."))
+  welch_display <- function(w) {
+    m <- w$means
+    out <- data.frame(m$Treatment, fmt_n(m$Mean), fmt_n(m$SD), formatC(m$N, format = "d"), fmt_n(m$SE), stringsAsFactors = FALSE)
+    names(out) <- c(w$treatment, "Mean", "SD", "N", "SE")
+    if (w$significant) out$Group <- m$Group
+    out
+  }
+  gh_display <- function(w) { z <- w$pairs
+    data.frame(Comparison = z$Comparison, Difference = fmt_n(z$Difference), SE = fmt_n(z$SE), t = fmt_n(z$t, 3), DF = fmt_n(z$DF), p = fmt_p(z$P),
+               check.names = FALSE, stringsAsFactors = FALSE) }
+  # the results screen when Analysis is Welch's ANOVA
+  welch_results_ui <- function(r) {
+    w <- welch_try()
+    if (inherits(w, "star_error")) return(error_box(paste("Welch's ANOVA could not be run:", w$message)))
+    m <- w$means; top <- m[which.max(m$Mean), ]; np <- np_res()
+    tagList(
+      notes_ui(r$data_notes),
+      div(class = if (w$significant) "alert alert-success" else "alert alert-info", w$summary),
+      if (!is.null(np)) dual_ui(paste(np$name, "test"), np$p, np$significant, "Welch's ANOVA", w$p, w$significant),
+      key_stats(
+        stat("Test", "Welch's ANOVA", "no equal-variance assumption"),
+        stat("F", sprintf("%.2f", w$statistic), sprintf("df = %d and %.2f", w$df1, w$df2)),
+        stat("p value", fmt_p(w$p), if (w$significant) paste("significant at", format(w$alpha)) else paste("not significant at", format(w$alpha))),
+        stat("Highest mean", fmt_n(top$Mean), top$Treatment)),
+      if (!is.null(r$transform)) div(class = "alert alert-light small", icon("circle-info"), sprintf(" The analysis used %s transformed as %s; the means are on the transformed scale.", r$original_response, transforms[[r$transform]]$label)),
+      result_card("สรุปผล (ภาษาไทย)", p(lang = "th", thai_summary_welch(w)), copy = "cp_welch_th", copy_label = "คัดลอก"),
+      result_card("Welch's ANOVA: means", html_table(welch_display(w)),
+        p(class = "text-muted small mb-0", if (w$significant) "Means with the same letter do not differ (Games-Howell test, which does not assume equal variances). " else "Letters are not given because the test is not significant. ",
+          "SE is the group's own standard error."), copy = "cp_welch", copy_label = "Copy table"),
+      result_card("Games-Howell comparisons", html_table(gh_display(w)), copy = "cp_gh", copy_label = "Copy table"),
+      result_card("APA-style report", p(w$apa), copy = "cp_welch_apa"),
+      result_card("R code to repeat this analysis", tags$pre(class = "small mb-0", style = "white-space: pre-wrap;", welch_script()), copy = "cp_welch_script", copy_label = "Copy code"),
+      p(class = "text-muted small", icon("circle-info"), " The standard ANOVA table and its letters are not shown because Analysis is set to Welch's ANOVA."))
+  }
   # the results screen when Analysis is rank-based: the test, medians and letters take the place of the ANOVA
   rank_results_ui <- function(r) {
     np <- np_try()
@@ -204,6 +258,9 @@
     tagList(
       notes_ui(r$data_notes),
       div(class = if (np$significant) "alert alert-success" else "alert alert-info", np$summary),
+      dual_ui("standard ANOVA", anova_p(r), isTRUE(r$significant), paste(np$name, "test"), np$p, np$significant),
+      if (isFALSE(r$diagnostics$homogeneity$ok)) p(class = "small text-muted", icon("circle-info"),
+        " The spread differs among the treatments, so the test compares mean ranks (which treatments tend to give larger values) rather than medians alone."),
       key_stats(
         stat("Test", np$name, if (is.null(np$block)) "CRD, ranks of all plots" else paste("RCBD, ranks within each", np$block)),
         stat("Chi-square", sprintf("%.2f", np$statistic), paste("df =", np$df)),
@@ -223,7 +280,7 @@
   # with a transformation the plotted observations must be on the transformed scale, like the means
   observeEvent(input$go_aov, used_data(tryCatch(transform_response(dat(), input$resp, input$transform)$data, error = function(e) dat())))
   aov_sig <- reactive(list(input$design, input$src, input$example, input$file$name, to_long(), input$resp, input$transform, input$trt, input$env, input$trt_main, input$trt_sub,
-                           input$blk, input$pw, input$alpha, input$aov_method))
+                           input$blk, input$pw, input$alpha))
   aov_stale <- stale_flag("go_aov", aov_sig)
   output$aov_msg <- renderUI({
     if (!isTRUE(input$go_aov > 0)) return(run_hint("Run analysis"))
@@ -249,8 +306,10 @@
 
   output$results_ui <- renderUI({
     r <- ok()
-    if (aov_rank()) return(rank_results_ui(r))
-    tb <- tables()
+    advice <- advice_ui(aov_rec(), aov_mode(), "rec_switch", "rec_stay", rec_kept(), method_names[[aov_mode()]])
+    if (aov_rank()) return(tagList(advice, rank_results_ui(r)))
+    if (aov_welch()) return(tagList(advice, welch_results_ui(r)))
+    tb <- tables(); np <- np_res()
     sig <- r$effects$Effect[r$effects$Significant %in% TRUE]
     # with a significant interaction the overall means are not compared, so the highest cell mean is shown instead
     top_stat <- if (isTRUE(r$interaction_significant) && !is.null(r$cells)) {
@@ -262,8 +321,10 @@
       stat(paste("Highest mean of", top_f), fmt_n(top$Mean), top$Treatment)
     }
     tagList(
+      advice,
       notes_ui(r$data_notes),
       div(class = if (r$significant || r$interaction_significant) "alert alert-success" else "alert alert-info", r$summary),
+      if (!is.null(np) && length(r$factors) == 1) dual_ui(paste(np$name, "test"), np$p, np$significant, "ANOVA", anova_p(r), isTRUE(r$significant)),
       key_stats(
         stat("Significant effects", sprintf("%d of %d", length(sig), nrow(r$effects)), if (length(sig)) paste(sig, collapse = ", ") else "none"),
         stat("Grand mean", fmt_n(r$grand_mean), r$original_response %||% r$response),
@@ -303,7 +364,16 @@
   plot_effect <- reactive({ r <- ok(); pe <- input$plot_effect; if (is.null(pe) || !(pe %in% c(r$factors, if (!is.null(r$cells)) c("interaction", "interaction_line")))) r$factors[1] else pe })
   use_gg <- reactive(identical(input$plot_style, "gg"))
   # the ggplot2 figure (a ggplot object); the classic style is drawn with base graphics instead
-  gg_means <- reactive(apply_plot_customizations(do.call(star_ggplot_means, c(list(ok(), plot_effect(), data = if (isTRUE(input$gg_points)) used_data(), error = input$gg_error %||% "se",
+  # the result the means plot is drawn from: for Welch's ANOVA the letters are those of the Games-Howell test
+  plot_obj <- reactive({
+    r <- ok(); if (!aov_welch()) return(r)
+    w <- welch_try(); req(!inherits(w, "star_error")); f <- r$factors
+    r$means[[f]]$Group <- w$means$Group[match(r$means[[f]]$Treatment, w$means$Treatment)]
+    r$effects$Significant[r$effects$Effect == f] <- w$significant
+    r$tests_used[[f]] <- "Games-Howell"
+    r
+  })
+  gg_means <- reactive(apply_plot_customizations(do.call(star_ggplot_means, c(list(plot_obj(), plot_effect(), data = if (isTRUE(input$gg_points)) used_data(), error = input$gg_error %||% "se",
                                                          main = input$gg_title, xlab = input$gg_xlab, ylab = input$gg_ylab), plot_style("aov"))), "gg", "aov"))
   gg_rank <- reactive({ np <- np_try(); req(!is.null(np), !inherits(np, "star_error"))
     apply_plot_customizations(do.call(star_ggplot_rank, c(list(np, points = isTRUE(input$gg_points), main = input$gg_title, xlab = input$gg_xlab, ylab = input$gg_ylab),
@@ -313,7 +383,7 @@
   draw_means <- function() {
     if (aov_rank()) print(gg_rank())
     else if (use_gg()) print(gg_means())
-    else star_plot_means(ok(), sub("_line$", "", plot_effect()), main = input$gg_title, xlab = input$gg_xlab, ylab = input$gg_ylab)
+    else star_plot_means(plot_obj(), sub("_line$", "", plot_effect()), main = input$gg_title, xlab = input$gg_xlab, ylab = input$gg_ylab)
   }
   output$means_plot <- renderPlot(draw_means(),
     width = function() live_plot_dims("aov")$width,
@@ -330,7 +400,7 @@
         o[] <- lapply(o, function(v) if (is.numeric(v)) fmt_n(v, 3) else as.character(v))
         tagList(h4("Flagged observations"), p(class = "text-muted", "Row = row number in your data. |Studentized residual| > 3 = outlier, 2 to 3 = suspect."), html_table(o))
       },
-      if (!aov_rank() && !is.null(np <- np_res())) result_card(paste("Rank-based alternative:", np$name, "test"), np_ui(np),
+      if (aov_mode() == "anova" && !is.null(np <- np_res())) result_card(paste("Rank-based alternative:", np$name, "test"), np_ui(np),
         p(class = "text-muted small mb-0", "To report this test instead of the ANOVA, set Analysis to rank-based under Experimental design and run again."),
         copy = "cp_np", copy_label = "Copy table"))
   })
@@ -351,6 +421,13 @@
                   Info = data.frame(Item = c("App version", "Design", "Response", "Treatment factor", "Block", "Test", "Chi-square", "df", "p value", "Alpha", "Summary", "Data checks"),
                                     Value = c(version_label(), r$design, np$response, np$treatment, np$block %||% "-", np$name, round(np$statistic, 4), np$df, signif(np$p, 4), np$alpha, np$summary,
                                               if (length(r$data_notes)) paste(r$data_notes, collapse = " | ") else "none"))))
+    }
+    if (aov_welch()) {
+      w <- welch_try(); req(!inherits(w, "star_error"))
+      return(list(`Welch means` = w$means, `Games-Howell` = w$pairs,
+                  Info = data.frame(Item = c("App version", "Design", "Response", "Transformation", "Treatment factor", "Test", "F", "df1", "df2", "p value", "Alpha", "Summary"),
+                                    Value = c(version_label(), r$design, r$original_response %||% r$response, if (is.null(r$transform)) "none" else transforms[[r$transform]]$label,
+                                              w$treatment, "Welch's ANOVA (Games-Howell comparisons)", round(w$statistic, 4), w$df1, round(w$df2, 4), signif(w$p, 4), w$alpha, w$summary))))
     }
     tb <- tables()
     sheets <- list(ANOVA = r$anova,
@@ -380,7 +457,7 @@
                                         if (length(r$data_notes)) paste(r$data_notes, collapse = " | ") else "none"))
     sheets
   })
-  output$dl_xlsx <- downloadHandler(function() if (aov_rank()) "rdstat_rank_test.xlsx" else "rdstat_anova.xlsx", function(file) writexl::write_xlsx(xlsx_sheets(), file))
+  output$dl_xlsx <- downloadHandler(function() switch(aov_mode(), rank = "rdstat_rank_test.xlsx", welch = "rdstat_welch_anova.xlsx", "rdstat_anova.xlsx"), function(file) writexl::write_xlsx(xlsx_sheets(), file))
   output$dl_aov_plot <- downloadHandler(function() paste0("rdstat_means_plot.", input$aov_fmt), function(file) {
     fmt <- input$aov_fmt %||% "png"; dpi <- as.numeric(input$aov_dpi %||% 300); wh <- export_dims("aov")
     if (use_gg() || aov_rank()) { star_ggsave(gg_current(), file, width = wh[1], height = wh[2], dpi = dpi); return(invisible()) }
@@ -393,6 +470,12 @@
   # ---- Thai summary and Word report ----
   aov_file_name <- reactive(script_file(input$src == "up", if (input$src == "up") input$file$name else setup()$file))
   aov_script <- reactive(script_aov(ok(), aov_file_name()))
+  welch_script <- reactive({ w <- welch_try(); req(!inherits(w, "star_error")); script_welch(w, ok(), aov_file_name()) })
+  observeEvent(input$cp_welch_script, session$sendCustomMessage("copy_text", list(what = "R code", text = welch_script())))
+  observeEvent(input$cp_welch_th, session$sendCustomMessage("copy_text", list(what = "สรุปผล", text = thai_summary_welch(welch_try()))))
+  observeEvent(input$cp_welch_apa, session$sendCustomMessage("copy_text", list(what = "APA text", text = welch_try()$apa)))
+  observeEvent(input$cp_welch, session$sendCustomMessage("copy_text", list(what = "Welch means", text = tsv(welch_display(welch_try())))))
+  observeEvent(input$cp_gh, session$sendCustomMessage("copy_text", list(what = "Games-Howell table", text = tsv(gh_display(welch_try())))))
   np_script <- reactive({ np <- np_try(); req(!is.null(np), !inherits(np, "star_error")); script_np(np, aov_file_name()) })
   observeEvent(input$cp_np_script, session$sendCustomMessage("copy_text", list(what = "R code", text = np_script())))
   observeEvent(input$cp_np_th, session$sendCustomMessage("copy_text", list(what = "สรุปผล", text = thai_summary_np(np_try()))))
@@ -402,8 +485,22 @@
   design_names <- c(CRD = "Completely randomized design (CRD)", RCBD = "Randomized complete block design (RCBD)",
                     SplitCRD = "Split plot in CRD", SplitRCBD = "Split plot in RCBD",
                     CombRCBD = "Combined analysis over environments (RCBD)", CombCRD = "Combined analysis over environments (CRD)")
-  output$dl_doc <- downloadHandler(function() if (aov_rank()) "rdstat_rank_test_report.doc" else "rdstat_anova_report.doc", function(file) {
+  output$dl_doc <- downloadHandler(function() switch(aov_mode(), rank = "rdstat_rank_test_report.doc", welch = "rdstat_welch_anova_report.doc", "rdstat_anova_report.doc"), function(file) {
     r <- ok(); np <- np_res(); dg <- r$diagnostics
+    if (aov_welch()) {
+      w <- welch_try(); req(!inherits(w, "star_error"))
+      png <- tryCatch({ f <- tempfile(fileext = ".png"); star_ggsave(gg_means(), f, width = 6.5, height = 4.5, dpi = 200); f }, error = function(e) NULL)
+      info <- data.frame(Item = c("Design", "Response", "Treatment factor", "Transformation", "Test", "Alpha", "Data", "Date", "App"),
+                         Value = c(design_names[[r$design]], r$original_response %||% r$response, w$treatment, if (is.null(r$transform)) "none" else transforms[[r$transform]]$label,
+                                   "Welch's ANOVA, Games-Howell comparisons", w$alpha, aov_file_name() %||% "-", format(Sys.Date()), paste(app_name, version_label())), stringsAsFactors = FALSE)
+      blocks <- c(word_table(info), w_h2("สรุปผล"), w_p(thai_summary_welch(w)), w_p(w$summary),
+        w_h2("Welch's ANOVA: means"), word_table(welch_display(w)),
+        if (w$significant) w_p("Means with the same letter do not differ (Games-Howell test).", "small"),
+        w_h2("Games-Howell comparisons"), word_table(gh_display(w)),
+        w_h2("APA-style report"), w_p(w$apa),
+        w_h2("Methods and references"), w_p(methods_sentence(gg_version())), paste0("<ul>", paste0("<li>", htmltools::htmlEscape(package_refs()), "</li>", collapse = ""), "</ul>"))
+      return(word_doc(file, paste(app_name, "- Welch's ANOVA:", r$original_response %||% r$response), blocks, png))
+    }
     if (aov_rank()) {
       req(!is.null(np))
       png <- tryCatch({ f <- tempfile(fileext = ".png"); star_ggsave(gg_rank(), f, width = 6.5, height = 4.5, dpi = 200); f }, error = function(e) NULL)

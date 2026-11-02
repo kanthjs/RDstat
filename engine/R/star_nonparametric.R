@@ -2,10 +2,12 @@
 ## do not meet its assumptions (normal residuals, equal variances).
 ##   block = NULL : Kruskal-Wallis test (CRD), groups compared on their mean ranks
 ##   block given  : Friedman test (RCBD, one observation per block x treatment), groups compared on their rank sums
-## Multiple comparisons are those of the agricolae package (Fisher's LSD on ranks, Conover); as with the ANOVA,
-## letters are given only when the overall test is significant.
+## Multiple comparisons are those of the agricolae package (Fisher's LSD on ranks, Conover) unless posthoc names Dunn's
+## test (Kruskal-Wallis only), with Holm or Bonferroni adjusted p values; as with the ANOVA, letters are given only when
+## the overall test is significant.
 
-star_nonparametric <- function(data, response, treatment, block = NULL, alpha = 0.05) {
+star_nonparametric <- function(data, response, treatment, block = NULL, alpha = 0.05, posthoc = c("conover", "dunn_holm", "dunn_bonferroni")) {
+  posthoc <- match.arg(posthoc)
   if (!is.data.frame(data)) stop("'data' must be a data frame.")
   if (length(treatment) != 1) stop("The rank-based test needs exactly one treatment factor.", call. = FALSE)
   .star_check_columns(data, c(response, treatment, block), "Response, treatment and block")
@@ -21,7 +23,13 @@ star_nonparametric <- function(data, response, treatment, block = NULL, alpha = 
                       stringsAsFactors = FALSE)
     out$Group <- trimws(as.character(k$groups[out$Treatment, "groups"]))
     test <- list(name = "Kruskal-Wallis", statistic = unname(st$Chisq), df = unname(st$Df), p = unname(st$p.chisq),
-                 rank_label = "Mean rank")
+                 rank_label = "Mean rank", posthoc = "conover", posthoc_label = "Conover (LSD on ranks, agricolae)")
+    if (posthoc != "conover") {
+      dn <- .star_dunn(y, tr, sub("^dunn_", "", posthoc), alpha)
+      out$Group <- unname(dn$letters[out$Treatment])
+      test$pairs <- dn$pairs; test$posthoc <- posthoc
+      test$posthoc_label <- sprintf("Dunn, %s adjusted", if (dn$adjust == "holm") "Holm" else "Bonferroni")
+    }
   } else {
     b <- droplevels(d[[block]])
     if (any(table(b, tr) != 1)) stop("The Friedman test needs exactly one observation of each treatment in each block.", call. = FALSE)
@@ -31,14 +39,14 @@ star_nonparametric <- function(data, response, treatment, block = NULL, alpha = 
                       stringsAsFactors = FALSE)
     out$Group <- trimws(as.character(f$groups[out$Treatment, "groups"]))
     test <- list(name = "Friedman", statistic = unname(st$Chisq), df = unname(st$Df), p = unname(st$p.chisq),
-                 rank_label = "Rank sum")
+                 rank_label = "Rank sum", posthoc = "conover", posthoc_label = "LSD on rank sums (agricolae)")
   }
   out <- out[match(levels(tr), out$Treatment), ]
   rownames(out) <- NULL
   test$significant <- !is.na(test$p) && test$p < alpha
   if (!test$significant) out$Group <- NA_character_
   test$summary <- sprintf("%s test: chi-square = %.2f, df = %d, p %s. %s", test$name, test$statistic, test$df, .star_fmt_p(test$p),
-                          if (test$significant) sprintf("The %s differ (letters compare the %s).", treatment, tolower(test$rank_label))
+                          if (test$significant) sprintf("The %s differ (letters: %s, comparing the %s).", treatment, test$posthoc_label, tolower(test$rank_label))
                           else sprintf("No significant difference among the %s.", treatment))
   res <- structure(c(test, list(means = out, treatment = treatment, response = response, block = block, alpha = alpha,
                                 data = data.frame(Treatment = tr, y = y, stringsAsFactors = FALSE))), class = "star_nonparametric")
@@ -69,7 +77,7 @@ star_ggplot_rank <- function(x, main = NULL, xlab = NULL, ylab = NULL, points = 
                                                    shape = 21, size = 1.8, fill = "white", colour = "grey20", alpha = 0.85)
   if (x$significant) p <- p + ggplot2::geom_text(data = m, ggplot2::aes(x = .data$Treatment, y = .data$top, label = .data$Group),
                                                  vjust = -0.6, fontface = "bold", inherit.aes = FALSE)
-  note <- if (x$significant) sprintf("Letters: comparison of %s (agricolae), alpha = %s.", tolower(x$rank_label), format(x$alpha))
+  note <- if (x$significant) sprintf("Letters: %s, alpha = %s.", x$posthoc_label, format(x$alpha))
           else "No significant difference."
   p + ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = c(0.02, 0.12))) +
     ggplot2::labs(x = .star_gg_or(xlab, x$treatment), y = .star_gg_or(ylab, x$response),

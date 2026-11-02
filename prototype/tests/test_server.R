@@ -71,6 +71,36 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
         grepl("transformation is not used", html(output$results_ui)), "Rank method: medians in the original unit when a transformation is set")
   session$setInputs(transform = "none"); run(aov_method = "anova")
   check(!aov_rank() && grepl("Analysis of variance", html(output$results_ui)), "Rank method: back to ANOVA")
+  check(!is.null(aov_rec()) && grepl("Data check", html(output$results_ui)) && grepl("Check with the Kruskal-Wallis test", html(output$results_ui)),
+        "Guidance: data check and the rank-based comparison line under the ANOVA")
+  # Welch's ANOVA with Games-Howell letters; switching method needs no new run
+  session$setInputs(aov_method = "welch")
+  w <- welch_try(); ref <- oneway.test(GrainYield ~ Insecticide, crd)
+  check(aov_welch() && isTRUE(all.equal(w$p, ref$p.value)) && isTRUE(all.equal(w$statistic, unname(ref$statistic))) && grepl("Games-Howell comparisons", html(output$results_ui)),
+        "Welch: oneway.test result on the screen")
+  e <- run_script(welch_script()); check(isTRUE(all.equal(e$welch$p.value, w$p)) && isTRUE(all.equal(e$gh$P, w$pairs$P)), "Welch: script reproduces the app (Welch p and Games-Howell p)")
+  check(identical(plot_obj()$tests_used[["Insecticide"]], "Games-Howell") && identical(names(xlsx_sheets()), c("Welch means", "Games-Howell", "Info")), "Welch: plot letters and Excel sheets")
+  # Dunn's comparisons after Kruskal-Wallis, chosen instead of Conover's
+  session$setInputs(aov_method = "rank", np_posthoc = "dunn_holm")
+  np <- np_try(); e <- run_script(np_script())
+  check(np$posthoc == "dunn_holm" && isTRUE(all.equal(unname(e$dunn$P.adj), np$pairs$P.adj)) && identical(np$means$Group[np$means$Treatment == "Control"], "b") && grepl("Dunn, Holm adjusted", html(output$results_ui)),
+        "Dunn: Holm-adjusted comparisons, letters and script")
+  session$setInputs(aov_method = "anova", np_posthoc = "conover")
+  # the advice follows the data: skewed values suggest the rank test, unequal variances Welch (CRD) or a transformation (RCBD)
+  set.seed(1)
+  skew <- data.frame(T = rep(c("a", "b", "c"), each = 10), y = round(c(rexp(10, 1), rexp(10, 0.5), rexp(10, 0.3)), 2), stringsAsFactors = FALSE)
+  rc <- star_recommend_aov(star_aov(skew, "y", "T", design = "CRD", report = FALSE))
+  check(rc$level == "warn" && identical(rc$switch_to, "rank") && grepl("Kruskal-Wallis", rc$switch_label), "Guidance: skewed residuals suggest Kruskal-Wallis")
+  x <- c(-1.2, -0.6, -0.3, 0, 0.3, 0.6, 1.2, -0.9, 0.9, 0)
+  het <- data.frame(T = rep(c("a", "b", "c"), each = 10), y = c(10 + x, 12 + 4 * x, 14 + 10 * x), B = rep(1:10, 3), stringsAsFactors = FALSE)
+  rc <- star_recommend_aov(star_aov(het, "y", "T", design = "CRD", report = FALSE))
+  check(identical(rc$switch_to, "welch") && grepl("Levene", rc$observed), "Guidance: unequal variances in CRD suggest Welch's ANOVA")
+  rc <- star_recommend_aov(star_aov(het, "y", "T", "B", design = "RCBD", report = FALSE))
+  check(identical(rc$switch_to, "rank") && grepl("no Welch version for blocks", rc$advice), "Guidance: unequal variances in RCBD suggest a transformation or Friedman")
+  ui <- as.character(advice_ui(rc, "anova", "rec_switch", "rec_stay", FALSE, "ANOVA"))
+  check(grepl("Switch to Friedman", ui) && grepl("Continue with ANOVA", ui) && grepl("Advice only", ui), "Guidance: switch and keep buttons, marked as advice")
+  check(grepl("recommended method", as.character(advice_ui(rc, "rank", "a", "b", FALSE, "rank"))) && grepl("chose to continue", as.character(advice_ui(rc, "anova", "a", "b", TRUE, "ANOVA"))),
+        "Guidance: acknowledges the recommended method, or the user's choice to keep theirs")
 
   # ---- CRD, two factors (tooth growth) ----
   session$setInputs(design = "CRD", example = "crd2", resp = "len", trt = c("supp", "dose"))
@@ -261,6 +291,9 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(grepl("W = 575.5", tt_ok()$nonparametric_summary) && grepl("Mann-Whitney", html(output$tt_results_ui)), "Wilcoxon method: rank-sum test for two independent groups")
   session$setInputs(tt_method = "t", tt_example = "rice", tt_type = "one", tt_resp = "Yield", tt_mu = 3, go_tt = 8)
   check(!tt_rank() && grepl("Mean - test value", html(output$tt_results_ui)), "Wilcoxon method: back to the t-test")
+  check(grepl("Check with the Wilcoxon test", html(output$tt_results_ui)) && !is.null(tt_rec()), "Guidance: t-test screen has the data check and the Wilcoxon comparison line")
+  rc <- star_recommend_tt(star_ttest(skew[skew$T != "c", ], "independent", response = "y", group = "T"))
+  check(identical(rc$switch_to, "wilcox") && grepl("1.5 x IQR", rc$observed), "Guidance: skewed groups suggest Wilcoxon and point to values beyond 1.5 x IQR")
   e <- run_script(tt_script()); check(isTRUE(all.equal(unname(e$tt$statistic), r$test$t)) && isTRUE(all.equal(e$tt$p.value, r$p)) && isTRUE(all.equal(e$wilcox$p.value, r$nonparametric$P)), "t-test script: one sample reproduces the app")
   check(grepl("t.test(v, mu = mu", tt_script(), fixed = TRUE) && grepl("R code to repeat", html(output$tt_results_ui)), "t-test script: shown on the results screen")
   # scripts must not depend on the app: example data are carried inside, files are read as the app reads them

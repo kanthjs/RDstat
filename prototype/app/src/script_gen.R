@@ -263,9 +263,45 @@ script_np <- function(np, file = NULL) {
            sprintf("np <- agricolae::friedman(d[[%s]], d[[%s]], d$y, alpha = %s, console = FALSE)", r_str(blk), r_str(f), r_num(np$alpha))),
     "np$statistics   # chi-square, df and p value (p.chisq)",
     "np$means        # medians (Q50) and ranks",
-    "np$groups       # letters: use them only when the test is significant")
-  paste(c(head, "", body), collapse = "
-")
+    if (np$posthoc == "conover") "np$groups       # letters: use them only when the test is significant"
+    else c("",
+           sprintf("# Dunn's test of the mean ranks, ties corrected, p values adjusted with the %s method", sub("^dunn_", "", np$posthoc)),
+           sprintf("g <- d[[%s]]; r <- rank(d$y); N <- length(r); n <- table(g); rb <- tapply(r, g, mean)", r_str(f)),
+           "tie <- sum(table(d$y)^3 - table(d$y)) / (12 * (N - 1))",
+           "pr <- combn(levels(g), 2)",
+           "z <- apply(pr, 2, function(ab) (rb[ab[1]] - rb[ab[2]]) / sqrt((N * (N + 1) / 12 - tie) * (1 / n[ab[1]] + 1 / n[ab[2]])))",
+           sprintf("dunn <- data.frame(Comparison = paste(pr[1, ], \"-\", pr[2, ]), z = z, P.adj = p.adjust(2 * pnorm(-abs(z)), %s))", r_str(sub("^dunn_", "", np$posthoc))),
+           "dunn   # pairs with P.adj below alpha differ; use them only when the test is significant"))
+  paste(c(head, "", body), collapse = "\n")
+}
+
+# Welch's one-way ANOVA with the Games-Howell comparisons, as the app runs them (on the transformed values if any)
+script_welch <- function(w, r, file = NULL) {
+  f <- w$treatment
+  resp <- r$original_response %||% r$response
+  head <- script_header(sprintf("Welch's ANOVA of %s by %s", resp, f), file)
+  trans <- if (!is.null(r$transform)) sprintf("y <- switch(%s, log = log(y + 1), sqrt = sqrt(y + 0.5), arcsin = asin(sqrt(y / 100)) * 180 / pi)   # transformed response", r_str(r$transform))
+  body <- c(
+    script_num("y", resp),
+    trans,
+    "d$y <- y",
+    sprintf("d$g <- factor(trimws(as.character(d[[%s]])))", r_str(f)),
+    "d <- d[complete.cases(d[c(\"y\", \"g\")]), ]   # rows with a missing value are left out",
+    "",
+    "welch <- oneway.test(y ~ g, data = d, var.equal = FALSE)   # Welch's ANOVA: no equal-variance assumption",
+    "welch",
+    "",
+    "# Games-Howell comparisons (each pair with its own variances and Welch df; studentized range distribution)",
+    "n <- tapply(d$y, d$g, length); m <- tapply(d$y, d$g, mean); v <- tapply(d$y, d$g, var); k <- nlevels(d$g)",
+    "pr <- combn(levels(d$g), 2)",
+    "gh <- do.call(rbind, lapply(seq_len(ncol(pr)), function(j) {",
+    "  a <- pr[1, j]; b <- pr[2, j]; se2 <- v[a] / n[a] + v[b] / n[b]",
+    "  df <- se2^2 / ((v[a] / n[a])^2 / (n[a] - 1) + (v[b] / n[b])^2 / (n[b] - 1)); t <- (m[a] - m[b]) / sqrt(se2)",
+    "  data.frame(Comparison = paste(a, \"-\", b), Difference = m[a] - m[b], t = t, DF = df, P = ptukey(abs(t) * sqrt(2), k, df, lower.tail = FALSE))",
+    "}))",
+    "rownames(gh) <- NULL",
+    "gh   # pairs with P below alpha differ; use them only when Welch's test is significant")
+  paste(c(head, "", body), collapse = "\n")
 }
 
 # Split plot: whole plots are block x main-plot level; Error(a) tests the main-plot factor, Error(b) the sub-plot
@@ -316,8 +352,7 @@ script_split <- function(r, file = NULL) {
               script_compare(r$tests_used[[main]], "s$y", sprintf("droplevels(s[[%s]])", r_str(main)), r$alpha, "pooled_df", "pooled_ms")),
       "}", "simple")
   }
-  paste(c(head, "", body), collapse = "
-")
+  paste(c(head, "", body), collapse = "\n")
 }
 
 # Combined analysis of one treatment factor over environments (sites, seasons, years), environments fixed as in STAR.
@@ -385,6 +420,5 @@ script_combined <- function(r, file = NULL) {
     }))
     body <- c(body, "", "# the interaction is significant: each factor is compared within the levels of the other (pooled error)", "simple <- list()", sim, "simple")
   }
-  paste(c(head, "", body), collapse = "
-")
+  paste(c(head, "", body), collapse = "\n")
 }

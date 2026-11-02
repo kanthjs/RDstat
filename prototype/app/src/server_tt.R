@@ -50,10 +50,21 @@
   }) |> bindEvent(input$go_tt)
   tt_ok <- reactive({ r <- tt_res(); req(!inherits(r, "star_error")); r })
   tt_stale <- stale_flag("go_tt", reactive(list(input$tt_src, input$tt_example, input$tt_file$name, input$tt_type, input$tt_resp, input$tt_group,
-                                                input$tt_levels, input$tt_x, input$tt_y, input$tt_mu, input$tt_alt, input$tt_var, input$tt_alpha, input$tt_method)))
-  # the test chosen when Run was pressed; priority so that it is set before the results are drawn
-  tt_rank <- reactiveVal(FALSE)
-  observeEvent(input$go_tt, tt_rank(identical(input$tt_method, "wilcox")), priority = 10)
+                                                input$tt_levels, input$tt_x, input$tt_y, input$tt_mu, input$tt_alt, input$tt_var, input$tt_alpha)))
+  # the test shown follows the Test buttons at once (both tests are computed on every run)
+  tt_rank <- reactive(identical(input$tt_method, "wilcox"))
+  # which test suits the data (advice only), and whether the user chose to keep theirs
+  tt_rec <- reactive(tryCatch(star_recommend_tt(tt_ok()), error = function(e) NULL))
+  tt_kept <- reactiveVal(FALSE)
+  observeEvent(input$go_tt, tt_kept(FALSE))
+  observeEvent(input$tt_rec_stay, tt_kept(TRUE))
+  observeEvent(input$tt_rec_switch, {
+    rc <- tt_rec(); req(rc$switch_to)
+    if (rc$switch_to == "wilcox") updateRadioButtons(session, "tt_method", selected = "wilcox")
+    else if (rc$switch_to == "welch_var") updateRadioButtons(session, "tt_var", selected = "welch")   # needs a new run: the screen says so
+  })
+  tt_current <- reactive(if (tt_rank()) "wilcox" else if (isTRUE(tt_ok()$var_equal)) "pooled" else "welch_var")
+  tt_advice <- reactive(advice_ui(tt_rec(), tt_current(), "tt_rec_switch", "tt_rec_stay", tt_kept(), if (tt_rank()) "Wilcoxon test" else "t-test"))
   output$tt_msg <- renderUI({
     if (!isTRUE(input$go_tt > 0)) return(run_hint("Run test"))
     r <- tt_res()
@@ -67,7 +78,9 @@
     g <- r$groups[!is.na(r$groups$N), ]   # the groups or measurements, not the row of their difference
     tagList(
       notes_ui(r$data_notes),
+      tt_advice(),
       div(class = if (sig) "alert alert-success" else "alert alert-info", r$nonparametric_summary),
+      dual_ui("t-test", r$p, r$significant, "Wilcoxon test", w$P, sig),
       key_stats(
         stat("p value", fmt_p(w$P), if (sig) paste("significant at", format(r$alpha)) else paste("not significant at", format(r$alpha))),
         stat(if (r$type == "independent") "Hodges-Lehmann shift" else "Hodges-Lehmann estimate", fmt_n(w$Estimate, k),
@@ -87,12 +100,14 @@
   output$tt_results_ui <- renderUI({
     r <- tt_ok(); tb <- tt_tables()
     if (tt_rank()) return(tt_rank_ui(r, tb))
-    tr <- r$test[r$chosen, ]; k <- tt_digits(r)
+    tr <- r$test[r$chosen, ]; k <- tt_digits(r); w <- r$nonparametric
     nrm <- r$normality; bad_norm <- nrm$Data[!is.na(nrm$P) & nrm$P < r$alpha]
     small <- min(nrm$N) < 30
     tagList(
       notes_ui(r$data_notes),
+      tt_advice(),
       div(class = if (r$significant) "alert alert-success" else "alert alert-info", r$summary),
+      dual_ui("Wilcoxon test", w$P, !is.na(w$P) && w$P < r$alpha, "t-test", r$p, r$significant),
       key_stats(
         stat("p value", fmt_p(r$p), if (r$significant) paste("significant at", format(r$alpha)) else paste("not significant at", format(r$alpha))),
         stat(switch(r$type, independent = "Difference in means", paired = "Mean difference", one = "Mean - test value"), fmt_n(tr$Difference, k),

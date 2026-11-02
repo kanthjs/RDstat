@@ -63,9 +63,18 @@ thai_summary_np <- function(np) {
   st <- sprintf("χ² = %.2f, df = %d, %s", np$statistic, np$df, th_p(np$p))
   how <- if (is.null(np$block)) "การทดสอบ Kruskal-Wallis" else sprintf("การทดสอบ Friedman (จัดอันดับภายในแต่ละ %s)", np$block)
   if (np$significant)
-    sprintf("%s พบว่า %s ของ %s แตกต่างกันอย่างมีนัยสำคัญทางสถิติ (%s) ค่ามัธยฐานสูงสุดคือ %s (%s) สิ่งทดลองที่มีอักษรเหมือนกันไม่แตกต่างกันทางสถิติ (เปรียบเทียบ%s)",
-            how, np$response, np$treatment, st, top$Treatment, fmt_n(top$Median), if (is.null(np$block)) "อันดับเฉลี่ย" else "ผลรวมอันดับ")
+    sprintf("%s พบว่า %s ของ %s แตกต่างกันอย่างมีนัยสำคัญทางสถิติ (%s) ค่ามัธยฐานสูงสุดคือ %s (%s) สิ่งทดลองที่มีอักษรเหมือนกันไม่แตกต่างกันทางสถิติ (เปรียบเทียบ%s ด้วยวิธี %s)",
+            how, np$response, np$treatment, st, top$Treatment, fmt_n(top$Median), if (is.null(np$block)) "อันดับเฉลี่ย" else "ผลรวมอันดับ", np$posthoc_label)
   else sprintf("%s พบว่า %s ของ %s ไม่แตกต่างกันอย่างมีนัยสำคัญทางสถิติ (%s)", how, np$response, np$treatment, st)
+}
+
+thai_summary_welch <- function(w) {
+  m <- w$means; top <- m[which.max(m$Mean), ]
+  st <- sprintf("F = %.2f, df = %d และ %.2f, %s", w$statistic, w$df1, w$df2, th_p(w$p))
+  if (w$significant)
+    sprintf("Welch's ANOVA (ไม่สมมติว่าความแปรปรวนเท่ากัน) พบว่า %s มีผลต่อ %s อย่างมีนัยสำคัญทางสถิติ (%s) ค่าเฉลี่ยสูงสุดคือ %s (%s) ค่าเฉลี่ยที่มีอักษรเหมือนกันไม่แตกต่างกันทางสถิติ (เปรียบเทียบด้วยวิธี Games-Howell)",
+            w$treatment, w$response, st, top$Treatment, fmt_n(top$Mean))
+  else sprintf("Welch's ANOVA (ไม่สมมติว่าความแปรปรวนเท่ากัน) พบว่า %s ไม่มีผลต่อ %s อย่างมีนัยสำคัญทางสถิติ (%s)", w$treatment, w$response, st)
 }
 
 thai_summary_tt_np <- function(r) {

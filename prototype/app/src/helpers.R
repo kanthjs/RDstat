@@ -13,7 +13,7 @@ app_version <- local({
   c(version = get("version"), commit = get("commit"), built = get("built"))
 })
 version_label <- function() { v <- app_version; if (anyNA(v)) "development build" else sprintf("v%s (%s, built %s)", v[["version"]], v[["commit"]], v[["built"]]) }
-methods_sentence <- function(gg) sprintf("Data were analysed with %s (web app %s) running R %s.%s in the browser, using routines recovered from IRRI STAR 2.0.2. Analysis of variance used aov(), with environments combined as in STAR and their error variances compared with Bartlett's test; means were compared with the agricolae package (LSD, Tukey HSD, Duncan), and SE(m), SED and LSD were computed from the error mean square of each factor; rank-based tests used kruskal() and friedman() (agricolae); t tests used t.test() and var.test(), with wilcox.test() as the rank-based alternative; correlations used cor.test(); regression used lm(); residual normality used the Shapiro-Wilk test and the Lilliefors test (nortest); constant variance used the Breusch-Pagan test (lmtest); graphics used ggplot2 %s. See the references below.", app_name, version_label(), R.version$major, R.version$minor, gg)
+methods_sentence <- function(gg) sprintf("Data were analysed with %s (web app %s) running R %s.%s in the browser, using routines recovered from IRRI STAR 2.0.2. Analysis of variance used aov(), with environments combined as in STAR and their error variances compared with Bartlett's test; means were compared with the agricolae package (LSD, Tukey HSD, Duncan), and SE(m), SED and LSD were computed from the error mean square of each factor; Welch's ANOVA used oneway.test() with Games-Howell comparisons; rank-based tests used kruskal() and friedman() (agricolae), with Dunn's test as an option after Kruskal-Wallis; t tests used t.test() and var.test(), with wilcox.test() as the rank-based alternative; correlations used cor.test(); regression used lm(); residual normality used the Shapiro-Wilk test and the Lilliefors test (nortest); constant variance used the Breusch-Pagan test (lmtest); graphics used ggplot2 %s. See the references below.", app_name, version_label(), R.version$major, R.version$minor, gg)
 # packages whose results or tools appear in the output; their references are built from each package's own citation()
 cited_packages <- c("agricolae", "nortest", "lmtest", "ggplot2", "readxl", "writexl")
 package_refs <- function() {
@@ -309,6 +309,31 @@ result_card <- function(title, ..., copy = NULL, copy_label = "Copy") bslib::car
   bslib::card_header(class = "d-flex justify-content-between align-items-center", span(title),
                      if (!is.null(copy)) actionButton(copy, tagList(icon("copy"), " ", copy_label), class = "btn-sm")),
   bslib::card_body(...))
+# what the data checks suggest (from star_recommend_aov / star_recommend_tt), as advice the analyst may follow or not:
+# an observation, a recommendation, and a button to switch method or to keep the current one. `current` is the method
+# shown, `kept` TRUE once the user chose to keep it, `current_label` names it.
+advice_ui <- function(rc, current, switch_id, stay_id, kept, current_label) {
+  if (is.null(rc)) return(NULL)
+  if (rc$level != "warn") return(div(class = paste("alert small py-2", if (rc$level == "ok") "alert-light" else "alert-info"),
+    icon(if (rc$level == "ok") "circle-check" else "circle-info"), " ", strong("Data check: "), rc$observed, " ", rc$advice))
+  if (identical(current, rc$switch_to)) return(div(class = "alert alert-success small py-2", icon("circle-check"), " ", strong("Data check: "), rc$observed,
+                                                   " You are using the recommended method; the choice remains yours."))
+  if (isTRUE(kept)) return(div(class = "alert alert-light small py-2", icon("circle-info"), " ", strong("Data check: "), rc$observed,
+                               sprintf(" You chose to continue with the %s.", current_label)))
+  div(class = "alert alert-warning",
+      div(icon("triangle-exclamation"), " ", strong("Observation: "), rc$observed),
+      div(class = "mt-1", icon("lightbulb"), " ", strong("Recommendation: "), rc$advice),
+      div(class = "mt-2 d-flex flex-wrap gap-2", actionButton(switch_id, rc$switch_label, class = "btn-warning btn-sm"),
+          actionButton(stay_id, rc$stay_label, class = "btn-outline-secondary btn-sm")),
+      div(class = "small text-muted mt-1", "Advice only: the analyst decides which method to report."))
+}
+# a second test on the same data, to show whether the conclusion depends on the method
+dual_ui <- function(other, other_p, other_sig, main, main_p, main_sig) {
+  if (is.null(other_p) || !length(other_p) || is.na(other_p) || !length(main_p) || is.na(main_p)) return(NULL)
+  p(class = "small text-muted", icon("scale-balanced"), " ",
+    sprintf("Check with the %s: p %s, %s the %s (p %s).", other, .star_fmt_p(other_p),
+            if (isTRUE(other_sig) == isTRUE(main_sig)) "the same conclusion as" else "a different conclusion from", main, .star_fmt_p(main_p)))
+}
 # settings changed after the last run: the results on the screen no longer match the controls
 # outputs that show results; greyed out and made inert (no clicks, copying or downloading) while the results are stale
 stale_dim <- function(tag) tagAppendAttributes(tag, class = "stale-dim")
