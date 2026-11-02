@@ -53,19 +53,58 @@
                                                 input$tt_levels, input$tt_x, input$tt_y, input$tt_mu, input$tt_alt, input$tt_var, input$tt_alpha)))
   # the test shown follows the Test buttons at once (both tests are computed on every run)
   tt_rank <- reactive(identical(input$tt_method, "wilcox"))
+  tt_trimmed <- reactive(identical(input$tt_method, "trimmed"))
+  tt_trim <- reactive(tryCatch(star_tt_trimmed(tt_ok()), error = as_error))
+  tt_trim_ok <- reactive({ s <- tt_trim(); req(!inherits(s, "star_error")); s })
+  # the summary, APA sentence, Thai summary and name of the test chosen, for the screen and the downloads
+  tt_main <- reactive({
+    r <- tt_ok()
+    if (tt_trimmed()) { s <- tt_trim_ok(); list(summary = s$summary, apa = s$apa, thai = thai_summary_tt_trim(r, s), name = s$method) }
+    else if (tt_rank()) list(summary = r$nonparametric_summary, apa = r$nonparametric_apa, thai = thai_summary_tt_np(r), name = r$nonparametric$Method)
+    else list(summary = r$summary, apa = r$apa, thai = thai_summary_tt(r), name = r$method_name)
+  })
   # which test suits the data (advice only), and whether the user chose to keep theirs
   tt_rec <- reactive(tryCatch(star_recommend_tt(tt_ok()), error = function(e) NULL))
   tt_kept <- reactiveVal(FALSE)
   observeEvent(input$go_tt, tt_kept(FALSE))
   observeEvent(input$tt_rec_stay, tt_kept(TRUE))
-  observeEvent(input$tt_rec_switch, {
-    rc <- tt_rec(); req(rc$switch_to)
-    if (rc$switch_to == "wilcox") updateRadioButtons(session, "tt_method", selected = "wilcox")
-    else if (rc$switch_to == "welch_var") updateRadioButtons(session, "tt_var", selected = "welch")   # needs a new run: the screen says so
-  })
-  tt_current <- reactive(if (tt_rank()) "wilcox" else if (isTRUE(tt_ok()$var_equal)) "pooled" else "welch_var")
-  tt_advice <- reactive(advice_ui(tt_rec(), tt_current(), "tt_rec_switch", "tt_rec_stay", tt_kept(),
-                                  if (tt_rank()) "the Wilcoxon test" else if (isTRUE(tt_ok()$var_equal)) "the pooled t-test" else "Welch's t-test"))
+  for (id in c("wilcox", "trimmed")) local({ m <- id; observeEvent(input[[paste0("tt_rec_", m)]], updateRadioButtons(session, "tt_method", selected = m)) })
+  observeEvent(input$tt_rec_welch_var, updateRadioButtons(session, "tt_var", selected = "welch"))   # needs a new run: the screen says so
+  tt_current <- reactive(if (tt_trimmed()) "trimmed" else if (tt_rank()) "wilcox" else if (isTRUE(tt_ok()$var_equal)) "pooled" else "welch_var")
+  tt_advice <- reactive(advice_ui(tt_rec(), tt_current(), "tt_rec", tt_kept(),
+                                  if (tt_trimmed()) "the trimmed-means test" else if (tt_rank()) "the Wilcoxon test" else if (isTRUE(tt_ok()$var_equal)) "the pooled t-test" else "Welch's t-test"))
+  tt_trim_display <- function(r, s) { z <- s$table; k <- tt_digits(r)
+    out <- data.frame(Method = z$Method, t = fmt_n(z$t, 3), DF = fmt_n(z$DF), p = fmt_p(z$P), Difference = fmt_n(z$Estimate, k), SE = fmt_n(z$SE, k),
+                      Lower = fmt_n(z$Lower, k), Upper = fmt_n(z$Upper, k), `Bootstrap lower` = fmt_n(z$BootLower, k), `Bootstrap upper` = fmt_n(z$BootUpper, k),
+                      check.names = FALSE, stringsAsFactors = FALSE)
+    names(out)[7:8] <- paste0(c("Lower ", "Upper "), format(100 * r$conf_level), "% CI")
+    if (r$alternative != "two.sided") names(out)[4] <- paste0("p (one-sided, ", r$alternative, ")")
+    out }
+  # the results screen when trimmed means are chosen
+  tt_trim_ui <- function(r, tb) {
+    s <- tt_trim()
+    if (inherits(s, "star_error")) return(tagList(tt_advice(), error_box(paste("The trimmed-means test could not be run:", s$message))))
+    z <- s$table; k <- tt_digits(r)
+    tagList(
+      tt_advice(),
+      notes_ui(r$data_notes),
+      div(class = if (s$significant) "alert alert-success" else "alert alert-info", s$summary),
+      key_stats(
+        stat("p value", fmt_p(z$P), if (s$significant) paste("significant at", format(r$alpha)) else paste("not significant at", format(r$alpha))),
+        stat(if (r$type == "independent") "Difference in trimmed means" else "Trimmed mean difference", fmt_n(z$Estimate, k),
+             sprintf("%g%% CI %s to %s", 100 * r$conf_level, fmt_n(z$Lower, k), fmt_n(z$Upper, k))),
+        stat("Bootstrap interval", sprintf("%s to %s", fmt_n(z$BootLower, k), fmt_n(z$BootUpper, k)), sprintf("percentile, %d resamples", s$B)),
+        stat("Trimmed means", paste(fmt_n(s$trimmed_means, k), collapse = " / "), paste(r$groups$Group[!is.na(r$groups$N)], collapse = " / "))),
+      if (s$n_min < 10) div(class = "alert alert-light small", icon("circle-info"), sprintf(" With %d values%s, 20%% trimming sets aside few or no values and the bootstrap interval is rough.", s$n_min, if (r$type == "independent") " in the smaller group" else "")),
+      result_card("สรุปผล (ภาษาไทย)", p(lang = "th", thai_summary_tt_trim(r, s)), copy = "cp_tt_th", copy_label = "คัดลอก"),
+      result_card("Descriptive statistics", html_table(tb$desc), copy = "cp_tt_desc", copy_label = "Copy table"),
+      result_card(s$method, html_table(tt_trim_display(r, s)),
+        p(class = "text-muted small mb-0", "Winsorized variances; no normal distribution or equal variances assumed. The bootstrap interval uses a fixed seed, so the same data give the same interval."),
+        copy = "cp_tt_trim", copy_label = "Copy table"),
+      result_card("APA-style report", p(s$apa), copy = "cp_tt_apa"),
+      result_card("R code to repeat this analysis", tags$pre(class = "small mb-0", style = "white-space: pre-wrap;", tt_trim_script()), copy = "cp_tt_trim_script", copy_label = "Copy code"),
+      p(class = "text-muted small", icon("circle-info"), " The t-test is not shown because trimmed means are chosen under Kind of comparison."))
+  }
   output$tt_msg <- renderUI({
     if (!isTRUE(input$go_tt > 0)) return(run_hint("Run test"))
     r <- tt_res()
@@ -99,6 +138,7 @@
   }
   output$tt_results_ui <- renderUI({
     r <- tt_ok(); tb <- tt_tables()
+    if (tt_trimmed()) return(tt_trim_ui(r, tb))
     if (tt_rank()) return(tt_rank_ui(r, tb))
     tr <- r$test[r$chosen, ]; k <- tt_digits(r)
     nrm <- r$normality; bad_norm <- nrm$Data[!is.na(nrm$P) & nrm$P < r$alpha]
@@ -138,36 +178,41 @@
   )
   output$dl_tt_plot <- plot_download("tt", gg_tt)
   tt_script <- reactive(script_tt(tt_ok(), tt_file_name()))
+  tt_trim_script <- reactive(script_tt_trimmed(tt_ok(), tt_trim_ok(), tt_file_name()))
   tt_file_name <- reactive(script_file(input$tt_src == "up", if (input$tt_src == "up") input$tt_file$name else tt_setup[[input$tt_example]]$file))
-  copy_button("cp_tt_th", "สรุปผล", function() if (tt_rank()) thai_summary_tt_np(tt_ok()) else thai_summary_tt(tt_ok()))
+  copy_button("cp_tt_th", "สรุปผล", function() tt_main()$thai)
   output$dl_tt_doc <- downloadHandler("rdstat_ttest_report.doc", function(file) {
     r <- tt_ok(); tb <- tt_tables()
     png <- tryCatch({ f <- tempfile(fileext = ".png"); star_ggsave(gg_tt(), f, width = 6.5, height = 4.5, dpi = 200); f }, error = function(e) NULL)
     blocks <- c(w_p(paste("Data:", tt_file_name() %||% "-", "| Date:", format(Sys.Date()), "|", app_name, version_label()), "small"),
-      w_h2("สรุปผล"), if (tt_rank()) c(w_p(thai_summary_tt_np(r)), w_p(r$nonparametric_summary)) else c(w_p(thai_summary_tt(r)), w_p(r$summary)),
+      w_h2("สรุปผล"), w_p(tt_main()$thai), w_p(tt_main()$summary),
       w_h2("Descriptive statistics"), word_table(tb$desc),
-      if (tt_rank()) c(w_h2(r$nonparametric$Method), word_table(tb$nonpar)) else c(w_h2("t-test"), word_table(tb$test)),
+      if (tt_trimmed()) c(w_h2(tt_trim_ok()$method), word_table(tt_trim_display(r, tt_trim_ok())))
+      else if (tt_rank()) c(w_h2(r$nonparametric$Method), word_table(tb$nonpar)) else c(w_h2("t-test"), word_table(tb$test)),
       w_h2("Assumption checks"), word_table(tb$normal),
       if (!is.null(r$variance)) w_p(sprintf("Equality of variances, F test: F(%d, %d) = %.2f, p %s.", r$variance$DF1, r$variance$DF2, r$variance$F, .star_fmt_p(r$variance$P))),
-      w_h2("APA-style report"), w_p(if (tt_rank()) r$nonparametric_apa else r$apa),
+      w_h2("APA-style report"), w_p(tt_main()$apa),
       w_h2("Methods and references"), w_p(methods_sentence(gg_version())), paste0("<ul>", paste0("<li>", htmltools::htmlEscape(package_refs()), "</li>", collapse = ""), "</ul>"))
-    word_doc(file, paste(app_name, "-", if (tt_rank()) r$nonparametric$Method else r$method_name), blocks, png)
+    word_doc(file, paste(app_name, "-", tt_main()$name), blocks, png)
   })
   output$dl_tt_xlsx <- downloadHandler("rdstat_ttest.xlsx", function(file) {
     r <- tt_ok()
     # only the test chosen, as on the screen
-    sheets <- c(list(Descriptives = r$groups), if (tt_rank()) list(Wilcoxon = r$nonparametric) else list(`t-test` = r$test), list(Normality = r$normality))
+    sheets <- c(list(Descriptives = r$groups), if (tt_trimmed()) list(`Trimmed means` = tt_trim_ok()$table) else if (tt_rank()) list(Wilcoxon = r$nonparametric) else list(`t-test` = r$test),
+                list(Normality = r$normality))
     if (!is.null(r$variance)) sheets$Variances <- r$variance
     vars <- switch(r$type, independent = sprintf("%s by %s (%s vs %s)", r$response, r$group, r$labels[1], r$labels[2]),
                    paired = paste(r$x, "-", r$y), one = sprintf("%s vs %s", r$response, format(r$mu)))
     sheets$Info <- data.frame(Item = c("App version", "Test", "Variables", "Alternative", "Alpha", "Effect size (Cohen's d)", "Summary", "Data checks"),
-                              Value = c(version_label(), if (tt_rank()) r$nonparametric$Method else r$method_name, vars, r$alternative, r$alpha, round(r$effect_size, 4), if (tt_rank()) r$nonparametric_summary else r$summary,
+                              Value = c(version_label(), tt_main()$name, vars, r$alternative, r$alpha, round(r$effect_size, 4), tt_main()$summary,
                                         if (length(r$data_notes)) paste(r$data_notes, collapse = " | ") else "none"))
     writexl::write_xlsx(sheets, file)
   })
   copy_button("cp_tt_desc", "Descriptive statistics", function() tsv(tt_tables()$desc))
   copy_button("cp_tt_test", "t-test table", function() tsv(tt_tables()$test))
   copy_button("cp_tt_np", "Wilcoxon table", function() tsv(tt_tables()$nonpar))
-  copy_button("cp_tt_apa", "APA text", function() if (tt_rank()) tt_ok()$nonparametric_apa else tt_ok()$apa)
+  copy_button("cp_tt_apa", "APA text", function() tt_main()$apa)
+  copy_button("cp_tt_trim", "Trimmed-means table", function() tsv(tt_trim_display(tt_ok(), tt_trim_ok())))
+  copy_button("cp_tt_trim_script", "R code", function() tt_trim_script())
   copy_button("cp_tt_script", "R code", function() tt_script())
 

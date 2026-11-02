@@ -64,7 +64,7 @@ star_nonparametric <- function(data, response, treatment, block = NULL, alpha = 
 ## box plot of the observations of each treatment, with the letters of the rank comparison above the boxes
 star_ggplot_rank <- function(x, main = NULL, xlab = NULL, ylab = NULL, points = TRUE, palette = NULL, base_size = 12,
                              theme = "classic", legend = "auto") {
-  if (!inherits(x, "star_nonparametric")) stop("'x' must be a result of star_nonparametric().")
+  if (!inherits(x, c("star_nonparametric", "star_trimmed"))) stop("'x' must be a result of star_nonparametric() or star_trimmed().")
   th <- star_gg_theme(base_size, theme, .star_gg_legend(legend))
   d <- x$data
   lv <- levels(d$Treatment)
@@ -82,7 +82,7 @@ star_ggplot_rank <- function(x, main = NULL, xlab = NULL, ylab = NULL, points = 
   p + ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = c(0.02, 0.12))) +
     ggplot2::labs(x = .star_gg_or(xlab, x$treatment), y = .star_gg_or(ylab, x$response),
                   title = .star_gg_or(main, paste(x$response, "by", x$treatment)),
-                  subtitle = paste(strwrap(sprintf("%s test, p %s. Boxes: median and quartiles%s. %s", x$name, .star_fmt_p(x$p),
+                  subtitle = paste(strwrap(sprintf("%s, p %s. Boxes: median and quartiles%s. %s", if (inherits(x, "star_trimmed")) x$name else paste(x$name, "test"), .star_fmt_p(x$p),
                                                    if (isTRUE(points)) "; circles: observations" else "", note), 70), collapse = "\n")) +
     th + .star_gg_xlab_theme(lv)
 }

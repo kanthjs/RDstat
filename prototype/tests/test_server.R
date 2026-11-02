@@ -51,7 +51,7 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   session$setInputs(transform = "log"); run(pw = "duncan"); aov_script_check("CRD, log-transformed response, Duncan")
   session$setInputs(transform = "none"); run(pw = "HSD")
   check(!grepl("assumptions are not met", html(output$results_ui)) && !grepl("ข้อตกลงเบื้องต้น", html(output$results_ui)), "Results tab: no verdict on the assumptions")
-  check(round(np_res()$statistic, 2) == 20.85 && np_res()$name == "Kruskal-Wallis" && !grepl("Kruskal", html(output$diag_ui)) && !grepl("Kruskal", html(output$results_ui)), "CRD 1 factor: Kruskal-Wallis computed but not shown beside the ANOVA, chi-square = 20.85 (kruskal.test)")
+  check(round(np_res()$statistic, 2) == 20.85 && np_res()$name == "Kruskal-Wallis" && !grepl("chi-square =", html(output$diag_ui)) && !grepl("chi-square =", html(output$results_ui)), "CRD 1 factor: Kruskal-Wallis computed but not shown beside the ANOVA, chi-square = 20.85 (kruskal.test)")
   # rank-based analysis chosen by the user: it replaces the ANOVA on the results screen and in the downloads
   run(aov_method = "rank")
   ui <- html(output$results_ui)
@@ -73,10 +73,17 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(!aov_rank() && grepl("Analysis of variance", html(output$results_ui)), "Rank method: back to ANOVA")
   check(!is.null(aov_rec()) && grepl("Data check|Observation", html(output$results_ui)) && !grepl("Check with", html(output$results_ui)),
         "Guidance: data check under the ANOVA, with no result of another method beside it")
+  # traffic light: one outlier in the insecticide trial is red, with a choice by reporting goal (ranks, or trimmed means)
+  rc <- aov_rec(); ui <- html(output$results_ui)
+  check(rc$light == "red" && identical(vapply(rc$options, function(o) o$id, ""), c("rank", "trimmed")) && grepl("light-red", ui) && grepl("To compare ranks or medians", ui) &&
+        grepl("To compare means without relying on the normal curve", ui) && grepl("Use trimmed means", ui), "Traffic light: an outlier is red, with options by reporting goal")
+  check(grepl("badge bg-danger", html(output$diag_ui)) && grepl("badge bg-success", html(output$diag_ui)), "Traffic light: assumption badges on the diagnostics tab")
   # Welch's ANOVA is recommended for a one-factor CRD whatever Levene's test says (here the variances look similar)
-  rc <- aov_rec()
-  check(identical(rc$switch_to, "welch") && rc$level == "note" && grepl("look similar", rc$observed) && grepl("without first testing the variances", rc$advice) &&
-        grepl("Switch to Welch", html(output$results_ui)), "Welch default: recommended for a CRD even when the variances look similar")
+  xs <- c(-1.2, -0.6, -0.3, 0, 0.3, 0.6, 1.2, -0.9, 0.9, 0)
+  eq <- data.frame(T = rep(c("a", "b", "c"), each = 10), y = c(10 + xs, 12 + xs, 14 + xs), stringsAsFactors = FALSE)
+  rc <- star_recommend_aov(star_aov(eq, "y", "T", design = "CRD", report = FALSE))
+  check(identical(rc$switch_to, "welch") && rc$light %in% c("green", "yellow") && grepl("look similar", rc$observed) && grepl("without first testing the variances", rc$advice),
+        "Welch default: recommended for a CRD even when the variances look similar")
   # Welch's ANOVA with Games-Howell letters; switching method needs no new run
   session$setInputs(aov_method = "welch")
   w <- welch_try(); ref <- oneway.test(GrainYield ~ Insecticide, crd)
@@ -90,20 +97,32 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(np$posthoc == "dunn_holm" && isTRUE(all.equal(unname(e$dunn$P.adj), np$pairs$P.adj)) && identical(np$means$Group[np$means$Treatment == "Control"], "b") && grepl("Dunn, Holm adjusted", html(output$results_ui)),
         "Dunn: Holm-adjusted comparisons, letters and script")
   session$setInputs(aov_method = "anova", np_posthoc = "conover")
+  # trimmed means: with no trimming the methods are Welch's; the R code reproduces the app, bootstrap included
+  check(isTRUE(all.equal(unname(unlist(.star_t1way(crd$GrainYield, factor(crd$Insecticide), 0)[c("F", "df2", "p")])), unname(c(ref$statistic, ref$parameter[2], ref$p.value)))) &&
+        isTRUE(all.equal(.star_yuen(1:10 + 0, c(2, 5, 9, 11, 3, 8, 14, 6), 0)$p, t.test(1:10 + 0, c(2, 5, 9, 11, 3, 8, 14, 6))$p.value)),
+        "Trimmed means: with no trimming, t1way and Yuen are Welch's ANOVA and Welch's t-test")
+  session$setInputs(aov_method = "trimmed")
+  x <- trimmed_try(); ui <- html(output$results_ui)
+  check(aov_trimmed() && grepl("Yuen's comparisons", ui) && grepl("Bootstrap", ui) && grepl("you are using|You are using", ui), "Trimmed means: results screen, acknowledged as a recommended method")
+  e <- run_script(trimmed_script())
+  check(isTRUE(all.equal(unname(e$p), x$p)) && isTRUE(all.equal(unname(e$F), x$statistic)) && isTRUE(all.equal(e$yuen$P.adj, x$pairs$P.adj)) &&
+        isTRUE(all.equal(unname(e$ci[, 1]), x$means$Lower)), "Trimmed means: script reproduces the app (F, p, Yuen tests, bootstrap intervals)")
+  check(identical(names(xlsx_sheets()), c("Trimmed means", "Yuen tests", "Info")) && inherits(gg_current(), "ggplot"), "Trimmed means: Excel sheets and box plot")
+  session$setInputs(aov_method = "anova")
   # the advice follows the data: skewed values suggest the rank test, unequal variances Welch (CRD) or a transformation (RCBD)
   set.seed(1)
   skew <- data.frame(T = rep(c("a", "b", "c"), each = 10), y = round(c(rexp(10, 1), rexp(10, 0.5), rexp(10, 0.3)), 2), stringsAsFactors = FALSE)
   rc <- star_recommend_aov(star_aov(skew, "y", "T", design = "CRD", report = FALSE))
-  check(rc$level == "warn" && identical(rc$switch_to, "rank") && grepl("Kruskal-Wallis", rc$switch_label), "Guidance: skewed residuals suggest Kruskal-Wallis")
+  check(rc$light == "red" && identical(rc$switch_to, "rank") && grepl("Kruskal-Wallis", rc$switch_label), "Guidance: skewed residuals are red and suggest Kruskal-Wallis or trimmed means")
   x <- c(-1.2, -0.6, -0.3, 0, 0.3, 0.6, 1.2, -0.9, 0.9, 0)
   het <- data.frame(T = rep(c("a", "b", "c"), each = 10), y = c(10 + x, 12 + 4 * x, 14 + 10 * x), B = rep(1:10, 3), stringsAsFactors = FALSE)
   rc <- star_recommend_aov(star_aov(het, "y", "T", design = "CRD", report = FALSE))
   check(identical(rc$switch_to, "welch") && grepl("Levene", rc$observed), "Guidance: unequal variances in CRD suggest Welch's ANOVA")
   rc <- star_recommend_aov(star_aov(het, "y", "T", "B", design = "RCBD", report = FALSE))
   check(identical(rc$switch_to, "rank") && grepl("no Welch version for blocks", rc$advice), "Guidance: unequal variances in RCBD suggest a transformation or Friedman")
-  ui <- as.character(advice_ui(rc, "anova", "rec_switch", "rec_stay", FALSE, "ANOVA"))
-  check(grepl("Switch to Friedman", ui) && grepl("Continue with ANOVA", ui) && grepl("Advice only", ui), "Guidance: switch and keep buttons, marked as advice")
-  check(grepl("recommended method", as.character(advice_ui(rc, "rank", "a", "b", FALSE, "rank"))) && grepl("chose to continue", as.character(advice_ui(rc, "anova", "a", "b", TRUE, "ANOVA"))),
+  ui <- as.character(advice_ui(rc, "anova", "rec", FALSE, "ANOVA"))
+  check(grepl("Use Friedman", ui) && grepl("rec_rank", ui) && grepl("Continue with ANOVA", ui) && grepl("Advice only", ui) && !grepl("trimmed", ui), "Guidance: switch and keep buttons, marked as advice (no trimmed option for RCBD)")
+  check(grepl("recommended method", as.character(advice_ui(rc, "rank", "a", FALSE, "rank"))) && grepl("chose to continue", as.character(advice_ui(rc, "anova", "a", TRUE, "ANOVA"))),
         "Guidance: acknowledges the recommended method, or the user's choice to keep theirs")
 
   # ---- CRD, two factors (tooth growth) ----
@@ -297,9 +316,22 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(grepl("W = 575.5", tt_ok()$nonparametric_summary) && grepl("Mann-Whitney", html(output$tt_results_ui)), "Wilcoxon method: rank-sum test for two independent groups")
   session$setInputs(tt_method = "t", tt_example = "rice", tt_type = "one", tt_resp = "Yield", tt_mu = 3, go_tt = 8)
   check(!tt_rank() && grepl("Mean - test value", html(output$tt_results_ui)), "Wilcoxon method: back to the t-test")
+  # trimmed means for two groups: Yuen's test, the trimmed mean of the differences, and of the values against mu
+  for (case in list(list(ex = "tooth", type = "independent", resp = "len", group = "supp", levels = c("OJ", "VC")), list(ex = "sleep", type = "paired", x = "Drug1", y = "Drug2"),
+                    list(ex = "rice", type = "one", resp = "Yield", mu = 3))) {
+    session$setInputs(tt_example = case$ex, tt_type = case$type, tt_method = "trimmed")
+    if (case$type == "independent") session$setInputs(tt_resp = case$resp, tt_group = case$group, tt_levels = case$levels)
+    if (case$type == "paired") session$setInputs(tt_x = case$x, tt_y = case$y)
+    if (case$type == "one") session$setInputs(tt_resp = case$resp, tt_mu = case$mu)
+    session$setInputs(go_tt = 100 + which(c("tooth", "sleep", "rice") == case$ex))
+    s <- tt_trim_ok(); e <- run_script(tt_trim_script())
+    check(isTRUE(all.equal(unname(e$res[c("t", "df", "p", "boot_lower", "boot_upper")]), unname(unlist(s$table[c("t", "DF", "P", "BootLower", "BootUpper")])))) && grepl("Bootstrap interval", html(output$tt_results_ui)),
+          paste("Trimmed means, two groups:", case$type, "script reproduces the app (t, df, p, bootstrap)"))
+  }
+  session$setInputs(tt_method = "t")
   check(grepl("Data check|Observation", html(output$tt_results_ui)) && !grepl("Check with", html(output$tt_results_ui)) && !is.null(tt_rec()), "Guidance: t-test screen has the data check, with no Wilcoxon result beside it")
   rc <- star_recommend_tt(star_ttest(skew[skew$T != "c", ], "independent", response = "y", group = "T"))
-  check(identical(rc$switch_to, "wilcox") && grepl("1.5 x IQR", rc$observed), "Guidance: skewed groups suggest Wilcoxon and point to values beyond 1.5 x IQR")
+  check(rc$light == "red" && identical(vapply(rc$options, function(o) o$id, ""), c("wilcox", "trimmed")) && grepl("x IQR", rc$observed), "Guidance: skewed groups are red, suggest Wilcoxon or trimmed means, and point to values beyond the quartiles")
   rc <- star_recommend_tt(star_ttest(read.csv("example_crd2.csv", stringsAsFactors = FALSE), "independent", response = "len", group = "supp", var_equal = TRUE))
   check(identical(rc$switch_to, "welch_var") && grepl("without first testing the variances", rc$advice), "Welch default: the pooled t-test gets Welch recommended whatever Levene's test says")
   check(is.null(star_recommend_tt(star_ttest(read.csv("example_crd2.csv", stringsAsFactors = FALSE), "independent", response = "len", group = "supp"))$switch_to),

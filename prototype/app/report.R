@@ -77,6 +77,22 @@ thai_summary_welch <- function(w) {
   else sprintf("Welch's ANOVA (ไม่สมมติว่าความแปรปรวนเท่ากัน) พบว่า %s ไม่มีผลต่อ %s อย่างมีนัยสำคัญทางสถิติ (%s)", w$treatment, w$response, st)
 }
 
+thai_summary_trimmed <- function(x) {
+  m <- x$means; top <- m[which.max(m$TrimmedMean), ]
+  st <- sprintf("F = %.2f, df = %d และ %.2f, %s", x$statistic, x$df1, x$df2, th_p(x$p))
+  if (x$significant)
+    sprintf("การเปรียบเทียบค่าเฉลี่ยตัดปลาย 20%% (ไม่สมมติการแจกแจงปกติและความแปรปรวนเท่ากัน) พบว่า %s มีผลต่อ %s อย่างมีนัยสำคัญทางสถิติ (%s) ค่าเฉลี่ยตัดปลายสูงสุดคือ %s (%s) สิ่งทดลองที่มีอักษรเหมือนกันไม่แตกต่างกันทางสถิติ (Yuen's test ปรับค่า p แบบ Holm)",
+            x$treatment, x$response, st, top$Treatment, fmt_n(top$TrimmedMean))
+  else sprintf("การเปรียบเทียบค่าเฉลี่ยตัดปลาย 20%% (ไม่สมมติการแจกแจงปกติและความแปรปรวนเท่ากัน) พบว่า %s ไม่มีผลต่อ %s อย่างมีนัยสำคัญทางสถิติ (%s)", x$treatment, x$response, st)
+}
+
+thai_summary_tt_trim <- function(r, s) {
+  z <- s$table
+  sprintf("%s: ผลต่าง = %s (t = %.2f, df = %.2f, %s; ช่วงความเชื่อมั่น %g%% %s ถึง %s; bootstrap %s ถึง %s) %s",
+          s$method, fmt_n(z$Estimate), z$t, z$DF, th_p(z$P), 100 * r$conf_level, fmt_n(z$Lower), fmt_n(z$Upper), fmt_n(z$BootLower), fmt_n(z$BootUpper),
+          if (s$significant) "แตกต่างอย่างมีนัยสำคัญทางสถิติ" else "ไม่แตกต่างอย่างมีนัยสำคัญทางสถิติ")
+}
+
 thai_summary_tt_np <- function(r) {
   w <- r$nonparametric; sig <- !is.na(w$P) && w$P < r$alpha; md <- r$groups$Median
   st <- sprintf("%s, %s", w$Statistic, th_p(w$P))

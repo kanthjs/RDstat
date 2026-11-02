@@ -422,3 +422,71 @@ script_combined <- function(r, file = NULL) {
   }
   paste(c(head, "", body), collapse = "\n")
 }
+
+# trimmed means (20%): the functions the app uses, written out so the script needs no package
+script_trim_funs <- c(
+  "# 20% trimmed means (Wilcox 2017): Winsorized variance, Yuen's standard error, percentile bootstrap with a fixed seed",
+  "tr <- 0.2",
+  "winvar <- function(x) { n <- length(x); g <- floor(tr * n); y <- sort(x); if (g > 0) { y[1:g] <- y[g + 1]; y[(n - g + 1):n] <- y[n - g] }; var(y) }",
+  "h_of <- function(x) length(x) - 2 * floor(tr * length(x))",
+  "d_of <- function(x) (length(x) - 1) * winvar(x) / (h_of(x) * (h_of(x) - 1))",
+  "boot_ci <- function(stat, B = 2000, conf = 0.95) { set.seed(1); v <- replicate(B, stat()); unname(quantile(v, c((1 - conf) / 2, 1 - (1 - conf) / 2))) }")
+
+# heteroscedastic ANOVA on trimmed means (t1way) with Yuen's tests, as the app runs it
+script_trimmed <- function(x, r, file = NULL) {
+  resp <- r$original_response %||% r$response
+  head <- script_header(sprintf("Trimmed-means ANOVA of %s by %s", resp, x$treatment), file)
+  trans <- if (!is.null(r$transform)) sprintf("y <- switch(%s, log = log(y + 1), sqrt = sqrt(y + 0.5), arcsin = asin(sqrt(y / 100)) * 180 / pi)   # transformed response", r_str(r$transform))
+  body <- c(
+    script_num("y", resp), trans, "d$y <- y",
+    sprintf("d$g <- factor(trimws(as.character(d[[%s]])))", r_str(x$treatment)),
+    "d <- d[complete.cases(d[c(\"y\", \"g\")]), ]   # rows with a missing value are left out",
+    "", script_trim_funs, "",
+    "x <- split(d$y, d$g); J <- length(x)",
+    "dd <- sapply(x, d_of); h <- sapply(x, h_of); tm <- sapply(x, mean, trim = tr)",
+    "w <- 1 / dd; U <- sum(w); xt <- sum(w * tm) / U; S <- sum((1 - w / U)^2 / (h - 1))",
+    "F <- sum(w * (tm - xt)^2) / (J - 1) / (1 + 2 * (J - 2) / (J^2 - 1) * S)",
+    "df1 <- J - 1; df2 <- 1 / (3 / (J^2 - 1) * S)",
+    "p <- pf(F, df1, df2, lower.tail = FALSE)",
+    "c(F = F, df1 = df1, df2 = df2, p = p)   # heteroscedastic one-way ANOVA on trimmed means (t1way)",
+    "",
+    "# Yuen's test for each pair, Holm adjusted",
+    "pr <- combn(levels(d$g), 2)",
+    "yuen <- do.call(rbind, lapply(seq_len(ncol(pr)), function(j) {",
+    "  a <- x[[pr[1, j]]]; b <- x[[pr[2, j]]]; da <- d_of(a); db <- d_of(b)",
+    "  t <- (mean(a, trim = tr) - mean(b, trim = tr)) / sqrt(da + db); df <- (da + db)^2 / (da^2 / (h_of(a) - 1) + db^2 / (h_of(b) - 1))",
+    "  data.frame(Comparison = paste(pr[1, j], \"-\", pr[2, j]), t = t, DF = df, P = 2 * pt(-abs(t), df))",
+    "}))",
+    "yuen$P.adj <- p.adjust(yuen$P, \"holm\")",
+    "yuen",
+    "",
+    sprintf("ci <- t(sapply(x, function(v) boot_ci(function() mean(sample(v, replace = TRUE), trim = tr), conf = %s)))   # bootstrap interval of each trimmed mean", r_num(1 - x$alpha)),
+    "data.frame(TrimmedMean = tm, Lower = ci[, 1], Upper = ci[, 2])")
+  paste(c(head, "", body), collapse = "\n")
+}
+
+# Yuen's test, or the trimmed mean of the differences (paired) or of the values (one sample), as the app runs it
+script_tt_trimmed <- function(r, s, file = NULL) {
+  head <- script_header(paste(s$method, "of", switch(r$type, independent = paste(r$response, "by", r$group), paired = paste(r$x, "-", r$y), one = r$response)), file)
+  conf <- r_num(r$conf_level); alt <- r_str(r$alternative)
+  pfun <- c("p_of <- function(t, df) switch(alt, two.sided = 2 * pt(-abs(t), df), greater = pt(t, df, lower.tail = FALSE), less = pt(t, df))",
+            sprintf("alt <- %s; conf <- %s", alt, conf))
+  data <- switch(r$type,
+    independent = c(script_num("y", r$response), sprintf("g <- trimws(as.character(d[[%s]]))", r_str(r$group)),
+                    sprintf("a <- y[g == %s & !is.na(y)]; b <- y[g == %s & !is.na(y)]", r_str(r$labels[1]), r_str(r$labels[2]))),
+    paired = c(script_num("x1", r$x), script_num("x2", r$y), "ok <- !is.na(x1) & !is.na(x2)", "v <- x1[ok] - x2[ok]   # the differences", "mu <- 0"),
+    one = c(script_num("v", r$response), "v <- v[!is.na(v)]", sprintf("mu <- %s", r_num(r$mu))))
+  test <- if (r$type == "independent") c(
+    "da <- d_of(a); db <- d_of(b); est <- mean(a, trim = tr) - mean(b, trim = tr); se <- sqrt(da + db)",
+    "df <- (da + db)^2 / (da^2 / (h_of(a) - 1) + db^2 / (h_of(b) - 1)); t <- est / se",
+    "boot <- boot_ci(function() mean(sample(a, replace = TRUE), trim = tr) - mean(sample(b, replace = TRUE), trim = tr), conf = conf)")
+  else c(
+    "est <- mean(v, trim = tr) - mu; se <- sqrt(d_of(v)); df <- h_of(v) - 1; t <- est / se",
+    "boot <- boot_ci(function() mean(sample(v, replace = TRUE), trim = tr) - mu, conf = conf)")
+  body <- c(data, "", script_trim_funs, pfun, "", test,
+            "q <- qt(if (alt == \"two.sided\") 1 - (1 - conf) / 2 else conf, df)",
+            "ci <- switch(alt, two.sided = est + c(-1, 1) * q * se, greater = c(est - q * se, Inf), less = c(-Inf, est + q * se))",
+            "res <- c(difference = est, t = t, df = df, p = p_of(t, df), lower = ci[1], upper = ci[2], boot_lower = boot[1], boot_upper = boot[2])",
+            "res")
+  paste(c(head, "", body), collapse = "\n")
+}

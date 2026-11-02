@@ -84,62 +84,89 @@ star_welch <- function(data, response, treatment, alpha = 0.05) {
        letters = .star_letters(lv, rb, P, alpha), adjust = adjust)
 }
 
-## a recommendation: what was observed, what is advised, and which method a switch button would choose (NULL: none)
-.star_advice <- function(level, observed, advice, switch_to = NULL, switch_label = NULL, stay_label = NULL) {
-  list(level = level, observed = observed, advice = advice, switch_to = switch_to, switch_label = switch_label, stay_label = stay_label)
+## a recommendation. `light` is the traffic light of the assumption checks: "green" (met: the parametric analysis can
+## be used fully), "yellow" (a mild departure the analysis is robust to, or a check with little power) or "red" (a
+## clear violation or outliers: another method is advised). `options` are the methods a button can switch to, each a
+## list(id, label, goal), the first being the recommended one; `checks` holds the light of each check for display.
+.star_advice <- function(light, observed, advice, options = list(), checks = NULL) {
+  list(light = light, observed = observed, advice = advice, options = options, checks = checks,
+       switch_to = if (length(options)) options[[1]]$id, switch_label = if (length(options)) options[[1]]$label)
+}
+.star_option <- function(id, label, goal = NULL) list(id = id, label = label, goal = goal)
+.star_worst <- function(lights) { lv <- c("green", "yellow", "red"); l <- intersect(lights, lv); if (!length(l)) "green" else lv[max(match(l, lv))] }
+.star_goal_rank <- "To compare ranks or medians (common practice)"
+.star_goal_means <- "To compare means without relying on the normal curve"
+
+## the light of each assumption check of a star_aov() result: normality of the residuals (yellow: the mixed rule for
+## large samples), equal variances (yellow: unequal but the largest/smallest variance ratio is at most 4 with equal
+## group sizes, a case the F test tolerates) and outliers (yellow: suspect residuals only, 2 < |r| <= 3)
+star_assumption_lights <- function(r) {
+  dg <- r$diagnostics
+  if (is.null(dg)) return(NULL)
+  cells <- table(interaction(r$data[r$factors], drop = TRUE)[!is.na(r$data[[r$response]])])
+  n_min <- min(cells); balanced <- length(unique(as.integer(cells))) == 1
+  sh <- .star_shape(dg$residuals$Residual)
+  robust <- n_min >= 30 && isTRUE(abs(sh[["skew"]]) <= 1 && abs(sh[["kurt"]]) <= 2)
+  nl <- if (is.na(dg$normality$ok)) NA_character_ else if (isTRUE(dg$normality$ok)) "green" else if (robust) "yellow" else "red"
+  vl <- if (is.null(dg$homogeneity) || is.na(dg$homogeneity$ok)) NA_character_ else if (isTRUE(dg$homogeneity$ok)) "green"
+        else if (balanced && is.finite(dg$homogeneity$ratio) && dg$homogeneity$ratio <= 4) "yellow" else "red"
+  ol <- if ((dg$n_outliers %||% 0) > 0) "red" else if ((dg$n_suspect %||% 0) > 0) "yellow" else "green"
+  data.frame(Check = c("normality", "variance", "outliers"), Light = c(nl, vl, ol), stringsAsFactors = FALSE)
 }
 
-## guidance for a one-factor CRD or RCBD analysed with star_aov(); `y` and `g` are the response and the treatment,
-## `outlier_rows` the rows the diagnostics flagged. NULL when there is nothing to check.
+## guidance for a one-factor CRD or RCBD analysed with star_aov(). NULL when there is nothing to check.
 star_recommend_aov <- function(r) {
   dg <- r$diagnostics
   if (is.null(dg) || !r$design %in% c("CRD", "RCBD") || length(r$factors) != 1) return(NULL)
-  a <- r$alpha; f <- r$factors
+  a <- r$alpha; f <- r$factors; crd <- r$design == "CRD"
+  lights <- star_assumption_lights(r); L <- stats::setNames(lights$Light, lights$Check)
   n_min <- min(table(r$data[[f]][!is.na(r$data[[r$response]])]))
   res <- dg$residuals$Residual
   sh <- .star_shape(res)
   sw_p <- dg$normality$p; lev_p <- dg$homogeneity$p
-  norm_fail <- isFALSE(dg$normality$ok); var_fail <- isFALSE(dg$homogeneity$ok)
-  clt <- norm_fail && n_min >= 30 && isTRUE(abs(sh[["skew"]]) <= 1 && abs(sh[["kurt"]]) <= 2)
   out <- dg$residuals$Flag %in% "outlier"
-  sw_wo <- if (norm_fail && any(out) && sum(!out) >= 3) tryCatch(stats::shapiro.test(res[!out])$p.value, error = \(e) NA_real_) else NA_real_
+  sw_wo <- if (isFALSE(dg$normality$ok) && any(out) && sum(!out) >= 3) tryCatch(stats::shapiro.test(res[!out])$p.value, error = \(e) NA_real_) else NA_real_
   y <- r$data[[r$original_response %||% r$response]]
   positive <- is.numeric(y) && all(y[!is.na(y)] > 0)
   tf <- if (positive && isTRUE(sh[["skew"]] > 0.5)) " A log or square-root transformation (Advanced options) may also make the residuals normal." else ""
-  rank_name <- if (r$design == "CRD") "Kruskal-Wallis" else "Friedman"
+  rank_name <- if (crd) "Kruskal-Wallis" else "Friedman"
   shape <- if (all(is.finite(sh))) sprintf(" Skewness = %.2f, excess kurtosis = %.2f.", sh[["skew"]], sh[["kurt"]]) else ""
   small <- if (n_min < 15) sprintf(" With %d observations per treatment the normality test has little power, so also look at the residual plot.", n_min) else ""
-
-  if (norm_fail && !clt) {
-    if (isTRUE(sw_wo >= a))
-      return(.star_advice("warn",
-        sprintf("The residuals depart from a normal distribution (Shapiro-Wilk p %s), but without the %d outlier(s) they look normal (p %s).", .star_fmt_p(sw_p), sum(out), .star_fmt_p(sw_wo)),
-        sprintf("Check the outlier(s) on the Outliers & assumptions tab for a data-entry or measurement error first. If the values are genuine, the %s test (rank-based) does not depend on the distribution.%s", rank_name, tf),
-        "rank", sprintf("Switch to %s", rank_name), "Continue with ANOVA"))
-    return(.star_advice("warn",
-      sprintf("The residuals depart from a normal distribution (Shapiro-Wilk p %s), which can make the ANOVA F test and letters unreliable.%s", .star_fmt_p(sw_p), shape),
-      sprintf("Consider the %s test (rank-based), which does not assume a normal distribution.%s", rank_name, tf),
-      "rank", sprintf("Switch to %s (recommended)", rank_name), "Continue with ANOVA"))
-  }
+  few <- if (n_min < 10) sprintf(" With %d per treatment, trimmed means and bootstrap intervals are rough; treat them with care.", n_min) else ""
   lev_txt <- sprintf("Levene p %s%s", .star_fmt_p(lev_p), if (is.finite(dg$homogeneity$ratio)) sprintf(", largest/smallest variance = %.1f", dg$homogeneity$ratio) else "")
-  note <- if (clt) sprintf(" The residuals depart from normal (Shapiro-Wilk p %s), but with %d or more per treatment and a moderate shape (%s) the means-based analysis is robust (central limit theorem).",
-                           .star_fmt_p(sw_p), n_min, trimws(shape)) else ""
-  norm_txt <- if (clt) "" else sprintf("Residuals are consistent with a normal distribution (Shapiro-Wilk p %s).", .star_fmt_p(sw_p))
-  if (r$design == "CRD")
-    return(.star_advice(if (var_fail) "warn" else "note",
-      paste0(norm_txt, note, sprintf(" The variances %s (%s).", if (var_fail) "differ among the treatments" else "look similar", lev_txt), small),
+  goal_options <- c(list(.star_option("rank", sprintf("Use %s", rank_name), .star_goal_rank)),
+                    if (crd) list(.star_option("trimmed", "Use trimmed means (20%) with bootstrap CI", .star_goal_means)))
+
+  # red: a clear violation of normality, or outliers
+  if (identical(L[["normality"]], "red") || identical(L[["outliers"]], "red")) {
+    obs <- c(
+      if (identical(L[["normality"]], "red")) sprintf("The residuals depart from a normal distribution (Shapiro-Wilk p %s), which can make the F test and letters unreliable.%s", .star_fmt_p(sw_p), shape),
+      if (any(out)) sprintf("%d outlier(s) (|studentized residual| > 3)%s.", sum(out), if (isTRUE(sw_wo >= a)) sprintf("; without them the residuals look normal (p %s)", .star_fmt_p(sw_wo)) else ""))
+    adv <- paste0(if (any(out)) "Check the flagged value(s) on the Outliers & assumptions tab for a data-entry or measurement error first. " else "",
+                  if (nzchar(tf)) paste0(trimws(tf), " ") else "", if (crd && nzchar(few)) paste0(trimws(few), " ") else "",
+                  "If the values are genuine, choose by what you want to report", if (crd) ":" else sprintf(": the %s test (rank-based).", rank_name))
+    return(.star_advice("red", paste(obs, collapse = " "), adv, goal_options, lights))
+  }
+  note <- if (identical(L[["normality"]], "yellow")) sprintf(" The residuals depart from normal (Shapiro-Wilk p %s), but with %d or more per treatment and a moderate shape (%s) the means-based analysis is robust (central limit theorem).",
+                                                         .star_fmt_p(sw_p), n_min, trimws(shape)) else ""
+  norm_txt <- if (identical(L[["normality"]], "green")) sprintf("Residuals are consistent with a normal distribution (Shapiro-Wilk p %s).", .star_fmt_p(sw_p)) else ""
+  var_txt <- sprintf(" The variances %s (%s).", if (isFALSE(dg$homogeneity$ok)) "differ among the treatments" else "look similar", lev_txt)
+  # CRD: Welch's ANOVA by default, whatever Levene's test says
+  if (crd)
+    return(.star_advice(.star_worst(c(L[["normality"]], L[["variance"]], L[["outliers"]], if (n_min < 15) "yellow")),
+      paste0(norm_txt, note, var_txt, small),
       paste("Welch's ANOVA is recommended by default: it does not assume equal variances and gives almost the same result when they are equal,",
             "so it is used without first testing the variances. Its means are compared with the Games-Howell test."),
-      "welch", "Switch to Welch's ANOVA (recommended)", "Continue with the standard ANOVA"))
-  if (var_fail) {
-    obs <- sprintf("The variances differ among the treatments (%s).", lev_txt)
-    return(.star_advice("warn", obs,
+      list(.star_option("welch", "Switch to Welch's ANOVA (recommended)")), lights))
+  # RCBD: no Welch version; clearly unequal variances call for a transformation or Friedman
+  if (identical(L[["variance"]], "red"))
+    return(.star_advice("red", sprintf("The variances differ among the treatments (%s).", lev_txt),
       sprintf("There is no Welch version for blocks. A transformation (Advanced options) often makes the variances equal%s; otherwise the Friedman test (rank-based) can be used.", if (positive) ", for example log for yields or counts" else ""),
-      "rank", "Switch to Friedman", "Continue with ANOVA"))
-  }
-  .star_advice(if (clt || n_min < 15) "note" else "ok",
-    paste0(norm_txt, note, sprintf(" The variances look similar (%s).", lev_txt), small),
-    "The ANOVA suits these data.")
+      list(.star_option("rank", "Use Friedman", .star_goal_rank)), lights))
+  .star_advice(.star_worst(c(L[["normality"]], L[["variance"]], L[["outliers"]], if (n_min < 15) "yellow")),
+    paste0(norm_txt, note, var_txt, small),
+    if (identical(L[["variance"]], "yellow")) "The variances differ only moderately with equal group sizes, which the ANOVA tolerates; the ANOVA can be used." else "The ANOVA suits these data.",
+    checks = lights)
 }
 
 ## guidance for a t-test result of star_ttest()
@@ -152,26 +179,33 @@ star_recommend_tt <- function(r) {
   n_min <- min(lengths(vals))
   nrm <- r$normality; bad <- !is.na(nrm$P) & nrm$P < a
   shapes <- lapply(vals, .star_shape)
-  clt <- any(bad) && n_min >= 30 && all(vapply(shapes, \(s) isTRUE(abs(s[["skew"]]) <= 1 && abs(s[["kurt"]]) <= 2), NA))
-  iqr_out <- sum(vapply(vals, \(v) { q <- stats::quantile(v, c(.25, .75)); h <- 1.5 * diff(q); sum(v < q[1] - h | v > q[2] + h) }, 0))
+  robust <- n_min >= 30 && all(vapply(shapes, \(s) isTRUE(abs(s[["skew"]]) <= 1 && abs(s[["kurt"]]) <= 2), NA))
+  beyond <- function(v, k) { q <- stats::quantile(v, c(.25, .75)); h <- k * diff(q); sum(v < q[1] - h | v > q[2] + h) }
+  iqr_out <- sum(vapply(vals, beyond, 0, k = 1.5)); far_out <- sum(vapply(vals, beyond, 0, k = 3))
+  nl <- if (!any(!is.na(nrm$P))) NA_character_ else if (!any(bad)) "green" else if (robust) "yellow" else "red"
+  ol <- if (far_out > 0) "red" else if (iqr_out > 0) "yellow" else "green"
+  lev <- if (r$type == "independent") .star_levene(d$Value, d$Group) else c(F = NA_real_, p = NA_real_)
+  vl <- if (is.na(lev[["p"]])) NA_character_ else if (lev[["p"]] >= a) "green" else "yellow"   # Welch's t-test handles unequal variances
+  lights <- data.frame(Check = c("normality", "variance", "outliers"), Light = c(nl, vl, ol), stringsAsFactors = FALSE)
   what <- if (r$type == "paired") "The differences" else if (r$type == "one") "The values" else sprintf("The values of %s", paste(nrm$Data[bad], collapse = " and "))
   small <- if (n_min < 15) sprintf(" With %d values%s the normality test has little power, so also look at the plot.", n_min, if (r$type == "independent") " in the smaller group" else "") else ""
+  few <- if (n_min < 10) sprintf(" With %d values%s, trimmed means and bootstrap intervals are rough; treat them with care.", n_min, if (r$type == "independent") " in the smaller group" else "") else ""
   wname <- if (r$type == "independent") "Wilcoxon rank-sum (Mann-Whitney)" else "Wilcoxon signed-rank"
-  if (any(bad) && !clt)
-    return(.star_advice("warn",
-      sprintf("%s depart from a normal distribution (Shapiro-Wilk p %s)%s.", what, .star_fmt_p(min(nrm$P[bad])),
-              if (iqr_out) sprintf("; %d value(s) lie beyond 1.5 x IQR, so check them for errors first", iqr_out) else ""),
-      sprintf("Consider the %s test, which does not assume a normal distribution.", wname),
-      "wilcox", "Switch to Wilcoxon (recommended)", "Continue with the t-test"))
-  if (r$type == "independent" && isTRUE(r$var_equal)) {
-    lev <- .star_levene(d$Value, d$Group)
-    return(.star_advice(if (isTRUE(lev[["p"]] < a)) "warn" else "note",
-      sprintf("The pooled (Student's) t-test is chosen; the variances of the two groups %s (Levene p %s).", if (isTRUE(lev[["p"]] < a)) "differ" else "look similar", .star_fmt_p(lev[["p"]])),
+  if (identical(nl, "red") || identical(ol, "red"))
+    return(.star_advice("red",
+      paste0(if (identical(nl, "red")) sprintf("%s depart from a normal distribution (Shapiro-Wilk p %s). ", what, .star_fmt_p(min(nrm$P[bad]))) else "",
+             if (far_out) sprintf("%d value(s) lie beyond 3 x IQR (extreme). ", far_out) else if (iqr_out) sprintf("%d value(s) lie beyond 1.5 x IQR. ", iqr_out) else ""),
+      paste0(if (iqr_out) "Check the values beyond the quartiles for errors first. " else "", if (nzchar(few)) paste0(trimws(few), " ") else "", "If the values are genuine, choose by what you want to report:"),
+      list(.star_option("wilcox", sprintf("Use the %s test", wname), .star_goal_rank),
+           .star_option("trimmed", "Use trimmed means (20%) with bootstrap CI", .star_goal_means)), lights))
+  obs <- paste0(if (identical(nl, "yellow")) sprintf("The data depart from normal, but with %d or more values per group and a moderate shape the t-test is robust (central limit theorem).", n_min)
+                else "The data are consistent with a normal distribution.",
+                if (iqr_out) sprintf(" %d value(s) lie beyond 1.5 x IQR.", iqr_out) else "",
+                if (!is.na(lev[["p"]])) sprintf(" The variances %s (Levene p %s).", if (lev[["p"]] < a) "differ" else "look similar", .star_fmt_p(lev[["p"]])) else "", small)
+  light <- .star_worst(c(nl, ol, vl, if (n_min < 15) "yellow"))
+  if (r$type == "independent" && isTRUE(r$var_equal))
+    return(.star_advice(light, paste("The pooled (Student's) t-test is chosen.", obs),
       "Welch's t-test is recommended by default: it does not assume equal variances and gives almost the same result when they are equal, so it is used without first testing the variances.",
-      "welch_var", "Switch to Welch (recommended)", "Keep the pooled t-test"))
-  }
-  .star_advice(if (clt || n_min < 15) "note" else "ok",
-    paste0(if (clt) sprintf("The data depart from normal, but with %d or more values per group and a moderate shape the t-test is robust (central limit theorem).", n_min)
-           else "The data are consistent with a normal distribution.", small),
-    "The t-test suits these data.")
+      list(.star_option("welch_var", "Switch to Welch (recommended)")), lights))
+  .star_advice(light, obs, "The t-test suits these data.", checks = lights)
 }

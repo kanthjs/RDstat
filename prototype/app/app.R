@@ -245,6 +245,8 @@ app_css <- css_fill("@font-face { font-family: 'Chulabhorn Likit'; src: url('fon
       display: block;
       border-radius: 4px;
     }
+    .light-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%%; margin-right: 6px; vertical-align: -1px; }
+    .light-green { background: #2e9e44; } .light-yellow { background: #f0b400; } .light-red { background: #d33a2c; }
     .empty-state i { font-size: 32px; color: %1$s; margin-bottom: 10px; } .empty-state h5 { font-weight: 600; color: #333; }", brand[["main"]], brand[["dark"]], brand[["light"]])
 
 ui <- bslib::page_navbar(
@@ -266,11 +268,13 @@ ui <- bslib::page_navbar(
         conditionalPanel("input.design == 'CRD' || input.design == 'RCBD'",
           radioButtons("aov_method", "Analysis", c("Welch's ANOVA: compare means, no equal-variance assumption (CRD, one factor)" = "welch",
                                                    "Standard ANOVA: compare means, equal variances assumed" = "anova",
+                                                   "Trimmed means (20%): compare means without the normal curve, bootstrap CI (CRD, one factor)" = "trimmed",
                                                    "Rank-based: Kruskal-Wallis (CRD) or Friedman (RCBD)" = "rank"), selected = "welch"),
           helpText("Welch's ANOVA is the default for a CRD with one factor; for RCBD, two factors and the other designs the standard ANOVA is used (no Welch version exists). After running, the results screen checks the data and recommends a method; switching here updates the results at once."),
           help_box("ANOVA, Welch or rank-based?",
             p(strong("ANOVA"), " compares the treatment means. It assumes normal residuals and equal variances; check them on the Outliers & assumptions tab after running."),
             p(strong("Welch's ANOVA"), " (default for CRD) also compares means but does not assume equal variances; its means are compared with the Games-Howell test. When the variances are equal it gives almost the same result as the standard ANOVA, so it is used without first testing the variances. It exists for CRD with one factor only (there is no version for blocks)."),
+            p(strong("Trimmed means"), " compare means after setting aside the lowest and highest 20% of each group, so skewed data and a few extreme values do not drive the result; no normal distribution or equal variances are assumed, and bootstrap intervals are given. CRD with one factor only."),
             p(strong("Rank-based"), " compares the ranks of the values instead, so it does not need those assumptions. Use it when the checks fail and a transformation does not help, or for scores and ranks. It needs one treatment factor; in RCBD each treatment must appear exactly once in every block (Friedman). It gives medians and a chi-square test instead of means, an ANOVA table and a CV."),
             p("Choose the method before looking at the results, not the one that gives the smaller p value.")))),
       side_step(2, "Data",

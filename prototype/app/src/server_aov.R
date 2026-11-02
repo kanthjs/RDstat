@@ -176,17 +176,18 @@
   aov_mode <- reactive({
     r <- ok(); m <- input$aov_method %||% "anova"
     if (m == "rank" && r$design %in% c("CRD", "RCBD")) "rank"
-    else if (m == "welch" && identical(r$design, "CRD") && length(r$factors) == 1) "welch"
+    else if (m %in% c("welch", "trimmed") && identical(r$design, "CRD") && length(r$factors) == 1) m
     else "anova"
   })
   # Welch's ANOVA is the default where it exists (CRD, one factor) and the standard ANOVA elsewhere
   observeEvent(input$design, {
     m <- input$aov_method %||% "welch"
     if (input$design == "CRD" && m == "anova") updateRadioButtons(session, "aov_method", selected = "welch")
-    if (input$design != "CRD" && m == "welch") updateRadioButtons(session, "aov_method", selected = "anova")
+    if (input$design != "CRD" && m %in% c("welch", "trimmed")) updateRadioButtons(session, "aov_method", selected = "anova")
   }, ignoreInit = TRUE)
   # Welch's ANOVA chosen where it does not apply: the standard ANOVA is shown, and the screen says why
-  welch_fallback <- reactive(identical(input$aov_method, "welch") && aov_mode() == "anova")
+  welch_fallback <- reactive((input$aov_method %||% "") %in% c("welch", "trimmed") && aov_mode() == "anova")
+  aov_trimmed <- reactive(aov_mode() == "trimmed")
   aov_rank <- reactive(aov_mode() == "rank")
   aov_welch <- reactive(aov_mode() == "welch")
   # rank-based test for one treatment factor in a CRD (Kruskal-Wallis) or an RCBD (Friedman); NULL for other designs,
@@ -210,8 +211,13 @@
   rec_kept <- reactiveVal(FALSE)
   observeEvent(input$go_aov, rec_kept(FALSE))
   observeEvent(input$rec_stay, rec_kept(TRUE))
-  observeEvent(input$rec_switch, { rc <- aov_rec(); if (!is.null(rc$switch_to)) updateRadioButtons(session, "aov_method", selected = rc$switch_to) })
-  method_names <- c(anova = "the standard ANOVA", welch = "Welch's ANOVA", rank = "the rank-based test")
+  for (id in c("rank", "welch", "trimmed")) local({ m <- id; observeEvent(input[[paste0("rec_", m)]], updateRadioButtons(session, "aov_method", selected = m)) })
+  method_names <- c(anova = "the standard ANOVA", welch = "Welch's ANOVA", rank = "the rank-based test", trimmed = "the trimmed-means comparison")
+  # trimmed means (20%) with bootstrap intervals, on the analysed values; CRD with one factor
+  trimmed_try <- reactive({
+    r <- ok(); d <- used_data(); req(d)
+    tryCatch(star_trimmed(d, r$response, r$factors, r$alpha), error = as_error)
+  })
   np_display <- function(np) {
     m <- np$means
     out <- data.frame(m$Treatment, fmt_n(m$Median), formatC(m$N, format = "d"), fmt_n(m$Rank), stringsAsFactors = FALSE)
@@ -256,6 +262,40 @@
       result_card("APA-style report", p(w$apa), copy = "cp_welch_apa"),
       result_card("R code to repeat this analysis", tags$pre(class = "small mb-0", style = "white-space: pre-wrap;", welch_script()), copy = "cp_welch_script", copy_label = "Copy code"),
       p(class = "text-muted small", icon("circle-info"), " The standard ANOVA table and its letters are not shown because Analysis is set to Welch's ANOVA."))
+  }
+  trimmed_display <- function(x) {
+    m <- x$means
+    out <- data.frame(m$Treatment, fmt_n(m$TrimmedMean), fmt_n(m$Lower), fmt_n(m$Upper), formatC(m$N, format = "d"), stringsAsFactors = FALSE)
+    names(out) <- c(x$treatment, "Trimmed mean", sprintf("Bootstrap %g%% CI: lower", 100 * (1 - x$alpha)), "upper", "N")
+    if (x$significant) out$Group <- m$Group
+    out
+  }
+  yuen_display <- function(x) { z <- x$pairs
+    data.frame(Comparison = z$Comparison, Difference = fmt_n(z$Difference), SE = fmt_n(z$SE), t = fmt_n(z$t, 3), DF = fmt_n(z$DF), p = fmt_p(z$P), `p (Holm)` = fmt_p(z$P.adj),
+               check.names = FALSE, stringsAsFactors = FALSE) }
+  # the results screen for the trimmed-means comparison
+  trimmed_results_ui <- function(r) {
+    x <- trimmed_try()
+    if (inherits(x, "star_error")) return(error_box(paste("The trimmed-means comparison could not be run:", x$message)))
+    m <- x$means; top <- m[which.max(m$TrimmedMean), ]
+    tagList(
+      notes_ui(r$data_notes),
+      div(class = if (x$significant) "alert alert-success" else "alert alert-info", x$summary),
+      key_stats(
+        stat("Test", "Trimmed means (20%)", "no normality or equal-variance assumption"),
+        stat("F", sprintf("%.2f", x$statistic), sprintf("df = %d and %.2f", x$df1, x$df2)),
+        stat("p value", fmt_p(x$p), if (x$significant) paste("significant at", format(x$alpha)) else paste("not significant at", format(x$alpha))),
+        stat("Highest trimmed mean", fmt_n(top$TrimmedMean), top$Treatment)),
+      if (x$n_min < 10) div(class = "alert alert-light small", icon("circle-info"), sprintf(" With %d observations per treatment, 20%% trimming sets aside few or no values and the bootstrap intervals are rough.", x$n_min)),
+      if (!is.null(r$transform)) div(class = "alert alert-light small", icon("circle-info"), sprintf(" The analysis used %s transformed as %s.", r$original_response, transforms[[r$transform]]$label)),
+      result_card("สรุปผล (ภาษาไทย)", p(lang = "th", thai_summary_trimmed(x)), copy = "cp_trim_th", copy_label = "คัดลอก"),
+      result_card("Trimmed means", html_table(trimmed_display(x)),
+        p(class = "text-muted small mb-0", if (x$significant) "Treatments with the same letter do not differ (Yuen's tests, Holm adjusted). " else "Letters are not given because the test is not significant. ",
+          sprintf("Percentile bootstrap intervals from %d resamples (fixed seed, so the same data give the same interval).", x$B)), copy = "cp_trim", copy_label = "Copy table"),
+      result_card("Yuen's comparisons", html_table(yuen_display(x)), copy = "cp_yuen", copy_label = "Copy table"),
+      result_card("APA-style report", p(x$apa), copy = "cp_trim_apa"),
+      result_card("R code to repeat this analysis", tags$pre(class = "small mb-0", style = "white-space: pre-wrap;", trimmed_script()), copy = "cp_trim_script", copy_label = "Copy code"),
+      p(class = "text-muted small", icon("circle-info"), " The ANOVA table and its letters are not shown because Analysis is set to trimmed means."))
   }
   # the results screen when Analysis is rank-based: the test, medians and letters take the place of the ANOVA
   rank_results_ui <- function(r) {
@@ -312,9 +352,10 @@
 
   output$results_ui <- renderUI({
     r <- ok()
-    advice <- advice_ui(aov_rec(), aov_mode(), "rec_switch", "rec_stay", rec_kept(), method_names[[aov_mode()]])
+    advice <- advice_ui(aov_rec(), aov_mode(), "rec", rec_kept(), method_names[[aov_mode()]])
     if (aov_rank()) return(tagList(advice, rank_results_ui(r)))
     if (aov_welch()) return(tagList(advice, welch_results_ui(r)))
+    if (aov_trimmed()) return(tagList(advice, trimmed_results_ui(r)))
     tb <- tables()
     sig <- r$effects$Effect[r$effects$Significant %in% TRUE]
     # with a significant interaction the overall means are not compared, so the highest cell mean is shown instead
@@ -329,8 +370,9 @@
     tagList(
       advice,
       if (welch_fallback()) div(class = "alert alert-light small py-2", icon("circle-info"),
-        if (identical(r$design, "CRD")) " Welch's ANOVA needs exactly one treatment factor, so the standard ANOVA is shown."
-        else " Welch's ANOVA exists only for CRD with one factor (there is no version for blocks or split plots), so the standard ANOVA is shown."),
+        sprintf(if (identical(r$design, "CRD")) " %s needs exactly one treatment factor, so the standard ANOVA is shown."
+                else " %s exists only for CRD with one factor (there is no version for blocks or split plots), so the standard ANOVA is shown.",
+                if (identical(input$aov_method, "trimmed")) "The trimmed-means comparison" else "Welch's ANOVA")),
       notes_ui(r$data_notes),
       div(class = if (r$significant || r$interaction_significant) "alert alert-success" else "alert alert-info", r$summary),
       key_stats(
@@ -364,7 +406,7 @@
 
   output$plot_picker <- renderUI({
     r <- ok()
-    if (aov_rank()) return(p(class = "text-muted small", "Box plot of the observations, for the rank-based test (error bars and the classic style do not apply)."))
+    if (aov_rank() || aov_trimmed()) return(p(class = "text-muted small", sprintf("Box plot of the observations, for the %s (error bars and the classic style do not apply).", method_names[[aov_mode()]])))
     ch <- c(setNames(r$factors, paste("Means of", r$factors)), if (!is.null(r$cells)) c("Interaction (grouped bars)" = "interaction", if (use_gg()) c("Interaction (lines)" = "interaction_line")))
     cur <- isolate(input$plot_effect)   # keep the choice when the style is switched
     if (length(ch) > 1) selectInput("plot_effect", "Plot", ch, selected = if (!is.null(cur) && cur %in% ch) cur else if (r$interaction_significant) "interaction" else r$factors[1])
@@ -383,13 +425,13 @@
   })
   gg_means <- reactive(apply_plot_customizations(do.call(star_ggplot_means, c(list(plot_obj(), plot_effect(), data = if (isTRUE(input$gg_points)) used_data(), error = input$gg_error %||% "se",
                                                          main = input$gg_title, xlab = input$gg_xlab, ylab = input$gg_ylab), plot_style("aov"))), "gg", "aov"))
-  gg_rank <- reactive({ np <- np_try(); req(!is.null(np), !inherits(np, "star_error"))
+  gg_rank <- reactive({ np <- if (aov_trimmed()) trimmed_try() else np_try(); req(!is.null(np), !inherits(np, "star_error"))
     apply_plot_customizations(do.call(star_ggplot_rank, c(list(np, points = isTRUE(input$gg_points), main = input$gg_title, xlab = input$gg_xlab, ylab = input$gg_ylab),
                                                          plot_style("aov"))), "gg", "aov") })
   # the figure shown and downloaded: the box plot for a rank-based analysis, else the means
-  gg_current <- reactive(if (aov_rank()) gg_rank() else gg_means())
+  gg_current <- reactive(if (aov_rank() || aov_trimmed()) gg_rank() else gg_means())
   draw_means <- function() {
-    if (aov_rank()) print(gg_rank())
+    if (aov_rank() || aov_trimmed()) print(gg_rank())
     else if (use_gg()) print(gg_means())
     else star_plot_means(plot_obj(), sub("_line$", "", plot_effect()), main = input$gg_title, xlab = input$gg_xlab, ylab = input$gg_ylab)
   }
@@ -401,7 +443,7 @@
     dg <- ok()$diagnostics
     if (is.null(dg)) return(div(class = "alert alert-warning", if (is_split(ok()$design)) "Assumption checks are not available for split-plot designs yet." else "Assumption checks could not be computed for this data."))
     tagList(
-      diag_summary_cards(dg),
+      diag_summary_cards(dg, tryCatch(star_assumption_lights(ok()), error = function(e) NULL)),
       div(class = if (dg$ok) "alert alert-success" else "alert alert-warning", tags$ul(lapply(dg$messages, tags$li))),
       if (nrow(dg$outliers)) {
         o <- dg$outliers
@@ -426,6 +468,13 @@
                   Info = data.frame(Item = c("App version", "Design", "Response", "Treatment factor", "Block", "Test", "Chi-square", "df", "p value", "Alpha", "Summary", "Data checks"),
                                     Value = c(version_label(), r$design, np$response, np$treatment, np$block %||% "-", np$name, round(np$statistic, 4), np$df, signif(np$p, 4), np$alpha, np$summary,
                                               if (length(r$data_notes)) paste(r$data_notes, collapse = " | ") else "none"))))
+    }
+    if (aov_trimmed()) {
+      x <- trimmed_try(); req(!inherits(x, "star_error"))
+      return(list(`Trimmed means` = x$means, `Yuen tests` = x$pairs,
+                  Info = data.frame(Item = c("App version", "Design", "Response", "Treatment factor", "Test", "Trimming", "Bootstrap resamples", "F", "df1", "df2", "p value", "Alpha", "Summary"),
+                                    Value = c(version_label(), r$design, r$original_response %||% r$response, x$treatment, "Heteroscedastic ANOVA on trimmed means (t1way), Yuen tests with Holm adjustment",
+                                              x$tr, x$B, round(x$statistic, 4), x$df1, round(x$df2, 4), signif(x$p, 4), x$alpha, x$summary))))
     }
     if (aov_welch()) {
       w <- welch_try(); req(!inherits(w, "star_error"))
@@ -462,10 +511,10 @@
                                         if (length(r$data_notes)) paste(r$data_notes, collapse = " | ") else "none"))
     sheets
   })
-  output$dl_xlsx <- downloadHandler(function() switch(aov_mode(), rank = "rdstat_rank_test.xlsx", welch = "rdstat_welch_anova.xlsx", "rdstat_anova.xlsx"), function(file) writexl::write_xlsx(xlsx_sheets(), file))
+  output$dl_xlsx <- downloadHandler(function() switch(aov_mode(), rank = "rdstat_rank_test.xlsx", welch = "rdstat_welch_anova.xlsx", trimmed = "rdstat_trimmed_means.xlsx", "rdstat_anova.xlsx"), function(file) writexl::write_xlsx(xlsx_sheets(), file))
   output$dl_aov_plot <- downloadHandler(function() paste0("rdstat_means_plot.", input$aov_fmt), function(file) {
     fmt <- input$aov_fmt %||% "png"; dpi <- as.numeric(input$aov_dpi %||% 300); wh <- export_dims("aov")
-    if (use_gg() || aov_rank()) { star_ggsave(gg_current(), file, width = wh[1], height = wh[2], dpi = dpi); return(invisible()) }
+    if (use_gg() || aov_rank() || aov_trimmed()) { star_ggsave(gg_current(), file, width = wh[1], height = wh[2], dpi = dpi); return(invisible()) }
     if (fmt == "png") png(file, width = wh[1] * dpi, height = wh[2] * dpi, res = dpi)
     else if (fmt == "svg") svg(file, width = wh[1], height = wh[2]) else pdf(file, width = wh[1], height = wh[2])
     on.exit(dev.off()); draw_means()
@@ -475,6 +524,12 @@
   # ---- Thai summary and Word report ----
   aov_file_name <- reactive(script_file(input$src == "up", if (input$src == "up") input$file$name else setup()$file))
   aov_script <- reactive(script_aov(ok(), aov_file_name()))
+  trimmed_script <- reactive({ x <- trimmed_try(); req(!inherits(x, "star_error")); script_trimmed(x, ok(), aov_file_name()) })
+  observeEvent(input$cp_trim_script, session$sendCustomMessage("copy_text", list(what = "R code", text = trimmed_script())))
+  observeEvent(input$cp_trim_th, session$sendCustomMessage("copy_text", list(what = "สรุปผล", text = thai_summary_trimmed(trimmed_try()))))
+  observeEvent(input$cp_trim_apa, session$sendCustomMessage("copy_text", list(what = "APA text", text = trimmed_try()$apa)))
+  observeEvent(input$cp_trim, session$sendCustomMessage("copy_text", list(what = "Trimmed means", text = tsv(trimmed_display(trimmed_try())))))
+  observeEvent(input$cp_yuen, session$sendCustomMessage("copy_text", list(what = "Yuen table", text = tsv(yuen_display(trimmed_try())))))
   welch_script <- reactive({ w <- welch_try(); req(!inherits(w, "star_error")); script_welch(w, ok(), aov_file_name()) })
   observeEvent(input$cp_welch_script, session$sendCustomMessage("copy_text", list(what = "R code", text = welch_script())))
   observeEvent(input$cp_welch_th, session$sendCustomMessage("copy_text", list(what = "สรุปผล", text = thai_summary_welch(welch_try()))))
@@ -490,8 +545,20 @@
   design_names <- c(CRD = "Completely randomized design (CRD)", RCBD = "Randomized complete block design (RCBD)",
                     SplitCRD = "Split plot in CRD", SplitRCBD = "Split plot in RCBD",
                     CombRCBD = "Combined analysis over environments (RCBD)", CombCRD = "Combined analysis over environments (CRD)")
-  output$dl_doc <- downloadHandler(function() switch(aov_mode(), rank = "rdstat_rank_test_report.doc", welch = "rdstat_welch_anova_report.doc", "rdstat_anova_report.doc"), function(file) {
+  output$dl_doc <- downloadHandler(function() switch(aov_mode(), rank = "rdstat_rank_test_report.doc", welch = "rdstat_welch_anova_report.doc", trimmed = "rdstat_trimmed_means_report.doc", "rdstat_anova_report.doc"), function(file) {
     r <- ok(); np <- np_res(); dg <- r$diagnostics
+    if (aov_trimmed()) {
+      x <- trimmed_try(); req(!inherits(x, "star_error"))
+      png <- tryCatch({ f <- tempfile(fileext = ".png"); star_ggsave(gg_rank(), f, width = 6.5, height = 4.5, dpi = 200); f }, error = function(e) NULL)
+      info <- data.frame(Item = c("Design", "Response", "Treatment factor", "Test", "Alpha", "Data", "Date", "App"),
+                         Value = c(design_names[[r$design]], r$original_response %||% r$response, x$treatment, "Trimmed means (20%), Yuen tests (Holm)", x$alpha,
+                                   aov_file_name() %||% "-", format(Sys.Date()), paste(app_name, version_label())), stringsAsFactors = FALSE)
+      blocks <- c(word_table(info), w_h2("สรุปผล"), w_p(thai_summary_trimmed(x)), w_p(x$summary),
+        w_h2("Trimmed means"), word_table(trimmed_display(x)), w_h2("Yuen's comparisons"), word_table(yuen_display(x)),
+        w_h2("APA-style report"), w_p(x$apa),
+        w_h2("Methods and references"), w_p(methods_sentence(gg_version())), paste0("<ul>", paste0("<li>", htmltools::htmlEscape(package_refs()), "</li>", collapse = ""), "</ul>"))
+      return(word_doc(file, paste(app_name, "- trimmed means:", r$original_response %||% r$response), blocks, png))
+    }
     if (aov_welch()) {
       w <- welch_try(); req(!inherits(w, "star_error"))
       png <- tryCatch({ f <- tempfile(fileext = ".png"); star_ggsave(gg_means(), f, width = 6.5, height = 4.5, dpi = 200); f }, error = function(e) NULL)
