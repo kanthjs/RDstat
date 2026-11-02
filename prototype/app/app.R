@@ -9,12 +9,12 @@ compiler::enableJIT(0)
 if (FALSE) { readxl::read_excel; agricolae::LSD.test; nortest::lillie.test; lmtest::bptest }
 for (f in sort(list.files("star", pattern = "[.]R$", full.names = TRUE))) source(f, local = FALSE)
 
-# Code is split by role into ./R; each file is sourced in the same order as before, so definitions keep their dependencies.
-source("R/helpers.R", local = TRUE)        # formatting, display tables, data reading, UI building blocks
-source("R/ui_components.R", local = TRUE)  # data source / plot label / export controls
-source("R/ui_screens.R", local = TRUE)     # correlation, regression and t-test screens
-source("R/tt_display.R", local = TRUE)     # t-test result tables
-source("R/designs.R", local = TRUE)        # example datasets and design helpers
+# Code is split by role into ./src; each file is sourced in the same order as before, so definitions keep their dependencies.
+source("src/helpers.R", local = TRUE)        # formatting, display tables, data reading, UI building blocks
+source("src/ui_components.R", local = TRUE)  # data source / plot label / export controls
+source("src/ui_screens.R", local = TRUE)     # correlation, regression and t-test screens
+source("src/tt_display.R", local = TRUE)     # t-test result tables
+source("src/designs.R", local = TRUE)        # example datasets and design helpers
 
 copy_js <- "
 Shiny.addCustomMessageHandler('copy_text', function(msg) {
@@ -320,13 +320,13 @@ server <- function(input, output, session) {
   observeEvent(input$home_reg, updateNavbarPage(session, "nav", selected = "Regression"))
   # Each file below holds one part of the server. They are sourced into this function (local = TRUE), so they share
   # input, output, session and the helpers defined above them, and must stay in this order.
-  source("R/server_plot.R", local = TRUE)      # plot style, export size, methods text
-  source("R/server_aov.R", local = TRUE)       # analysis of variance (also defines stale_flag)
-  source("R/server_shared.R", local = TRUE)    # helpers for the t-test, correlation and regression screens
-  source("R/server_tt.R", local = TRUE)
-  source("R/server_corr.R", local = TRUE)
-  source("R/server_reg.R", local = TRUE)
-  source("R/server_feedback.R", local = TRUE)  # feedback form and diagnostics
+  source("src/server_plot.R", local = TRUE)      # plot style, export size, methods text
+  source("src/server_aov.R", local = TRUE)       # analysis of variance (also defines stale_flag)
+  source("src/server_shared.R", local = TRUE)    # helpers for the t-test, correlation and regression screens
+  source("src/server_tt.R", local = TRUE)
+  source("src/server_corr.R", local = TRUE)
+  source("src/server_reg.R", local = TRUE)
+  source("src/server_feedback.R", local = TRUE)  # feedback form and diagnostics
 }
 
 shinyApp(ui, server)
