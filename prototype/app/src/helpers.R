@@ -327,13 +327,6 @@ advice_ui <- function(rc, current, switch_id, stay_id, kept, current_label) {
           actionButton(stay_id, rc$stay_label, class = "btn-outline-secondary btn-sm")),
       div(class = "small text-muted mt-1", "Advice only: the analyst decides which method to report."))
 }
-# a second test on the same data, to show whether the conclusion depends on the method
-dual_ui <- function(other, other_p, other_sig, main, main_p, main_sig) {
-  if (is.null(other_p) || !length(other_p) || is.na(other_p) || !length(main_p) || is.na(main_p)) return(NULL)
-  p(class = "small text-muted", icon("scale-balanced"), " ",
-    sprintf("Check with the %s: p %s, %s the %s (p %s).", other, .star_fmt_p(other_p),
-            if (isTRUE(other_sig) == isTRUE(main_sig)) "the same conclusion as" else "a different conclusion from", main, .star_fmt_p(main_p)))
-}
 # settings changed after the last run: the results on the screen no longer match the controls
 # outputs that show results; greyed out and made inert (no clicks, copying or downloading) while the results are stale
 stale_dim <- function(tag) tagAppendAttributes(tag, class = "stale-dim")

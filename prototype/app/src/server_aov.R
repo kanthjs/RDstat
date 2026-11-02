@@ -202,8 +202,6 @@
   observeEvent(input$rec_stay, rec_kept(TRUE))
   observeEvent(input$rec_switch, { rc <- aov_rec(); if (!is.null(rc$switch_to)) updateRadioButtons(session, "aov_method", selected = rc$switch_to) })
   method_names <- c(anova = "ANOVA", welch = "Welch's ANOVA", rank = "rank-based test")
-  # the main effect's F test of the standard ANOVA (one factor), for the comparison lines
-  anova_p <- function(r) r$effects$P[r$effects$Effect == r$factors[1]]
   np_display <- function(np) {
     m <- np$means
     out <- data.frame(m$Treatment, fmt_n(m$Median), formatC(m$N, format = "d"), fmt_n(m$Rank), stringsAsFactors = FALSE)
@@ -230,11 +228,10 @@
   welch_results_ui <- function(r) {
     w <- welch_try()
     if (inherits(w, "star_error")) return(error_box(paste("Welch's ANOVA could not be run:", w$message)))
-    m <- w$means; top <- m[which.max(m$Mean), ]; np <- np_res()
+    m <- w$means; top <- m[which.max(m$Mean), ]
     tagList(
       notes_ui(r$data_notes),
       div(class = if (w$significant) "alert alert-success" else "alert alert-info", w$summary),
-      if (!is.null(np)) dual_ui(paste(np$name, "test"), np$p, np$significant, "Welch's ANOVA", w$p, w$significant),
       key_stats(
         stat("Test", "Welch's ANOVA", "no equal-variance assumption"),
         stat("F", sprintf("%.2f", w$statistic), sprintf("df = %d and %.2f", w$df1, w$df2)),
@@ -258,7 +255,6 @@
     tagList(
       notes_ui(r$data_notes),
       div(class = if (np$significant) "alert alert-success" else "alert alert-info", np$summary),
-      dual_ui("standard ANOVA", anova_p(r), isTRUE(r$significant), paste(np$name, "test"), np$p, np$significant),
       if (isFALSE(r$diagnostics$homogeneity$ok)) p(class = "small text-muted", icon("circle-info"),
         " The spread differs among the treatments, so the test compares mean ranks (which treatments tend to give larger values) rather than medians alone."),
       key_stats(
@@ -309,7 +305,7 @@
     advice <- advice_ui(aov_rec(), aov_mode(), "rec_switch", "rec_stay", rec_kept(), method_names[[aov_mode()]])
     if (aov_rank()) return(tagList(advice, rank_results_ui(r)))
     if (aov_welch()) return(tagList(advice, welch_results_ui(r)))
-    tb <- tables(); np <- np_res()
+    tb <- tables()
     sig <- r$effects$Effect[r$effects$Significant %in% TRUE]
     # with a significant interaction the overall means are not compared, so the highest cell mean is shown instead
     top_stat <- if (isTRUE(r$interaction_significant) && !is.null(r$cells)) {
@@ -324,7 +320,6 @@
       advice,
       notes_ui(r$data_notes),
       div(class = if (r$significant || r$interaction_significant) "alert alert-success" else "alert alert-info", r$summary),
-      if (!is.null(np) && length(r$factors) == 1) dual_ui(paste(np$name, "test"), np$p, np$significant, "ANOVA", anova_p(r), isTRUE(r$significant)),
       key_stats(
         stat("Significant effects", sprintf("%d of %d", length(sig), nrow(r$effects)), if (length(sig)) paste(sig, collapse = ", ") else "none"),
         stat("Grand mean", fmt_n(r$grand_mean), r$original_response %||% r$response),
@@ -399,10 +394,7 @@
         o <- dg$outliers
         o[] <- lapply(o, function(v) if (is.numeric(v)) fmt_n(v, 3) else as.character(v))
         tagList(h4("Flagged observations"), p(class = "text-muted", "Row = row number in your data. |Studentized residual| > 3 = outlier, 2 to 3 = suspect."), html_table(o))
-      },
-      if (aov_mode() == "anova" && !is.null(np <- np_res())) result_card(paste("Rank-based alternative:", np$name, "test"), np_ui(np),
-        p(class = "text-muted small mb-0", "To report this test instead of the ANOVA, set Analysis to rank-based under Experimental design and run again."),
-        copy = "cp_np", copy_label = "Copy table"))
+      })
   })
   observeEvent(input$cp_np, session$sendCustomMessage("copy_text", list(what = "Rank-based test", text = paste(np_res()$summary, tsv(np_display(np_res())), sep = "\n"))))
   gg_diag <- function(dg, p) { st <- plot_style(p); star_ggplot_diagnostics(dg, st$base_size - 1, st$theme, st$legend) }
@@ -529,7 +521,6 @@
       if (!is.null(tb$cells)) c(w_p(paste("Cell means:", paste(r$factors, collapse = " x "))), word_table(tb$cells)),
       unlist(lapply(names(tb$simple), function(nm) c(w_p(nm), word_table(tb$simple[[nm]])))),
       if (!is.null(dg)) c(w_h2("Assumption checks"), paste0("<ul>", paste0("<li>", htmltools::htmlEscape(dg$messages), "</li>", collapse = ""), "</ul>")),
-      if (!is.null(np)) c(w_h2(paste("Rank-based alternative:", np$name)), w_p(np$summary), word_table(np_display(np))),
       w_h2("APA-style report"), vapply(r$apa, w_p, ""),
       w_h2("Methods and references"), w_p(methods_sentence(gg_version())), paste0("<ul>", paste0("<li>", htmltools::htmlEscape(package_refs()), "</li>", collapse = ""), "</ul>"))
     word_doc(file, paste(app_name, "- analysis of variance:", r$original_response %||% r$response), blocks, png)

@@ -80,7 +80,6 @@
       notes_ui(r$data_notes),
       tt_advice(),
       div(class = if (sig) "alert alert-success" else "alert alert-info", r$nonparametric_summary),
-      dual_ui("t-test", r$p, r$significant, "Wilcoxon test", w$P, sig),
       key_stats(
         stat("p value", fmt_p(w$P), if (sig) paste("significant at", format(r$alpha)) else paste("not significant at", format(r$alpha))),
         stat(if (r$type == "independent") "Hodges-Lehmann shift" else "Hodges-Lehmann estimate", fmt_n(w$Estimate, k),
@@ -100,14 +99,13 @@
   output$tt_results_ui <- renderUI({
     r <- tt_ok(); tb <- tt_tables()
     if (tt_rank()) return(tt_rank_ui(r, tb))
-    tr <- r$test[r$chosen, ]; k <- tt_digits(r); w <- r$nonparametric
+    tr <- r$test[r$chosen, ]; k <- tt_digits(r)
     nrm <- r$normality; bad_norm <- nrm$Data[!is.na(nrm$P) & nrm$P < r$alpha]
     small <- min(nrm$N) < 30
     tagList(
       notes_ui(r$data_notes),
       tt_advice(),
       div(class = if (r$significant) "alert alert-success" else "alert alert-info", r$summary),
-      dual_ui("Wilcoxon test", w$P, !is.na(w$P) && w$P < r$alpha, "t-test", r$p, r$significant),
       key_stats(
         stat("p value", fmt_p(r$p), if (r$significant) paste("significant at", format(r$alpha)) else paste("not significant at", format(r$alpha))),
         stat(switch(r$type, independent = "Difference in means", paired = "Mean difference", one = "Mean - test value"), fmt_n(tr$Difference, k),
@@ -129,12 +127,6 @@
           if (length(bad_norm) && small) "The data depart from a normal distribution and the sample is small, so the t-test may be unreliable; check the plot for outliers, or choose the Wilcoxon test under Kind of comparison."
           else if (length(bad_norm)) "The data depart somewhat from a normal distribution, but with 30 or more observations per group the t-test is usually still reliable."
           else "The normality tests are only a guide: with few observations they have little power, so also look at the plot.")),
-      result_card("Rank-based alternative (nonparametric)", html_table(tb$nonpar),
-        div(class = paste("small mb-0", if (length(bad_norm) && small) "alert alert-warning" else "text-muted"),
-            "Does not assume a normal distribution. ", if (length(bad_norm) && small) strong("Consider reporting this test, because the data are not normal and the sample is small: choose Wilcoxon under Kind of comparison. "),
-            "Estimate = Hodges-Lehmann ", if (r$type == "independent") "shift between the groups" else "median difference", "; ",
-            "with tied values (or zero differences) the p value and the interval use a normal approximation."),
-        copy = "cp_tt_np", copy_label = "Copy table"),
       result_card("APA-style report", p(r$apa), copy = "cp_tt_apa"),
       result_card("R code to repeat this analysis", tags$pre(class = "small mb-0", style = "white-space: pre-wrap;", tt_script()), copy = "cp_tt_script", copy_label = "Copy code"))
   })
@@ -156,14 +148,14 @@
       if (tt_rank()) c(w_h2(r$nonparametric$Method), word_table(tb$nonpar)) else c(w_h2("t-test"), word_table(tb$test)),
       w_h2("Assumption checks"), word_table(tb$normal),
       if (!is.null(r$variance)) w_p(sprintf("Equality of variances, F test: F(%d, %d) = %.2f, p %s.", r$variance$DF1, r$variance$DF2, r$variance$F, .star_fmt_p(r$variance$P))),
-      if (!tt_rank()) c(w_h2("Rank-based alternative"), word_table(tb$nonpar)),
       w_h2("APA-style report"), w_p(if (tt_rank()) r$nonparametric_apa else r$apa),
       w_h2("Methods and references"), w_p(methods_sentence(gg_version())), paste0("<ul>", paste0("<li>", htmltools::htmlEscape(package_refs()), "</li>", collapse = ""), "</ul>"))
     word_doc(file, paste(app_name, "-", if (tt_rank()) r$nonparametric$Method else r$method_name), blocks, png)
   })
   output$dl_tt_xlsx <- downloadHandler("rdstat_ttest.xlsx", function(file) {
     r <- tt_ok()
-    sheets <- list(Descriptives = r$groups, `t-test` = r$test, Wilcoxon = r$nonparametric, Normality = r$normality)
+    # only the test chosen, as on the screen
+    sheets <- c(list(Descriptives = r$groups), if (tt_rank()) list(Wilcoxon = r$nonparametric) else list(`t-test` = r$test), list(Normality = r$normality))
     if (!is.null(r$variance)) sheets$Variances <- r$variance
     vars <- switch(r$type, independent = sprintf("%s by %s (%s vs %s)", r$response, r$group, r$labels[1], r$labels[2]),
                    paired = paste(r$x, "-", r$y), one = sprintf("%s vs %s", r$response, format(r$mu)))

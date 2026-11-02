@@ -51,13 +51,13 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   session$setInputs(transform = "log"); run(pw = "duncan"); aov_script_check("CRD, log-transformed response, Duncan")
   session$setInputs(transform = "none"); run(pw = "HSD")
   check(!grepl("assumptions are not met", html(output$results_ui)) && !grepl("ข้อตกลงเบื้องต้น", html(output$results_ui)), "Results tab: no verdict on the assumptions")
-  check(round(np_res()$statistic, 2) == 20.85 && np_res()$name == "Kruskal-Wallis" && grepl("Rank-based alternative", html(output$diag_ui)), "CRD 1 factor: Kruskal-Wallis chi-square = 20.85 (kruskal.test)")
+  check(round(np_res()$statistic, 2) == 20.85 && np_res()$name == "Kruskal-Wallis" && !grepl("Kruskal", html(output$diag_ui)) && !grepl("Kruskal", html(output$results_ui)), "CRD 1 factor: Kruskal-Wallis computed but not shown beside the ANOVA, chi-square = 20.85 (kruskal.test)")
   # rank-based analysis chosen by the user: it replaces the ANOVA on the results screen and in the downloads
   run(aov_method = "rank")
   ui <- html(output$results_ui)
   check(aov_rank() && grepl("Kruskal-Wallis test", ui) && !grepl("Analysis of variance", ui) && !grepl("Means (publication layout)", ui, fixed = TRUE) && grepl("χ²(6, N = 28) = 20.85", ui, fixed = TRUE),
         "Rank method: Kruskal-Wallis replaces the ANOVA on the results screen")
-  check(!grepl("Rank-based alternative", html(output$diag_ui)), "Rank method: not repeated on the assumptions tab")
+  check(!grepl("Rank-based alternative", html(output$diag_ui)), "Rank method: no rank card on the assumptions tab")
   e <- run_script(np_script()); check(isTRUE(all.equal(e$np$statistics$p.chisq, np_try()$p)) && identical(trimws(e$np$groups[np_try()$means$Treatment, "groups"]), np_try()$means$Group),
                                       "Rank method: Kruskal-Wallis script reproduces the app (p and letters)")
   session$setInputs(aov_fmt = "png")
@@ -71,8 +71,8 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
         grepl("transformation is not used", html(output$results_ui)), "Rank method: medians in the original unit when a transformation is set")
   session$setInputs(transform = "none"); run(aov_method = "anova")
   check(!aov_rank() && grepl("Analysis of variance", html(output$results_ui)), "Rank method: back to ANOVA")
-  check(!is.null(aov_rec()) && grepl("Data check", html(output$results_ui)) && grepl("Check with the Kruskal-Wallis test", html(output$results_ui)),
-        "Guidance: data check and the rank-based comparison line under the ANOVA")
+  check(!is.null(aov_rec()) && grepl("Data check", html(output$results_ui)) && !grepl("Check with", html(output$results_ui)),
+        "Guidance: data check under the ANOVA, with no result of another method beside it")
   # Welch's ANOVA with Games-Howell letters; switching method needs no new run
   session$setInputs(aov_method = "welch")
   w <- welch_try(); ref <- oneway.test(GrainYield ~ Insecticide, crd)
@@ -276,7 +276,7 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   r <- tt_ok(); check(round(r$test$t, 3) == -4.062 && r$test$DF == 9 && round(r$p, 4) == 0.0028, "t-test: paired t = -4.062, df = 9, p = 0.0028 (Student's sleep data)")
   check(identical(tt_tables()$desc$Measurement, c("Drug1", "Drug2", "Drug1 - Drug2")), "t-test: paired descriptives include the differences")
   e <- run_script(tt_script()); check(isTRUE(all.equal(unname(e$tt$statistic), r$test$t)) && isTRUE(all.equal(e$tt$p.value, r$p)) && isTRUE(all.equal(e$wilcox$p.value, r$nonparametric$P)), "t-test script: paired reproduces the app")
-  check(isTRUE(all.equal(r$nonparametric$P, suppressWarnings(wilcox.test(read.csv("example_sleep.csv")$Drug1, read.csv("example_sleep.csv")$Drug2, paired = TRUE)$p.value))) && grepl("Rank-based", html(output$tt_results_ui)), "t-test: Wilcoxon signed-rank alternative (wilcox.test)")
+  check(isTRUE(all.equal(r$nonparametric$P, suppressWarnings(wilcox.test(read.csv("example_sleep.csv")$Drug1, read.csv("example_sleep.csv")$Drug2, paired = TRUE)$p.value))) && !grepl("Hodges-Lehmann", html(output$tt_results_ui)), "t-test: Wilcoxon signed-rank computed (wilcox.test) but not shown beside the t-test")
   check(file.size(output$dl_tt_plot) > 3000, "t-test: paired plot png")
   session$setInputs(tt_example = "rice", tt_type = "one", tt_resp = "Yield", tt_mu = 3, go_tt = 5)
   r <- tt_ok(); ref <- t.test(read.csv("example_rice.csv")$Yield, mu = 3)
@@ -291,7 +291,7 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(grepl("W = 575.5", tt_ok()$nonparametric_summary) && grepl("Mann-Whitney", html(output$tt_results_ui)), "Wilcoxon method: rank-sum test for two independent groups")
   session$setInputs(tt_method = "t", tt_example = "rice", tt_type = "one", tt_resp = "Yield", tt_mu = 3, go_tt = 8)
   check(!tt_rank() && grepl("Mean - test value", html(output$tt_results_ui)), "Wilcoxon method: back to the t-test")
-  check(grepl("Check with the Wilcoxon test", html(output$tt_results_ui)) && !is.null(tt_rec()), "Guidance: t-test screen has the data check and the Wilcoxon comparison line")
+  check(grepl("Data check|Observation", html(output$tt_results_ui)) && !grepl("Check with", html(output$tt_results_ui)) && !is.null(tt_rec()), "Guidance: t-test screen has the data check, with no Wilcoxon result beside it")
   rc <- star_recommend_tt(star_ttest(skew[skew$T != "c", ], "independent", response = "y", group = "T"))
   check(identical(rc$switch_to, "wilcox") && grepl("1.5 x IQR", rc$observed), "Guidance: skewed groups suggest Wilcoxon and point to values beyond 1.5 x IQR")
   e <- run_script(tt_script()); check(isTRUE(all.equal(unname(e$tt$statistic), r$test$t)) && isTRUE(all.equal(e$tt$p.value, r$p)) && isTRUE(all.equal(e$wilcox$p.value, r$nonparametric$P)), "t-test script: one sample reproduces the app")
@@ -307,7 +307,7 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   e <- new.env(); eval(parse(text = grep("shapiro_safe <-", tt_script(), value = TRUE, fixed = TRUE)[1]), e)
   check(is.null(e$shapiro_safe(c(1, 2))) && is.null(e$shapiro_safe(c(5, 5, 5))) && !is.null(e$shapiro_safe(c(1, 2, 4))), "Script: Shapiro-Wilk is skipped where the app skips it (fewer than 3 values, all equal)")
   check(file.size(output$dl_tt_plot) > 3000, "t-test: one-sample plot png")
-  x <- output$dl_tt_xlsx; check(identical(readxl::excel_sheets(x), c("Descriptives", "t-test", "Wilcoxon", "Normality", "Info")), "t-test: xlsx sheets")
+  x <- output$dl_tt_xlsx; check(identical(readxl::excel_sheets(x), c("Descriptives", "t-test", "Normality", "Info")), "t-test: xlsx sheets (only the test chosen)")
   check(grepl("สรุปผล", html(output$tt_results_ui)) && file.size(output$dl_tt_doc) > 10000, "t-test: Thai summary and Word report")
   session$setInputs(tt_type = "paired", tt_x = "Yield", tt_y = "Yield", go_tt = 6); check(!isTRUE(tryCatch(is.list(tt_res()), error = function(e) FALSE)) || inherits(tt_res(), "star_error"), "t-test: same column twice is refused")
   session$setInputs(cp_tt_desc = 1, cp_tt_test = 1, cp_tt_apa = 1, home_tt = 1)
