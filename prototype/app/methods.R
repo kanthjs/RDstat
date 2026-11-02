@@ -8,9 +8,9 @@ methods_sections <- tagList(
     "ใช้ ",
     code("t.test()"),
     " สองกลุ่มอิสระ: แสดงทั้ง t-test แบบรวมความแปรปรวน (pooled, Student, 1908) และแบบไม่สมมติว่าความแปรปรวนเท่ากันของ Welch (Welch, 1947) ซึ่งใช้องศาอิสระของ Satterthwaite (Satterthwaite, 1946) เหมือน STAR ต้นฉบับ ",
-    "ผู้ใช้เลือกได้ว่าจะสรุปผลจากแบบใด ค่าเริ่มต้นคือ Welch ความเท่ากันของความแปรปรวนทดสอบด้วย F test (",
+    "ผู้ใช้เลือกได้ว่าจะสรุปผลจากแบบใด ค่าเริ่มต้นคือ pooled และแอปแนะนำ Welch เมื่อความแปรปรวนต่างกัน (ดูหัวข้อค่าเริ่มต้น) ความเท่ากันของความแปรปรวนทดสอบด้วย F test (",
     code("var.test()"),
-    ") ",
+    ") แสดงเป็นข้อมูลประกอบ ไม่ใช้เลือกวิธี ",
     "แบบจับคู่ (paired): ทดสอบค่าเฉลี่ยของผลต่าง (ค่าแรก - ค่าที่สอง) ของแต่ละหน่วย ใช้เฉพาะแถวที่มีค่าทั้งสอง แบบกลุ่มเดียว (one sample): เปรียบเทียบค่าเฉลี่ยกับค่าที่กำหนด ",
     "ช่วงความเชื่อมั่นของผลต่างอยู่ที่ระดับ 1 - alpha ขนาดอิทธิพล Cohen's d (Cohen, 1988) = ผลต่างของค่าเฉลี่ย / SD รวม (สองกลุ่มอิสระ), ค่าเฉลี่ยของผลต่าง / SD ของผลต่าง (dz, แบบจับคู่) หรือ (ค่าเฉลี่ย - ค่าที่กำหนด) / SD (กลุ่มเดียว) ",
     "คำว่า เล็ก ปานกลาง และใหญ่ ใช้เกณฑ์ 0.2, 0.5 และ 0.8 ของ Cohen การแจกแจงปกติตรวจด้วย Shapiro-Wilk test ของแต่ละกลุ่ม หรือของผลต่างในแบบจับคู่"
@@ -120,13 +120,92 @@ methods_sections <- tagList(
     "การทดสอบเหล่านี้เป็นเพียงข้อแนะนำ ไม่ใช่ข้อพิสูจน์ เมื่อตัวอย่างน้อยจะมีอำนาจการทดสอบต่ำ และเมื่อตัวอย่างมากจะชี้ความเบี่ยงเบนเล็กน้อยที่ไม่มีความสำคัญในทางปฏิบัติ"
   ),
 
+  h4("คำแนะนำการเลือกวิธีวิเคราะห์"),
+  p(
+    "ผลการตรวจข้อสมมติแต่ละข้อ (การแจกแจงปกติ ความแปรปรวน ค่าผิดปกติ) แสดงเป็นไฟ 3 สี ทั้งในกล่องคำแนะนำและในแท็บ Outliers & assumptions: ",
+    strong("เขียว"),
+    " ผ่าน ใช้วิธีพาราเมตริกได้เต็มที่; ",
+    strong("เหลือง"),
+    " เบี่ยงเบนเล็กน้อยแต่สถิติทนทานได้ เช่น ค่าส่วนเหลือไม่ปกติแต่มีข้อมูลตั้งแต่ 30 ค่าต่อกลุ่มและรูปร่างไม่เบ้รุนแรง, ",
+    "ความแปรปรวนต่างกันไม่เกิน 4 เท่าเมื่อจำนวนข้อมูลแต่ละกลุ่มเท่ากัน, มีค่าน่าสงสัย (2 < |studentized residual| <= 3 หรือนอก 1.5 x IQR) หรือมีข้อมูลน้อยกว่า 15 ค่าต่อกลุ่มซึ่งการทดสอบมีอำนาจต่ำ ใช้วิธีพาราเมตริกต่อได้; ",
+    strong("แดง"),
+    " ละเมิดชัดเจน (ไม่ปกติและไม่เข้าเกณฑ์ทนทาน ความแปรปรวนต่างกันมาก หรือมีค่าผิดปกติ |studentized residual| > 3 หรือนอก 3 x IQR) แนะนำให้สลับวิธี ",
+    "เมื่อขึ้นไฟแดง แอปเสนอทางเลือกตามสิ่งที่ผู้ใช้ต้องการรายงาน: เปรียบเทียบอันดับหรือมัธยฐาน (มาตรฐานทั่วไป) ใช้ Kruskal-Wallis, Friedman หรือ Wilcoxon; ",
+    "เปรียบเทียบค่าเฉลี่ยโดยไม่พึ่งโค้งปกติ ใช้ค่าเฉลี่ยตัดปลาย 20% พร้อมช่วงความเชื่อมั่นแบบ bootstrap (CRD ปัจจัยเดียวและสองกลุ่ม) ",
+    "ถ้ามีค่าผิดปกติ แนะนำให้ตรวจค่าเหล่านั้นก่อนว่าเกิดจากการบันทึกหรือการวัดผิดหรือไม่"
+  ),
+  p(
+    "หลังวิเคราะห์ แอปตรวจข้อมูลและแนะนำวิธีที่เหมาะสม พร้อมปุ่มสลับวิธี คำแนะนำเป็นเพียงข้อเสนอ ผู้วิเคราะห์เป็นผู้ตัดสินใจ ",
+    "ลำดับการตรวจ (CRD และ RCBD ปัจจัยเดียว และการเปรียบเทียบสองกลุ่ม): ",
+    "(1) การแจกแจงปกติของค่าส่วนเหลือของโมเดล (สองกลุ่ม: ของแต่ละกลุ่ม หรือของผลต่างเมื่อจับคู่) ไม่ใช่ของข้อมูลรวมทุกกลุ่ม ",
+    "ถ้าไม่ผ่านแต่มีข้อมูลตั้งแต่ 30 ค่าต่อกลุ่ม และ |skewness| <= 1 และ |excess kurtosis| <= 2 ถือว่าวิธีพาราเมตริกยังทนทานได้ (central limit theorem) เกณฑ์นี้เป็นแนวทางตามธรรมเนียม ไม่ใช่เกณฑ์ตายตัว ",
+    "ถ้ามีน้อยกว่า 15 ค่าต่อกลุ่ม แอปเตือนว่า Shapiro-Wilk test มีอำนาจการทดสอบต่ำ ",
+    "(2) ถ้าไม่ปกติ แอปดูก่อนว่าเกิดจากค่าผิดปกติหรือไม่ (ANOVA: ตัดค่าที่ |studentized residual| > 3 แล้วทดสอบใหม่; สองกลุ่ม: ค่าที่อยู่นอก 1.5 x IQR) และแนะนำให้ตรวจค่าเหล่านั้นก่อน ",
+    "ถ้าข้อมูลเป็นบวกและเบ้ขวา แนะนำการแปลงข้อมูลด้วย แล้วจึงแนะนำการทดสอบแบบ rank ",
+    "(3) ความแปรปรวน: CRD ปัจจัยเดียวและสองกลุ่มแนะนำ Welch's test เมื่อความแปรปรวนต่างกัน (Levene แบบ Brown-Forsythe มีนัยสำคัญ) หรือจำนวนข้อมูลแต่ละกลุ่มไม่เท่ากันและความแปรปรวนต่างกันตั้งแต่ 2 เท่าขึ้นไป (ดูหัวข้อถัดไป) ",
+    "RCBD ซึ่งไม่มี Welch แบบมีบล็อก ถ้าความแปรปรวนไม่เท่ากันแนะนำการแปลงข้อมูลหรือ Friedman test"
+  ),
+  p(
+    "แอปแสดงผลเฉพาะวิธีที่เลือก ไม่แสดงผลของวิธีอื่นคู่กัน เพื่อไม่ให้เลือกวิธีจากค่า p ที่ได้ ",
+    "การเลือกวิธีจากผลการทดสอบข้อสมมติบนข้อมูลชุดเดียวกันทำให้ค่า p คลาดเคลื่อนได้บ้าง จึงควรตัดสินใจจากลักษณะของข้อมูลและการออกแบบการทดลองเป็นหลัก"
+  ),
+
+  h4("ค่าเริ่มต้น: ANOVA แบบดั้งเดิม แล้วแนะนำ Welch's test เมื่อจำเป็น"),
+  p(
+    "แอปใช้ ANOVA แบบดั้งเดิม (และ pooled t-test สำหรับสองกลุ่ม) เป็นค่าเริ่มต้น เพราะเป็นวิธีที่ผู้วิเคราะห์ส่วนใหญ่คุ้นเคยและเป็นรูปแบบที่ใช้รายงานทั่วไป ",
+    "หลังรันแล้วหน้าผลลัพธ์ตรวจข้อสมมติให้อัตโนมัติ และถ้าความแปรปรวนต่างกันก็แนะนำ Welch's test พร้อมปุ่มสลับ ไม่บังคับ ",
+    "เหตุผลที่แนะนำ Welch: (1) เมื่อความแปรปรวนเท่ากันจริง Welch's test ให้ผลแทบไม่ต่างจากวิธีดั้งเดิม แต่เมื่อไม่เท่ากัน โดยเฉพาะเมื่อจำนวนข้อมูลแต่ละกลุ่มไม่เท่ากัน วิธีดั้งเดิมให้ค่า p ผิดได้มาก (Delacre et al., 2017; Delacre et al., 2019) ",
+    "(2) R ใช้ ",
+    code("var.equal = FALSE"),
+    " เป็นค่าเริ่มต้นของ ",
+    code("t.test()"),
+    " และ ",
+    code("oneway.test()"),
+    " ",
+    "(3) ถ้าเลือกวิธีด้วยผลทดสอบความแปรปรวนก่อนแล้วจึงทดสอบค่าเฉลี่ย ความน่าจะเป็นของ Type I error ของการทดสอบที่ตามมาคลาดเคลื่อนได้ (Zimmerman, 2004) แอปจึงใช้ผล Levene เป็นเพียงคำแนะนำให้ผู้ใช้ตัดสินใจเองและไม่สลับวิธีให้อัตโนมัติ ",
+    "ตัวเลือกที่ไม่มีสำหรับแผนการทดลองที่เลือกจะเป็นสีเทาและกดไม่ได้: Welch's ANOVA และ trimmed means มีเฉพาะ CRD ปัจจัยเดียว (ไม่มีรูปแบบสำหรับบล็อก) rank-based test ต้องมีปัจจัยเดียวใน CRD หรือ RCBD ส่วนสองปัจจัย split plot และ combined analysis ใช้ ANOVA แบบดั้งเดิมเท่านั้น ",
+    "Welch's ANOVA ไม่มีตารางค่าเฉลี่ยแบบตีพิมพ์ที่ใช้ SE(m), SED, LSD และ CV จากความแปรปรวนร่วม เพราะไม่ได้สมมติว่าความแปรปรวนเท่ากัน ถ้าต้องการตารางแบบนั้นให้เลือก ANOVA แบบดั้งเดิม"
+  ),
+
+  h4("ค่าเฉลี่ยตัดปลาย (trimmed means) และ bootstrap"),
+  p(
+    "ตัดค่าต่ำสุดและสูงสุดของแต่ละกลุ่มออกข้างละ 20% แล้วเปรียบเทียบค่าเฉลี่ยของส่วนที่เหลือ ข้อมูลเบ้หรือมีค่าสุดโต่งไม่กี่ค่าจึงไม่ครอบงำผล ",
+    "ใช้ความแปรปรวนแบบ Winsorized และไม่สมมติว่าความแปรปรวนเท่ากัน (Wilcox, 2017) ",
+    "สองกลุ่มอิสระใช้ Yuen's test (Yuen, 1974) แบบจับคู่ทดสอบค่าเฉลี่ยตัดปลายของผลต่าง กลุ่มเดียวทดสอบค่าเฉลี่ยตัดปลายเทียบกับค่าที่กำหนด ",
+    "CRD ปัจจัยเดียวใช้ heteroscedastic one-way ANOVA บนค่าเฉลี่ยตัดปลาย (t1way ของ Wilcox) และเปรียบเทียบรายคู่ด้วย Yuen's test ปรับค่า p แบบ Holm เพื่อให้อักษร ",
+    "ช่วงความเชื่อมั่นแบบ percentile bootstrap (Efron & Tibshirani, 1993) จากการสุ่มซ้ำ 2,000 ครั้งด้วย seed คงที่ ข้อมูลชุดเดิมจึงได้ช่วงเดิมทุกครั้ง ",
+    "การ Winsorize ใช้ order statistics ตามนิยามของ Wilcox (เหมือนแพ็กเกจ WRS2) ซึ่งต่างจากบางโปรแกรมที่ใช้ quantile แบบประมาณค่าเล็กน้อย ",
+    "เมื่อไม่ตัดปลาย (0%) วิธีเหล่านี้คือ Welch's t-test และ Welch's ANOVA ",
+    "เมื่อมีข้อมูลน้อยกว่า 10 ค่าต่อกลุ่ม การตัดปลาย 20% แทบไม่ตัดค่าใดออกและช่วง bootstrap หยาบ แอปจะเตือน RCBD ไม่มีวิธีนี้"
+  ),
+
+  h4("Welch's ANOVA"),
+  p(
+    "ใช้ ",
+    code("oneway.test(var.equal = FALSE)"),
+    " (Welch, 1951) สำหรับ CRD ปัจจัยเดียว ไม่สมมติว่าความแปรปรวนเท่ากัน ",
+    "เปรียบเทียบค่าเฉลี่ยรายคู่ด้วย Games-Howell test (Games & Howell, 1976) ซึ่งใช้ความแปรปรวนของแต่ละคู่ องศาอิสระแบบ Welch และการแจกแจง studentized range ",
+    "อักษรแสดงเฉพาะเมื่อ Welch's test มีนัยสำคัญ ใช้ค่าที่วิเคราะห์ (แปลงแล้วถ้าเลือกการแปลงข้อมูล)"
+  ),
+
   h4("การทดสอบแบบไม่อิงพารามิเตอร์ (nonparametric)"),
   p(
-    "ใช้เมื่อข้อมูลไม่เป็นไปตามข้อสมมติ (การแจกแจงปกติ ความแปรปรวนเท่ากัน) ANOVA หนึ่งปัจจัย: CRD ใช้ Kruskal-Wallis test (Kruskal & Wallis, 1952) ",
-    "และ RCBD ใช้ Friedman test (Friedman, 1937) คำนวณด้วยแพ็กเกจ agricolae ซึ่งเปรียบเทียบอันดับ (rank) แบบ Fisher's LSD (Conover, 1999) อักษรแสดงเฉพาะเมื่อการทดสอบรวมมีนัยสำคัญ ",
-    "t-test: สองกลุ่มอิสระใช้ Wilcoxon rank-sum (Mann-Whitney) test (Wilcoxon, 1945; Mann & Whitney, 1947) แบบจับคู่และกลุ่มเดียวใช้ Wilcoxon signed-rank test ด้วย ",
+    "การทดสอบเหล่านี้เปรียบเทียบอันดับ (rank) ของข้อมูลแทนค่าเฉลี่ย จึงไม่ต้องมีข้อสมมติเรื่องการแจกแจงปกติและความแปรปรวนเท่ากัน ไม่ใช่การวิเคราะห์ความแปรปรวน ",
+    "ผู้ใช้เลือกเองว่าจะรายงานผลแบบใด: หน้า Compare treatments เลือกที่ Analysis และหน้า Two groups เลือกที่ Test เมื่อเลือกแบบ rank ผลหลัก อักษร รายงาน APA ไฟล์ Excel/Word และ R code จะมาจากการทดสอบนี้ ",
+    "เมื่อเลือกแบบพาราเมตริก แอปไม่แสดงผลของการทดสอบแบบ rank แต่จะแนะนำเมื่อข้อมูลไม่เป็นไปตามข้อสมมติ ควรเลือกวิธีก่อนดูผล ไม่ใช่เลือกวิธีที่ให้ค่า p ต่ำกว่า"
+  ),
+  p(
+    "เปรียบเทียบสิ่งทดลองหนึ่งปัจจัย: CRD ใช้ Kruskal-Wallis test (Kruskal & Wallis, 1952) และ RCBD ใช้ Friedman test (Friedman, 1937) ซึ่งจัดอันดับภายในแต่ละบล็อก ",
+    "คำนวณด้วยแพ็กเกจ agricolae ซึ่งเปรียบเทียบอันดับแบบ Fisher's LSD (Conover, 1999) เป็นค่าเริ่มต้น หลัง Kruskal-Wallis เลือก Dunn's test (Dunn, 1964) ที่ปรับค่า p แบบ Holm (Holm, 1979) หรือ Bonferroni ได้ ",
+    "อักษรแสดงเฉพาะเมื่อการทดสอบรวมมีนัยสำคัญ ถ้าการกระจายของแต่ละกลุ่มต่างกันมาก การทดสอบจะเปรียบเทียบอันดับเฉลี่ย (ค่าของกลุ่มใดมักสูงกว่า) มากกว่ามัธยฐาน ",
+    "ใช้ค่าเดิมของข้อมูล (ไม่แปลงข้อมูล เพราะอันดับไม่เปลี่ยน) ค่ามัธยฐานจึงอยู่ในหน่วยเดิม ",
+    "ไม่มีการทดสอบแบบ rank สำหรับสองปัจจัย split plot และ combined analysis และ Friedman test ต้องมีข้อมูลของทุกสิ่งทดลองครบหนึ่งค่าในทุกบล็อก ถ้าไม่ครบแอปจะแจ้งสาเหตุ"
+  ),
+  p(
+    "สองกลุ่ม: สองกลุ่มอิสระใช้ Wilcoxon rank-sum (Mann-Whitney) test (Wilcoxon, 1945; Mann & Whitney, 1947) แบบจับคู่และกลุ่มเดียวใช้ Wilcoxon signed-rank test ด้วย ",
     code("wilcox.test()"),
-    " ค่าประมาณและช่วงความเชื่อมั่นเป็นของ Hodges-Lehmann (Hodges & Lehmann, 1963) เมื่อมีค่าซ้ำกันจะใช้การประมาณด้วยการแจกแจงปกติ"
+    " ค่าประมาณและช่วงความเชื่อมั่นเป็นของ Hodges-Lehmann (Hodges & Lehmann, 1963) ค่า p เป็นค่าแม่นตรง (exact) เมื่อข้อมูลน้อยกว่า 50 ค่าและไม่มีค่าซ้ำ ",
+    "ถ้ามีค่าซ้ำ ผลต่างเป็นศูนย์ (แบบจับคู่) หรือมีข้อมูลตั้งแต่ 50 ค่า จะใช้การประมาณด้วยการแจกแจงปกติพร้อม continuity correction และอาจคำนวณช่วงความเชื่อมั่นไม่ได้"
   ),
 
   h4("สหสัมพันธ์ (correlation)"),
@@ -172,10 +251,15 @@ method_refs <- c(
   "Cohen J (1988). Statistical Power Analysis for the Behavioral Sciences, 2nd edition. Lawrence Erlbaum, Hillsdale, NJ.",
   "Conover WJ (1999). Practical Nonparametric Statistics, 3rd edition. John Wiley & Sons, New York.",
   "Cook RD (1977). Detection of influential observation in linear regression. Technometrics, 19(1), 15-18. https://doi.org/10.1080/00401706.1977.10489493",
+  "Delacre M, Lakens D, Leys C (2017). Why psychologists should by default use Welch's t-test instead of Student's t-test. International Review of Social Psychology, 30(1), 92-101. https://doi.org/10.5334/irsp.82",
+  "Delacre M, Leys C, Mora YL, Lakens D (2019). Taking parametric assumptions seriously: arguments for the use of Welch's F-test instead of the classical F-test in one-way ANOVA. International Review of Social Psychology, 32(1), 13. https://doi.org/10.5334/irsp.198",
   "Duncan DB (1955). Multiple range and multiple F tests. Biometrics, 11(1), 1-42. https://doi.org/10.2307/3001478",
+  "Dunn OJ (1964). Multiple comparisons using rank sums. Technometrics, 6(3), 241-252. https://doi.org/10.1080/00401706.1964.10490181",
+  "Efron B, Tibshirani RJ (1993). An Introduction to the Bootstrap. Chapman & Hall, New York.",
   "Fisher RA (1921). On the 'probable error' of a coefficient of correlation deduced from a small sample. Metron, 1(4), 3-32.",
   "Fisher RA (1935). The Design of Experiments. Oliver and Boyd, Edinburgh.",
   "Friedman M (1937). The use of ranks to avoid the assumption of normality implicit in the analysis of variance. Journal of the American Statistical Association, 32(200), 675-701. https://doi.org/10.1080/01621459.1937.10503522",
+  "Games PA, Howell JF (1976). Pairwise multiple comparison procedures with unequal n's and/or variances: a Monte Carlo study. Journal of Educational Statistics, 1(2), 113-125. https://doi.org/10.3102/10769986001002113",
   "Gomez KA, Gomez AA (1984). Statistical Procedures for Agricultural Research, 2nd edition. Wiley, New York.",
   "Hodges JL, Lehmann EL (1963). Estimates of location based on rank tests. The Annals of Mathematical Statistics, 34(2), 598-611. https://doi.org/10.1214/aoms/1177704172",
   "Hollander M, Wolfe DA (1973). Nonparametric Statistical Methods. Wiley, New York.",
@@ -193,6 +277,10 @@ method_refs <- c(
   "Student (1908). The probable error of a mean. Biometrika, 6(1), 1-25. https://doi.org/10.2307/2331554",
   "Tukey JW (1949). Comparing individual means in the analysis of variance. Biometrics, 5(2), 99-114. https://doi.org/10.2307/3001913",
   "Welch BL (1947). The generalization of 'Student's' problem when several different population variances are involved. Biometrika, 34(1-2), 28-35. https://doi.org/10.2307/2332510",
+  "Welch BL (1951). On the comparison of several mean values: an alternative approach. Biometrika, 38(3-4), 330-336. https://doi.org/10.2307/2332579",
+  "Wilcox RR (2017). Introduction to Robust Estimation and Hypothesis Testing, 4th ed. Academic Press, London.",
   "Wilcoxon F (1945). Individual comparisons by ranking methods. Biometrics Bulletin, 1(6), 80-83. https://doi.org/10.2307/3001968",
-  "Wilkinson GN, Rogers CE (1973). Symbolic description of factorial models for analysis of variance. Applied Statistics, 22(3), 392-399. https://doi.org/10.2307/2346786"
+  "Wilkinson GN, Rogers CE (1973). Symbolic description of factorial models for analysis of variance. Applied Statistics, 22(3), 392-399. https://doi.org/10.2307/2346786",
+  "Yuen KK (1974). The two-sample trimmed t for unequal population variances. Biometrika, 61(1), 165-170. https://doi.org/10.1093/biomet/61.1.165",
+  "Zimmerman DW (2004). A note on preliminary tests of equality of variances. British Journal of Mathematical and Statistical Psychology, 57(1), 173-181. https://doi.org/10.1348/000711004849222"
 )

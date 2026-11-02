@@ -13,7 +13,7 @@ app_version <- local({
   c(version = get("version"), commit = get("commit"), built = get("built"))
 })
 version_label <- function() { v <- app_version; if (anyNA(v)) "development build" else sprintf("v%s (%s, built %s)", v[["version"]], v[["commit"]], v[["built"]]) }
-methods_sentence <- function(gg) sprintf("Data were analysed with %s (web app %s) running R %s.%s in the browser, using routines recovered from IRRI STAR 2.0.2. Analysis of variance used aov(), with environments combined as in STAR and their error variances compared with Bartlett's test; means were compared with the agricolae package (LSD, Tukey HSD, Duncan), and SE(m), SED and LSD were computed from the error mean square of each factor; rank-based tests used kruskal() and friedman() (agricolae); t tests used t.test() and var.test(), with wilcox.test() as the rank-based alternative; correlations used cor.test(); regression used lm(); residual normality used the Shapiro-Wilk test and the Lilliefors test (nortest); constant variance used the Breusch-Pagan test (lmtest); graphics used ggplot2 %s. See the references below.", app_name, version_label(), R.version$major, R.version$minor, gg)
+methods_sentence <- function(gg) sprintf("Data were analysed with %s (web app %s) running R %s.%s in the browser, using routines recovered from IRRI STAR 2.0.2. Analysis of variance used aov(), with environments combined as in STAR and their error variances compared with Bartlett's test; means were compared with the agricolae package (LSD, Tukey HSD, Duncan), and SE(m), SED and LSD were computed from the error mean square of each factor; Welch's ANOVA used oneway.test() with Games-Howell comparisons; trimmed means (20%%) used Yuen's test and Wilcox's heteroscedastic ANOVA with percentile bootstrap intervals; rank-based tests used kruskal() and friedman() (agricolae), with Dunn's test as an option after Kruskal-Wallis; t tests used t.test() and var.test(), with wilcox.test() as the rank-based alternative; correlations used cor.test(); regression used lm(); residual normality used the Shapiro-Wilk test and the Lilliefors test (nortest); constant variance used the Breusch-Pagan test (lmtest); graphics used ggplot2 %s. See the references below.", app_name, version_label(), R.version$major, R.version$minor, gg)
 # packages whose results or tools appear in the output; their references are built from each package's own citation()
 cited_packages <- c("agricolae", "nortest", "lmtest", "ggplot2", "readxl", "writexl")
 package_refs <- function() {
@@ -161,51 +161,42 @@ data_preview_ui <- function(d, n = 10) {
           html_table(shown))
 }
 
-# clean executive cards summarizing residual diagnostics (normality, variance equality, outliers)
-diag_summary_cards <- function(dg) {
+# cards of the residual checks, each with its traffic light: green met, yellow a mild departure the analysis is
+# robust to, red a clear violation (see star_assumption_lights); without lights, passed is green and failed red
+diag_summary_cards <- function(dg, lights = NULL) {
   if (is.null(dg)) return(NULL)
-
-  norm_ok <- dg$normality$ok
-  norm_badge <- if (isTRUE(norm_ok)) span(class = "badge bg-success", sprintf("Passed (p = %s)", fmt_p(dg$normality$p)))
-                else if (isFALSE(norm_ok)) span(class = "badge bg-warning text-dark", sprintf("Departure (p = %s)", fmt_p(dg$normality$p)))
-                else span(class = "badge bg-secondary", "Not tested")
-  norm_desc <- if (isTRUE(norm_ok)) "No evidence that the residuals depart from a normal distribution"
-               else if (isFALSE(norm_ok)) "Residuals depart from normality (consider a transformation)"
-               else "Too few observations to test"
-
+  light_of <- function(check, ok) {
+    l <- if (!is.null(lights)) lights$Light[lights$Check == check] else character()
+    if (length(l) && !is.na(l)) l else if (isTRUE(ok)) "green" else if (isFALSE(ok)) "red" else NA_character_
+  }
+  badge <- function(l, txt) span(class = paste("badge", switch(l %||% "none", green = "bg-success", yellow = "bg-warning text-dark", red = "bg-danger", "bg-secondary")), txt)
+  nl <- light_of("normality", dg$normality$ok)
+  norm_badge <- if (is.na(nl)) badge(NA, "Not tested") else badge(nl, sprintf("%s (p = %s)", c(green = "Passed", yellow = "Mild, robust", red = "Departure")[[nl]], fmt_p(dg$normality$p)))
+  norm_desc <- if (is.na(nl)) "Too few observations to test" else c(
+    green = "No evidence that the residuals depart from a normal distribution",
+    yellow = "The residuals depart from normal, but with 30 or more per group and a moderate shape the analysis is robust",
+    red = "The residuals clearly depart from normality: see the recommendation on the Results tab")[[nl]]
   has_homo <- !is.null(dg$homogeneity)
-  homo_ok <- if (has_homo) dg$homogeneity$ok else NULL
-  homo_badge <- if (isTRUE(homo_ok)) span(class = "badge bg-success", sprintf("Equal (p = %s)", fmt_p(dg$homogeneity$p)))
-                else if (isFALSE(homo_ok)) span(class = "badge bg-warning text-dark", sprintf("Heterogeneous (p = %s)", fmt_p(dg$homogeneity$p)))
-                else span(class = "badge bg-secondary", "Not applicable")
-  homo_desc <- if (isTRUE(homo_ok)) "Variances are similar across treatment groups"
-               else if (isFALSE(homo_ok)) "Variances differ across groups (consider a transformation)"
-               else "Too few observations per treatment to test"
-
-  n_out <- dg$n_out %||% 0
-  n_sus <- dg$n_sus %||% 0
-  out_badge <- if (n_out == 0 && n_sus == 0) span(class = "badge bg-success", "None detected")
-               else if (n_out > 0) span(class = "badge bg-danger", sprintf("%d outlier(s)", n_out))
-               else span(class = "badge bg-warning text-dark", sprintf("%d suspect", n_sus))
-  out_desc <- if (n_out == 0 && n_sus == 0) "No studentized residuals exceed |3|" else "Observations with extreme studentized residuals"
-
+  vl <- if (has_homo) light_of("variance", dg$homogeneity$ok) else NA_character_
+  homo_badge <- if (is.na(vl)) badge(NA, if (has_homo) "Not tested" else "Not applicable")
+                else badge(vl, sprintf("%s (p = %s)", c(green = "Equal", yellow = "Moderately unequal", red = "Unequal")[[vl]], fmt_p(dg$homogeneity$p)))
+  homo_desc <- if (is.na(vl)) "Too few observations per treatment to test" else c(
+    green = "Variances are similar across treatment groups",
+    yellow = "Variances differ moderately (largest/smallest at most 4) with equal group sizes, which the F test tolerates",
+    red = "Variances clearly differ across groups: Welch's ANOVA (CRD) or a transformation")[[vl]]
+  n_out <- dg$n_outliers %||% 0; n_sus <- dg$n_suspect %||% 0
+  ol <- light_of("outliers", n_out == 0)
+  out_badge <- badge(ol, if (n_out > 0) sprintf("%d outlier(s)", n_out) else if (n_sus > 0) sprintf("%d suspect", n_sus) else "None detected")
+  out_desc <- if (n_out > 0) "Studentized residuals beyond |3|: check them for errors" else if (n_sus > 0) "Studentized residuals between |2| and |3|: worth a look" else "No studentized residuals exceed |3|"
+  card <- function(title, b, desc, cls) div(class = cls,
+    div(class = "card h-100 p-3 bg-white border shadow-none", style = "border-color: #e5ebe5 !important;",
+      div(class = "d-flex justify-content-between align-items-center mb-1", strong(title), b),
+      p(class = "text-muted small mb-0", desc)))
+  cls <- if (has_homo) "col-md-4" else "col-md-6"
   div(class = "row g-3 mb-3",
-    div(class = if (has_homo) "col-md-4" else "col-md-6",
-      div(class = "card h-100 p-3 bg-white border shadow-none", style = "border-color: #e5ebe5 !important;",
-        div(class = "d-flex justify-content-between align-items-center mb-1",
-          strong("Residual normality"), norm_badge),
-        p(class = "text-muted small mb-0", norm_desc))),
-    if (has_homo) div(class = "col-md-4",
-      div(class = "card h-100 p-3 bg-white border shadow-none", style = "border-color: #e5ebe5 !important;",
-        div(class = "d-flex justify-content-between align-items-center mb-1",
-          strong("Variance equality"), homo_badge),
-        p(class = "text-muted small mb-0", homo_desc))),
-    div(class = if (has_homo) "col-md-4" else "col-md-6",
-      div(class = "card h-100 p-3 bg-white border shadow-none", style = "border-color: #e5ebe5 !important;",
-        div(class = "d-flex justify-content-between align-items-center mb-1",
-          strong("Outliers"), out_badge),
-        p(class = "text-muted small mb-0", out_desc)))
-  )
+    card("Residual normality", norm_badge, norm_desc, cls),
+    if (has_homo) card("Variance equality", homo_badge, homo_desc, cls),
+    card("Outliers", out_badge, out_desc, cls))
 }
 # the layout the analyses expect: one row per plot, the replication in its own column (long format)
 long_format_help <- function() help_box("How should the file be laid out?",
@@ -309,6 +300,34 @@ result_card <- function(title, ..., copy = NULL, copy_label = "Copy") bslib::car
   bslib::card_header(class = "d-flex justify-content-between align-items-center", span(title),
                      if (!is.null(copy)) actionButton(copy, tagList(icon("copy"), " ", copy_label), class = "btn-sm")),
   bslib::card_body(...))
+# the Thai summary card, with a reminder that the text is generated and must be read against the real context of the data
+thai_card <- function(text, copy) result_card("สรุปผล (ภาษาไทย)", p(lang = "th", text),
+  p(lang = "th", class = "text-muted small mb-0 mt-2", strong("ข้อเสนอแนะ:"), " สรุปนี้สร้างจากโปรแกรม ผู้วิจัยควรนำไปแปลความหมายด้วยความรอบคอบ โดยพิจารณาร่วมกับบริบทและสภาพแวดล้อมที่แท้จริงของข้อมูล"),
+  copy = copy, copy_label = "คัดลอก")
+# what the data checks suggest (from star_recommend_aov / star_recommend_tt), as advice the analyst may follow or not:
+# the traffic light of the assumption checks, an observation, a recommendation, and a button for each method offered
+# (on red, one per reporting goal: ranks or medians, or means without the normal curve) plus one to keep the current
+# method. Buttons are <prefix>_<method id> and <prefix>_stay. `current` is the method shown, `kept` TRUE once the user
+# chose to keep it, `current_label` names it.
+advice_ui <- function(rc, current, prefix, kept, current_label) {
+  if (is.null(rc)) return(NULL)
+  cls <- paste("alert", c(green = "alert-success", yellow = "alert-warning", red = "alert-danger")[[rc$light]])
+  title <- div(span(class = paste0("light-dot light-", rc$light)),
+               strong(c(green = "Assumptions met", yellow = "Mild departure: the analysis is robust", red = "Clear violation: another method is advised")[[rc$light]]))
+  obs <- div(class = "mt-1", icon("magnifying-glass"), " ", strong("Observation: "), rc$observed)
+  ids <- vapply(rc$options, function(o) o$id, "")
+  if (current %in% ids) return(div(class = paste(cls, "small"), title, obs,
+    div(class = "mt-1", icon("circle-check"), sprintf(" You are using %s, a recommended method; the choice remains yours.", current_label))))
+  rec <- div(class = "mt-1", icon("lightbulb"), " ", strong("Recommendation: "), rc$advice)
+  if (!length(ids)) return(div(class = paste(cls, "small"), title, obs, rec))
+  if (isTRUE(kept)) return(div(class = paste(cls, "small"), title, obs, div(class = "mt-1", icon("circle-info"), sprintf(" You chose to continue with %s.", current_label))))
+  opts <- lapply(seq_along(rc$options), function(i) { o <- rc$options[[i]]
+    div(class = "mt-2 d-flex flex-wrap align-items-center gap-2", if (!is.null(o$goal)) span(paste0(o$goal, ":")),
+        actionButton(paste0(prefix, "_", o$id), o$label, class = if (i == 1) "btn-light btn-sm border" else "btn-light btn-sm border")) })
+  div(class = cls, title, obs, rec, opts,
+      div(class = "mt-2", actionButton(paste0(prefix, "_stay"), sprintf("Continue with %s", current_label), class = "btn-light btn-sm border")),
+      div(class = "small text-muted mt-1", "Advice only: the analyst decides which method to report."))
+}
 # the R code that repeats an analysis, folded under a one-line heading: most users never need it, and those who want
 # to check the results or rerun them in R open it. `missing` is shown instead when there is no code for the analysis.
 code_card <- function(code, copy, missing = NULL) tags$details(class = "code-card",

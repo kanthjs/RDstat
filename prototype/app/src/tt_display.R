@@ -2,7 +2,7 @@
 tt_digits <- function(r) if (max(abs(r$groups$Mean), na.rm = TRUE) < 1) 4 else 2
 tt_desc_display <- function(r) {
   z <- r$groups; k <- tt_digits(r)
-  out <- data.frame(Group = z$Group, N = ifelse(is.na(z$N), "", formatC(z$N, format = "d")), Mean = fmt_n(z$Mean, k), SD = fmt_n(z$SD, k),
+  out <- data.frame(Group = z$Group, N = ifelse(is.na(z$N), "", formatC(z$N, format = "d")), Mean = fmt_n(z$Mean, k), Median = fmt_n(z$Median, k), SD = fmt_n(z$SD, k),
                     SE = fmt_n(z$SE, k), Min = fmt_n(z$Min, k), Max = fmt_n(z$Max, k), check.names = FALSE, stringsAsFactors = FALSE)
   names(out)[1] <- switch(r$type, independent = r$group, paired = "Measurement", one = "Variable")
   out

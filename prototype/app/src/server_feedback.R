@@ -7,7 +7,7 @@
     ts <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
 
     screen_details <- switch(nav_tab,
-      "Analysis of variance" = {
+      "Compare treatments" = {
         err_msg <- if (isTRUE(input$go_aov > 0)) {
           tryCatch({
             r <- res()
@@ -16,7 +16,7 @@
         } else "None (analysis not yet run)"
         paste0(
           "- Screen: ANOVA\n",
-          "- Design: ", input$design %||% "-", "\n",
+          "- Design: ", input$design %||% "-", if (identical(input$aov_method, "rank")) " (rank-based)" else "", "\n",
           "- Data source: ", input$src %||% "-", (if (identical(input$src, "ex")) paste0(" (", input$example, ")") else if (!is.null(input$file$name)) paste0(" (", input$file$name, ")") else ""), "\n",
           "- Response: ", input$resp %||% "-", "\n",
           "- Factors: ", paste(input$factors %||% input$trt %||% "-", collapse = ", "), "\n",

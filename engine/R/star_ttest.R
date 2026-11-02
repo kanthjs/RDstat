@@ -71,7 +71,7 @@ star_ttest <- function(data, type = c("independent", "paired", "one"), response 
                   .star_tt_row("Unequal variances (Welch)", t_welch, diff, sqrt(stats::var(va) / na + stats::var(vb) / nb)))
     chosen <- if (isTRUE(var_equal)) 1L else 2L
     groups <- .star_tt_desc(list(va, vb), levels)
-    groups <- rbind(groups, data.frame(Group = paste(levels[1], "-", levels[2]), N = NA_integer_, Mean = diff, SD = NA_real_,
+    groups <- rbind(groups, data.frame(Group = paste(levels[1], "-", levels[2]), N = NA_integer_, Mean = diff, Median = NA_real_, SD = NA_real_,
                                        SE = test$SE[chosen], Min = NA_real_, Max = NA_real_, stringsAsFactors = FALSE))
     vt <- stats::var.test(va, vb)
     variance <- data.frame(Test = "F test (ratio of variances)", F = unname(vt$statistic), DF1 = unname(vt$parameter[1]),
@@ -115,12 +115,14 @@ star_ttest <- function(data, type = c("independent", "paired", "one"), response 
               groups = groups, test = test, chosen = chosen, variance = variance, normality = normality,
               effect_size = d_eff, pair_r = pair_r, p = p, significant = sig, nonparametric = nonpar, data = long, data_notes = notes)
   res$summary <- .star_tt_summary(res)
+  res$nonparametric_summary <- .star_tt_np_summary(res)
+  res$nonparametric_apa <- .star_tt_np_apa(res)
   res$apa <- .star_tt_apa(res)
   structure(res, class = "star_ttest")
 }
 
 .star_tt_desc <- function(vals, names) {
-  data.frame(Group = names, N = vapply(vals, length, 0L), Mean = vapply(vals, mean, 0), SD = vapply(vals, stats::sd, 0),
+  data.frame(Group = names, N = vapply(vals, length, 0L), Mean = vapply(vals, mean, 0), Median = vapply(vals, stats::median, 0), SD = vapply(vals, stats::sd, 0),
              SE = vapply(vals, \(v) stats::sd(v) / sqrt(length(v)), 0), Min = vapply(vals, min, 0), Max = vapply(vals, max, 0),
              stringsAsFactors = FALSE)
 }
@@ -158,6 +160,43 @@ star_ttest <- function(data, type = c("independent", "paired", "one"), response 
 .star_tt_effect_word <- function(d) {
   a <- abs(d)
   if (is.na(a)) "" else if (a < 0.2) "negligible" else if (a < 0.5) "small" else if (a < 0.8) "medium" else "large"
+}
+
+# summary and APA sentence for the Wilcoxon test, for when it is the test reported
+.star_tt_np_sig <- function(r) { p <- r$nonparametric$P; !is.na(p) && p < r$alpha }
+.star_tt_np_ci <- function(r) {
+  w <- r$nonparametric
+  if (is.na(w$Lower)) "no interval could be computed" else sprintf("%g%% CI %s to %s", 100 * r$conf_level, .star_tt_num(w$Lower), .star_tt_num(w$Upper))
+}
+.star_tt_np_summary <- function(r) {
+  w <- r$nonparametric; sig <- .star_tt_np_sig(r); md <- r$groups$Median
+  verb <- if (sig) c(two.sided = "differ significantly from", greater = "are significantly greater than", less = "are significantly less than")
+          else c(two.sided = "do not differ significantly from", greater = "are not significantly greater than", less = "are not significantly less than")
+  verb <- verb[[r$alternative]]
+  stat <- sprintf("%s, p %s", w$Statistic, .star_fmt_p(w$P))
+  est <- sprintf("Hodges-Lehmann estimate %s, %s", .star_tt_num(w$Estimate), .star_tt_np_ci(r))
+  switch(r$type,
+    independent = sprintf("%s: the values of %s in %s (median %s) %s those in %s (median %s) (%s; %s).", w$Method, r$response, r$labels[1],
+                          .star_tt_num(md[1]), verb, r$labels[2], .star_tt_num(md[2]), stat, est),
+    paired = sprintf("%s: the values of %s (median %s) %s those of %s (median %s) (%s; %s of the median difference).", w$Method, r$x,
+                     .star_tt_num(md[1]), verb, r$y, .star_tt_num(md[2]), stat, est),
+    one = sprintf("%s: the values of %s (median %s) %s %s (%s; %s of the difference).", w$Method, r$response, .star_tt_num(md[1]),
+                  verb, format(r$mu), stat, est))
+}
+.star_tt_np_apa <- function(r) {
+  nz <- function(x, d) sub("^(-?)0\\.", "\\1.", formatC(x, format = "f", digits = d))
+  w <- r$nonparametric; md <- r$groups$Median
+  p <- if (is.na(w$P)) "p = NA" else if (w$P < 0.001) "p < .001" else paste("p =", nz(w$P, 3))
+  ci <- if (is.na(w$Lower)) "" else sprintf(", %g%% CI [%s, %s]", 100 * r$conf_level, .star_tt_num(w$Lower), .star_tt_num(w$Upper))
+  core <- sprintf("%s, %s, Hodges-Lehmann estimate = %s%s", w$Statistic, p, .star_tt_num(w$Estimate), ci)
+  res <- if (.star_tt_np_sig(r)) "significant" else "not significant"
+  switch(r$type,
+    independent = sprintf("A Wilcoxon rank-sum (Mann-Whitney) test showed that the difference in %s between %s (Mdn = %s) and %s (Mdn = %s) was %s, %s.",
+                          r$response, r$labels[1], .star_tt_num(md[1]), r$labels[2], .star_tt_num(md[2]), res, core),
+    paired = sprintf("A Wilcoxon signed-rank test showed that the difference between %s (Mdn = %s) and %s (Mdn = %s) was %s, %s.",
+                     r$x, .star_tt_num(md[1]), r$y, .star_tt_num(md[2]), res, core),
+    one = sprintf("A Wilcoxon signed-rank test showed that %s (Mdn = %s) was %s different from %s, %s.",
+                  r$response, .star_tt_num(md[1]), if (res == "significant") "significantly" else "not significantly", format(r$mu), core))
 }
 
 .star_tt_summary <- function(r) {
