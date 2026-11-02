@@ -98,3 +98,42 @@ script_corr <- function(r, file = NULL) {
     "round(r_matrix, 3)")
   paste(c(head, "", body), collapse = "\n")
 }
+
+script_reg <- function(r, file = NULL) {
+  y <- r$response; x <- r$predictors
+  rhs <- if (r$degree > 1) paste(c(sprintf("`%s`", x), sprintf("I(`%s`^%d)", x, 2:r$degree)), collapse = " + ")
+         else paste(sprintf("`%s`", x), collapse = " + ")
+  title <- sprintf("Linear regression of %s on %s%s", y, paste(x, collapse = ", "),
+                   c("", " (quadratic)", " (cubic)")[r$degree])
+  head <- script_header(title, file)
+  vars <- c(y, x)
+  body <- c(
+    sprintf("vars <- %s", r_vec(vars)),
+    "d[vars] <- lapply(d[vars], function(x) suppressWarnings(as.numeric(x)))",
+    "d <- d[complete.cases(d[vars]), vars]   # rows with a missing value are left out",
+    "",
+    sprintf("fit <- lm(`%s` ~ %s, data = d)", y, rhs),
+    "summary(fit)                         # coefficients, R-squared, F test",
+    "anova(fit)                           # sequential sums of squares",
+    sprintf("confint(fit, level = %s)", r_num(1 - r$alpha)),
+    c("AIC(fit); BIC(fit)"),
+    if (r$degree == 1 && length(x) > 1) c(
+      "",
+      sprintf("vif <- diag(solve(cor(d[%s])))   # variance inflation factors", r_vec(x)),
+      "vif",
+      sprintf("beta <- coef(fit)[-1] * sapply(d[%s], sd) / sd(d[[%s]])   # standardised coefficients", r_vec(x), r_str(y)),
+      "beta"),
+    if (r$degree == 2) c(
+      "",
+      "b <- coef(fit)",
+      "x_opt <- -b[2] / (2 * b[3])           # stationary point of the fitted curve",
+      "y_opt <- unname(b[1] + b[2] * x_opt + b[3] * x_opt^2)",
+      sprintf("c(x = unname(x_opt), y = y_opt, inside_range = x_opt >= min(d[[%s]]) && x_opt <= max(d[[%s]]))", r_str(x), r_str(x))),
+    "",
+    "# assumptions",
+    "shapiro <- shapiro.test(residuals(fit))   # normality of residuals",
+    "shapiro",
+    "# lmtest::bptest(fit)                     # constant variance (needs the lmtest package)",
+    "head(sort(abs(rstudent(fit)), decreasing = TRUE))   # largest studentised residuals (outliers if above about 3)")
+  paste(c(head, "", body), collapse = "\n")
+}
