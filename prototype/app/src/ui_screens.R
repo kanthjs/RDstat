@@ -65,7 +65,7 @@ tt_ui <- sidebarLayout(
       selectInput("tt_alt", "Alternative", c("Two-sided (different)" = "two.sided", "Greater: first > second (or > test value)" = "greater",
                                              "Less: first < second (or < test value)" = "less")),
       conditionalPanel("input.tt_type == 'independent'",
-        radioButtons("tt_var", "Variances of the two groups", c("Not assumed equal (Welch, recommended)" = "welch", "Assumed equal (pooled, Student)" = "equal"))),
+        radioButtons("tt_var", "Variances of the two groups", c("Assumed equal (pooled, Student): the usual t-test" = "equal", "Not assumed equal (Welch)" = "welch"))),
       selectInput("tt_alpha", "Significance level", c("0.05" = 0.05, "0.01" = 0.01, "0.10" = 0.10))),
     run_bar("go_tt", "Run test")),
   mainPanel(

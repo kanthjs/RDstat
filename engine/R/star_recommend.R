@@ -5,11 +5,11 @@
 ## The order of the checks: normality of the residuals (or of each group, for two groups), with a mixed rule for large
 ## samples (30 or more per group with |skewness| <= 1 and |excess kurtosis| <= 2 is robust by the central limit theorem)
 ## and a warning for small ones (fewer than 15 per group: the test has little power); outliers are checked before a rank
-## test is suggested. Welch's ANOVA (CRD, one factor) and Welch's t-test are recommended by default, without first testing
-## the variances: a preliminary Levene test distorts the error rate of the test that follows, and Welch's test loses
-## almost nothing when the variances are equal (Delacre et al. 2017, 2019; Zimmerman 2004). Levene's result is reported
-## for information. In an RCBD, where no Welch version exists, unequal variances lead to a transformation or the Friedman
-## test.
+## test is suggested. The standard ANOVA and the pooled t-test are the defaults of the app; after the run the guidance
+## suggests Welch's ANOVA (CRD, one factor) or Welch's t-test when the variances differ or the group sizes are unequal,
+## because Welch's test loses almost nothing when the variances are equal and the standard F test can be badly off when
+## they are not (Delacre et al. 2017, 2019; Zimmerman 2004). In an RCBD, where no Welch version exists, unequal variances
+## lead to a transformation or the Friedman test.
 
 ## sample skewness (g1) and excess kurtosis (g2)
 .star_shape <- function(x) {
@@ -151,13 +151,19 @@ star_recommend_aov <- function(r) {
                                                          .star_fmt_p(sw_p), n_min, trimws(shape)) else ""
   norm_txt <- if (identical(L[["normality"]], "green")) sprintf("Residuals are consistent with a normal distribution (Shapiro-Wilk p %s).", .star_fmt_p(sw_p)) else ""
   var_txt <- sprintf(" The variances %s (%s).", if (isFALSE(dg$homogeneity$ok)) "differ among the treatments" else "look similar", lev_txt)
-  # CRD: Welch's ANOVA by default, whatever Levene's test says
-  if (crd)
-    return(.star_advice(.star_worst(c(L[["normality"]], L[["variance"]], L[["outliers"]], if (n_min < 15) "yellow")),
-      paste0(norm_txt, note, var_txt, small),
-      paste("Welch's ANOVA is recommended by default: it does not assume equal variances and gives almost the same result when they are equal,",
-            "so it is used without first testing the variances. Its means are compared with the Games-Howell test."),
-      list(.star_option("welch", "Switch to Welch's ANOVA (recommended)")), lights))
+  # CRD: the standard ANOVA is the default; Welch's ANOVA is suggested when the variances differ or the group sizes are unequal
+  if (crd) {
+    cells <- table(r$data[[f]][!is.na(r$data[[r$response]])]); balanced <- length(unique(as.integer(cells))) == 1
+    ratio <- dg$homogeneity$ratio
+    welch_better <- L[["variance"]] %in% c("yellow", "red") || (!balanced && isTRUE(ratio >= 2))
+    light <- .star_worst(c(L[["normality"]], L[["variance"]], L[["outliers"]], if (n_min < 15) "yellow"))
+    if (welch_better)
+      return(.star_advice(light, paste0(norm_txt, note, var_txt, if (!balanced) " The numbers of observations differ among the treatments." else "", small),
+        paste("Welch's ANOVA does not assume equal variances, which the standard F test needs, especially when the group sizes are unequal.",
+              "Its means are compared with the Games-Howell test."),
+        list(.star_option("welch", "Switch to Welch's ANOVA (recommended)")), lights))
+    return(.star_advice(light, paste0(norm_txt, note, var_txt, small), "The standard ANOVA suits these data.", checks = lights))
+  }
   # RCBD: no Welch version; clearly unequal variances call for a transformation or Friedman
   if (identical(L[["variance"]], "red"))
     return(.star_advice("red", sprintf("The variances differ among the treatments (%s).", lev_txt),
@@ -203,9 +209,11 @@ star_recommend_tt <- function(r) {
                 if (iqr_out) sprintf(" %d value(s) lie beyond 1.5 x IQR.", iqr_out) else "",
                 if (!is.na(lev[["p"]])) sprintf(" The variances %s (Levene p %s).", if (lev[["p"]] < a) "differ" else "look similar", .star_fmt_p(lev[["p"]])) else "", small)
   light <- .star_worst(c(nl, ol, vl, if (n_min < 15) "yellow"))
-  if (r$type == "independent" && isTRUE(r$var_equal))
-    return(.star_advice(light, paste("The pooled (Student's) t-test is chosen.", obs),
-      "Welch's t-test is recommended by default: it does not assume equal variances and gives almost the same result when they are equal, so it is used without first testing the variances.",
+  vr <- if (r$type == "independent") { v <- vapply(vals, stats::var, 0); max(v) / min(v) } else NA_real_
+  welch_better <- r$type == "independent" && (isTRUE(lev[["p"]] < a) || (length(unique(lengths(vals))) > 1 && isTRUE(vr >= 2)))
+  if (r$type == "independent" && isTRUE(r$var_equal) && welch_better)
+    return(.star_advice(light, paste("The pooled (Student's) t-test is chosen.", obs, if (length(unique(lengths(vals))) > 1) " The group sizes differ." else ""),
+      "Welch's t-test does not assume equal variances, which the pooled test needs, especially when the group sizes are unequal; it gives almost the same result when the variances are equal.",
       list(.star_option("welch_var", "Switch to Welch (recommended)")), lights))
   .star_advice(light, obs, "The t-test suits these data.", checks = lights)
 }

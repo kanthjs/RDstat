@@ -78,12 +78,14 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(rc$light == "red" && identical(vapply(rc$options, function(o) o$id, ""), c("rank", "trimmed")) && grepl("light-red", ui) && grepl("To compare ranks or medians", ui) &&
         grepl("To compare means without relying on the normal curve", ui) && grepl("Use trimmed means", ui), "Traffic light: an outlier is red, with options by reporting goal")
   check(grepl("badge bg-danger", html(output$diag_ui)) && grepl("badge bg-success", html(output$diag_ui)), "Traffic light: assumption badges on the diagnostics tab")
-  # Welch's ANOVA is recommended for a one-factor CRD whatever Levene's test says (here the variances look similar)
+  # the standard ANOVA is the default; Welch's ANOVA is suggested only when the variances differ or the group sizes are unequal
   xs <- c(-1.2, -0.6, -0.3, 0, 0.3, 0.6, 1.2, -0.9, 0.9, 0)
   eq <- data.frame(T = rep(c("a", "b", "c"), each = 10), y = c(10 + xs, 12 + xs, 14 + xs), stringsAsFactors = FALSE)
   rc <- star_recommend_aov(star_aov(eq, "y", "T", design = "CRD", report = FALSE))
-  check(identical(rc$switch_to, "welch") && rc$light %in% c("green", "yellow") && grepl("look similar", rc$observed) && grepl("without first testing the variances", rc$advice),
-        "Welch default: recommended for a CRD even when the variances look similar")
+  check(is.null(rc$switch_to) && rc$light %in% c("green", "yellow") && grepl("look similar", rc$observed) && grepl("standard ANOVA suits", rc$advice),
+        "Standard ANOVA default: no switch offered when the variances look similar")
+  rc <- star_recommend_aov(star_aov(eq[-(1:4), ], "y", "T", design = "CRD", report = FALSE))
+  check(is.null(rc$switch_to), "Standard ANOVA default: unequal group sizes alone (similar variances) do not trigger a switch")
   # Welch's ANOVA with Games-Howell letters; switching method needs no new run
   session$setInputs(aov_method = "welch")
   w <- welch_try(); ref <- oneway.test(GrainYield ~ Insecticide, crd)
@@ -117,7 +119,9 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   x <- c(-1.2, -0.6, -0.3, 0, 0.3, 0.6, 1.2, -0.9, 0.9, 0)
   het <- data.frame(T = rep(c("a", "b", "c"), each = 10), y = c(10 + x, 12 + 4 * x, 14 + 10 * x), B = rep(1:10, 3), stringsAsFactors = FALSE)
   rc <- star_recommend_aov(star_aov(het, "y", "T", design = "CRD", report = FALSE))
-  check(identical(rc$switch_to, "welch") && grepl("Levene", rc$observed), "Guidance: unequal variances in CRD suggest Welch's ANOVA")
+  check(identical(rc$switch_to, "welch") && grepl("Levene", rc$observed) && grepl("Switch to Welch", rc$switch_label), "Guidance: unequal variances in CRD suggest Welch's ANOVA")
+  rc <- star_recommend_aov(star_aov(het[-(1:4), ], "y", "T", design = "CRD", report = FALSE))
+  check(identical(rc$switch_to, "welch") && grepl("numbers of observations differ", rc$observed), "Guidance: unequal variances and unequal group sizes also suggest Welch's ANOVA")
   rc <- star_recommend_aov(star_aov(het, "y", "T", "B", design = "RCBD", report = FALSE))
   check(identical(rc$switch_to, "rank") && grepl("no Welch version for blocks", rc$advice), "Guidance: unequal variances in RCBD suggest a transformation or Friedman")
   ui <- as.character(advice_ui(rc, "anova", "rec", FALSE, "ANOVA"))
@@ -132,7 +136,14 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(identical(r$anova$Source, c("supp", "dose", "supp:dose", "Error", "Total")), "CRD 2 factors: ANOVA rows")
   run(aov_method = "rank"); check(grepl("needs exactly one treatment factor", html(output$results_ui)), "Rank method: two factors give a reason, not a blank screen")
   run(aov_method = "welch"); check(aov_mode() == "anova" && grepl("Welch's ANOVA needs exactly one treatment factor", html(output$results_ui)) && grepl("Analysis of variance", html(output$results_ui)),
-                                   "Welch default: two factors get the standard ANOVA, with the reason")
+                                   "Welch chosen: two factors get the standard ANOVA, with the reason")
+  # analyses that do not exist for the design are greyed out (disabled), the standard ANOVA stays available
+  check(identical(aov_support()$ok, "anova") && grepl("exactly one treatment factor", aov_support()$why), "Analysis buttons: two factors leave only the standard ANOVA")
+  session$setInputs(trt = "supp")
+  check(setequal(aov_support()$ok, c("anova", "rank", "welch", "trimmed")) && is.null(aov_support()$why), "Analysis buttons: CRD with one factor has all four analyses")
+  session$setInputs(design = "RCBD"); check(setequal(aov_support()$ok, c("anova", "rank")) && grepl("blocks", aov_support()$why), "Analysis buttons: RCBD has no Welch or trimmed means")
+  session$setInputs(design = "SplitCRD"); check(identical(aov_support()$ok, "anova") && grepl("split-plot", aov_support()$why), "Analysis buttons: split plots have only the standard ANOVA")
+  session$setInputs(design = "CRD", trt = c("supp", "dose"))
   run(aov_method = "anova")
   check(r$interaction_significant, "CRD 2 factors: interaction significant")
   check(setequal(names(tables()$simple), c("supp within dose", "dose within supp")), "CRD 2 factors: simple-effect tables")
@@ -332,10 +343,13 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(grepl("Data check|Observation", html(output$tt_results_ui)) && !grepl("Check with", html(output$tt_results_ui)) && !is.null(tt_rec()), "Guidance: t-test screen has the data check, with no Wilcoxon result beside it")
   rc <- star_recommend_tt(star_ttest(skew[skew$T != "c", ], "independent", response = "y", group = "T"))
   check(rc$light == "red" && identical(vapply(rc$options, function(o) o$id, ""), c("wilcox", "trimmed")) && grepl("x IQR", rc$observed), "Guidance: skewed groups are red, suggest Wilcoxon or trimmed means, and point to values beyond the quartiles")
-  rc <- star_recommend_tt(star_ttest(read.csv("example_crd2.csv", stringsAsFactors = FALSE), "independent", response = "len", group = "supp", var_equal = TRUE))
-  check(identical(rc$switch_to, "welch_var") && grepl("without first testing the variances", rc$advice), "Welch default: the pooled t-test gets Welch recommended whatever Levene's test says")
-  check(is.null(star_recommend_tt(star_ttest(read.csv("example_crd2.csv", stringsAsFactors = FALSE), "independent", response = "len", group = "supp"))$switch_to),
-        "Welch default: no switch offered when Welch's t-test is already used")
+  xs <- c(-1.2, -0.6, -0.3, 0, 0.3, 0.6, 1.2, -0.9, 0.9, 0)
+  two_het <- data.frame(g = rep(c("a", "b"), each = 10), y = c(10 + xs, 12 + 8 * xs)); two_eq <- data.frame(g = rep(c("a", "b"), each = 10), y = c(10 + xs, 12 + xs))
+  rc <- star_recommend_tt(star_ttest(two_het, "independent", response = "y", group = "g", var_equal = TRUE))
+  check(identical(rc$switch_to, "welch_var") && grepl("does not assume equal variances", rc$advice), "Pooled t-test default: Welch recommended when the variances differ")
+  check(is.null(star_recommend_tt(star_ttest(two_het, "independent", response = "y", group = "g"))$switch_to) &&
+        is.null(star_recommend_tt(star_ttest(two_eq, "independent", response = "y", group = "g", var_equal = TRUE))$switch_to),
+        "Pooled t-test default: no switch when Welch is already used, or when the variances look similar")
   e <- run_script(tt_script()); check(isTRUE(all.equal(unname(e$tt$statistic), r$test$t)) && isTRUE(all.equal(e$tt$p.value, r$p)) && isTRUE(all.equal(e$wilcox$p.value, r$nonparametric$P)), "t-test script: one sample reproduces the app")
   check(grepl("t.test(v, mu = mu", tt_script(), fixed = TRUE) && grepl("R code to repeat", html(output$tt_results_ui)), "t-test script: shown on the results screen")
   # scripts must not depend on the app: example data are carried inside, files are read as the app reads them

@@ -179,12 +179,22 @@
     else if (m %in% c("welch", "trimmed") && identical(r$design, "CRD") && length(r$factors) == 1) m
     else "anova"
   })
-  # Welch's ANOVA is the default where it exists (CRD, one factor) and the standard ANOVA elsewhere
-  observeEvent(input$design, {
-    m <- input$aov_method %||% "welch"
-    if (input$design == "CRD" && m == "anova") updateRadioButtons(session, "aov_method", selected = "welch")
-    if (input$design != "CRD" && m %in% c("welch", "trimmed")) updateRadioButtons(session, "aov_method", selected = "anova")
-  }, ignoreInit = TRUE)
+  # the analyses that exist for the design and the number of treatment factors chosen; the others are greyed out
+  # (disabled) in the Analysis buttons, and a choice that stops being available falls back to the standard ANOVA
+  aov_support <- reactive({
+    d <- input$design %||% "CRD"; one <- length(input$trt %||% 1) == 1
+    can_rank <- d %in% c("CRD", "RCBD") && one; can_welch <- d == "CRD" && one
+    why <- if (!d %in% c("CRD", "RCBD")) "Only the standard ANOVA is available for split-plot and combined designs."
+           else if (!one) "This analysis needs exactly one treatment factor; with two factors only the standard ANOVA is available."
+           else if (!can_welch) "Not available for blocks (RCBD): there is no Welch or trimmed-means version with blocks."
+    list(ok = c("anova", if (can_rank) "rank", if (can_welch) c("welch", "trimmed")), why = why)
+  })
+  observe({
+    s <- aov_support()
+    session$sendCustomMessage("radio_support", list(id = "aov_method", ok = as.list(s$ok), why = s$why %||% ""))
+    if (!(isolate(input$aov_method) %||% "anova") %in% s$ok) updateRadioButtons(session, "aov_method", selected = "anova")
+  })
+  output$aov_method_note <- renderUI({ s <- aov_support(); if (!is.null(s$why)) p(class = "text-muted small", icon("circle-info"), " ", s$why, " Greyed-out analyses do not apply.") })
   # Welch's ANOVA chosen where it does not apply: the standard ANOVA is shown, and the screen says why
   welch_fallback <- reactive((input$aov_method %||% "") %in% c("welch", "trimmed") && aov_mode() == "anova")
   aov_trimmed <- reactive(aov_mode() == "trimmed")

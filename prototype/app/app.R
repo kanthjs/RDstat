@@ -18,6 +18,14 @@ source("src/designs.R", local = TRUE)        # example datasets and design helpe
 source("src/script_gen.R", local = TRUE)     # R scripts that repeat an analysis outside the app
 
 copy_js <- "
+Shiny.addCustomMessageHandler('radio_support', function(msg) {
+  var root = document.getElementById(msg.id); if (!root) return;
+  var ok = [].concat(msg.ok);
+  root.querySelectorAll('input[type=radio]').forEach(function(r) {
+    var off = ok.indexOf(r.value) < 0, box = r.closest('.radio, .form-check') || r.parentElement;
+    r.disabled = off; box.classList.toggle('opt-disabled', off); box.title = off ? msg.why : '';
+  });
+});
 Shiny.addCustomMessageHandler('copy_text', function(msg) {
   var done = function(ok) { Shiny.setInputValue('copy_status', {ok: ok, what: msg.what, t: Date.now()}); };
   var fallback = function() {
@@ -245,6 +253,7 @@ app_css <- css_fill("@font-face { font-family: 'Chulabhorn Likit'; src: url('fon
       display: block;
       border-radius: 4px;
     }
+    .opt-disabled, .opt-disabled * { color: #9aa0a6 !important; cursor: not-allowed; }
     .light-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%%; margin-right: 6px; vertical-align: -1px; }
     .light-green { background: #2e9e44; } .light-yellow { background: #f0b400; } .light-red { background: #d33a2c; }
     .empty-state i { font-size: 32px; color: %1$s; margin-bottom: 10px; } .empty-state h5 { font-weight: 600; color: #333; }", brand[["main"]], brand[["dark"]], brand[["light"]])
@@ -264,16 +273,18 @@ ui <- bslib::page_navbar(
                                        "Combined over sites / seasons: RCBD" = "CombRCBD", "Combined over sites / seasons: CRD" = "CombCRD")),
         help_box("Which design?", p(strong("CRD:"), "treatments were assigned completely at random, no blocks."), p(strong("RCBD:"), "plots were grouped into blocks (replications) of similar conditions and every treatment appears once in each block."), p(strong("Split plot:"), "one factor (main plot) is applied to large plots and a second factor (sub plot) within each. ", strong("In CRD"), " the main plots were assigned at random with no blocks; ", strong("in RCBD"), " the main plots were grouped into blocks."),
                  p(strong("Combined:"), "the same trial (one treatment factor, CRD or RCBD) was repeated at several sites, seasons or years, and the data of all of them are in one file with a column naming the environment. Tests whether the treatments differ overall and whether their ranking changes between environments (treatment x environment interaction).")),
-        # a rank-based test exists only for one treatment factor in CRD (Kruskal-Wallis) or RCBD (Friedman)
+        # the analyses that do not exist for the chosen design are greyed out (see aov_support in the server): a rank-based
+        # test needs one treatment factor in CRD (Kruskal-Wallis) or RCBD (Friedman); Welch and trimmed means need CRD with one factor
+        radioButtons("aov_method", "Analysis", c("Standard ANOVA: compare means, equal variances assumed" = "anova",
+                                                 "Welch's ANOVA: compare means, no equal-variance assumption (CRD, one factor)" = "welch",
+                                                 "Trimmed means (20%): compare means without the normal curve, bootstrap CI (CRD, one factor)" = "trimmed",
+                                                 "Rank-based: Kruskal-Wallis (CRD) or Friedman (RCBD)" = "rank"), selected = "anova"),
+        helpText("Standard ANOVA is used by default. After running, the results screen automatically checks assumptions and recommends an alternative above if needed."),
+        uiOutput("aov_method_note"),
         conditionalPanel("input.design == 'CRD' || input.design == 'RCBD'",
-          radioButtons("aov_method", "Analysis", c("Welch's ANOVA: compare means, no equal-variance assumption (CRD, one factor)" = "welch",
-                                                   "Standard ANOVA: compare means, equal variances assumed" = "anova",
-                                                   "Trimmed means (20%): compare means without the normal curve, bootstrap CI (CRD, one factor)" = "trimmed",
-                                                   "Rank-based: Kruskal-Wallis (CRD) or Friedman (RCBD)" = "rank"), selected = "welch"),
-          helpText("Welch's ANOVA is the default for a CRD with one factor; for RCBD, two factors and the other designs the standard ANOVA is used (no Welch version exists). After running, the results screen checks the data and recommends a method; switching here updates the results at once."),
           help_box("ANOVA, Welch or rank-based?",
-            p(strong("ANOVA"), " compares the treatment means. It assumes normal residuals and equal variances; check them on the Outliers & assumptions tab after running."),
-            p(strong("Welch's ANOVA"), " (default for CRD) also compares means but does not assume equal variances; its means are compared with the Games-Howell test. When the variances are equal it gives almost the same result as the standard ANOVA, so it is used without first testing the variances. It exists for CRD with one factor only (there is no version for blocks)."),
+            p(strong("ANOVA"), " (the default) compares the treatment means. It assumes normal residuals and equal variances; the results screen checks them and recommends another method if they fail."),
+            p(strong("Welch's ANOVA"), " also compares means but does not assume equal variances; its means are compared with the Games-Howell test. When the variances are equal it gives almost the same result as the standard ANOVA, so it is safe to choose when the variances or the group sizes differ. It exists for CRD with one factor only (there is no version for blocks)."),
             p(strong("Trimmed means"), " compare means after setting aside the lowest and highest 20% of each group, so skewed data and a few extreme values do not drive the result; no normal distribution or equal variances are assumed, and bootstrap intervals are given. CRD with one factor only."),
             p(strong("Rank-based"), " compares the ranks of the values instead, so it does not need those assumptions. Use it when the checks fail and a transformation does not help, or for scores and ranks. It needs one treatment factor; in RCBD each treatment must appear exactly once in every block (Friedman). It gives medians and a chi-square test instead of means, an ANOVA table and a CV."),
             p("Choose the method before looking at the results, not the one that gives the smaller p value.")))),
