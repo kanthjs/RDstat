@@ -8,25 +8,57 @@
 
 ## Colours for n groups. `palette` is NULL or the name of a built-in palette (see star_gg_palettes), or a vector
 ## of colours (recycled). The default, Okabe-Ito, is colour-blind safe; beyond 8 levels it falls back to a generated palette.
-star_gg_palettes <- c("okabe", "grey", "viridis", "set2", "green")
+star_gg_palettes <- c("okabe", "dark2", "set2", "npg", "aaas", "lancet", "jco", "viridis", "cividis", "mako", "blues", "ylgnbu",
+                      "grey", "green")
 .star_gg_palette <- function(n, palette = NULL) {
   if (length(palette) > 1 || (length(palette) == 1 && !palette %in% star_gg_palettes)) return(rep_len(palette, n))
+  # a fixed list of colours up to its length, a generated palette beyond that
+  fixed <- function(base, gen) if (n <= length(base)) base[seq_len(n)] else grDevices::hcl.colors(n, gen)
+  # n steps of a sequential hcl palette, leaving out its palest end so the lightest group stays visible
+  seq_pal <- function(name, one) if (n == 1) one else grDevices::hcl.colors(n + 1, name)[seq_len(n)]
   switch(if (is.null(palette)) "okabe" else palette,
-    okabe = { base <- c("#0072B2", "#E69F00", "#009E73", "#D55E00", "#56B4E9", "#CC79A7", "#F0E442", "#999999")
-              if (n <= length(base)) base[seq_len(n)] else grDevices::hcl.colors(n, "Dark 3") },
-    grey = if (n == 1) "grey55" else grDevices::gray.colors(n, start = 0.2, end = 0.85),
+    okabe = fixed(c("#0072B2", "#E69F00", "#009E73", "#D55E00", "#56B4E9", "#CC79A7", "#F0E442", "#999999"), "Dark 3"),
+    dark2 = fixed(c("#1B9E77", "#D95F02", "#7570B3", "#E7298A", "#66A61E", "#E6AB02", "#A6761D", "#666666"), "Dark 2"),
+    set2 = fixed(c("#66C2A5", "#FC8D62", "#8DA0CB", "#E78AC3", "#A6D854", "#FFD92F", "#E5C494", "#B3B3B3"), "Set 2"),
+    # journal palettes as in the ggsci package (Nature, Science, The Lancet, J Clin Oncol)
+    npg = fixed(c("#E64B35", "#4DBBD5", "#00A087", "#3C5488", "#F39B7F", "#8491B4", "#91D1C2", "#DC0000", "#7E6148", "#B09C85"), "Dark 3"),
+    aaas = fixed(c("#3B4992", "#EE0000", "#008B45", "#631879", "#008280", "#BB0021", "#5F559B", "#A20056", "#808180", "#1B1919"), "Dark 3"),
+    lancet = fixed(c("#00468B", "#ED0000", "#42B540", "#0099B4", "#925E9F", "#FDAF91", "#AD002A", "#ADB6B6", "#1B1919"), "Dark 3"),
+    jco = fixed(c("#0073C2", "#EFC000", "#868686", "#CD534C", "#7AA6DC", "#003C67", "#8F7700", "#3B3B3B", "#A73030", "#4A6990"), "Dark 3"),
     viridis = if (n == 1) "#21908C" else grDevices::hcl.colors(n, "viridis"),
-    set2 = { base <- c("#66C2A5", "#FC8D62", "#8DA0CB", "#E78AC3", "#A6D854", "#FFD92F", "#E5C494", "#B3B3B3")
-             if (n <= length(base)) base[seq_len(n)] else grDevices::hcl.colors(n, "Set 2") },
-    green = if (n == 1) "#2E8B57" else grDevices::hcl.colors(n + 1, "Greens 3")[seq_len(n)])
+    cividis = if (n == 1) "#7C7B78" else grDevices::hcl.colors(n, "Cividis"),
+    mako = if (n == 1) "#3D9BA3" else grDevices::hcl.colors(n + 1, "Mako")[seq_len(n)],
+    blues = seq_pal("Blues 3", "#2171B5"),
+    ylgnbu = seq_pal("YlGnBu", "#41B6C4"),
+    grey = if (n == 1) "grey55" else grDevices::gray.colors(n, start = 0.2, end = 0.85),
+    green = seq_pal("Greens 3", "#2E8B57"))
 }
 ## Point and line colours of the scatter, regression and heatmap plots, matching the palette
 .star_gg_accent <- function(palette = NULL) {
   if (length(palette) > 1 || (length(palette) == 1 && !palette %in% star_gg_palettes)) return(rep_len(palette, 2))
   switch(if (is.null(palette)) "okabe" else palette,
-    okabe = c(point = "#0072B2", line = "#D55E00"), grey = c(point = "grey60", line = "grey10"),
-    viridis = c(point = "#3B528B", line = "#5DC863"), set2 = c(point = "#8DA0CB", line = "#FC8D62"),
-    green = c(point = "#74C476", line = "#00441B"))
+    okabe = c(point = "#0072B2", line = "#D55E00"), dark2 = c(point = "#1B9E77", line = "#D95F02"),
+    set2 = c(point = "#8DA0CB", line = "#FC8D62"), npg = c(point = "#4DBBD5", line = "#E64B35"),
+    aaas = c(point = "#3B4992", line = "#EE0000"), lancet = c(point = "#00468B", line = "#ED0000"),
+    jco = c(point = "#0073C2", line = "#CD534C"), viridis = c(point = "#3B528B", line = "#5DC863"),
+    cividis = c(point = "#7C7B78", line = "#00204D"), mako = c(point = "#3D9BA3", line = "#0B0405"),
+    blues = c(point = "#6BAED6", line = "#08306B"), ylgnbu = c(point = "#41B6C4", line = "#081D58"),
+    grey = c(point = "grey60", line = "grey10"), green = c(point = "#74C476", line = "#00441B"))
+}
+## Diverging colours (negative, middle, positive) of the correlation heatmap. NULL keeps the palette's own colours.
+star_gg_heat <- c("rdbu", "brbg", "piyg", "vik", "berlin")
+.star_gg_heat <- function(heat = NULL) {
+  if (is.null(heat) || !heat %in% star_gg_heat) return(NULL)
+  switch(heat,
+    rdbu = c("#B2182B", "#F7F7F7", "#2166AC"), brbg = c("#8C510A", "#F5F5F5", "#01665E"), piyg = c("#C51B7D", "#F7F7F7", "#4D9221"),
+    vik = rev(grDevices::hcl.colors(3, "Vik")), berlin = grDevices::hcl.colors(3, "Berlin"))
+}
+## Point shapes, as filled R plotting symbols (outline in the point colour's dark edge, fill in the palette colour)
+star_gg_shapes <- c(circle = 21, square = 22, diamond = 23, triangle = 24, triangle_down = 25)
+.star_gg_shape <- function(shape = NULL) {
+  if (is.numeric(shape) && length(shape) == 1) return(shape)
+  s <- if (is.null(shape) || !shape %in% names(star_gg_shapes)) "circle" else shape
+  unname(star_gg_shapes[[s]])
 }
 
 ## theme  : "classic" (axes only), "bw" (white with grid lines and a frame), "minimal" (grid lines, no frame) or
@@ -66,8 +98,9 @@ star_gg_theme <- function(base_size = 12, theme = c("classic", "bw", "minimal", 
 ## data   : the data frame given to star_aov(); only needed for points = TRUE
 star_ggplot_means <- function(x, effect = NULL, data = NULL, error = c("se", "sd", "ci"), points = !is.null(data),
                               main = NULL, xlab = NULL, ylab = NULL, palette = NULL, base_size = 12,
-                              theme = "classic", legend = "auto") {
+                              theme = "classic", legend = "auto", shape = "circle", point_size = 1) {
   error <- match.arg(error)
+  pch <- .star_gg_shape(shape)
   th <- star_gg_theme(base_size, theme, .star_gg_legend(legend))
   if (!inherits(x, "star_aov")) stop("'x' must be a result of star_aov() or star_splitplot().")
   inter <- !is.null(effect) && effect %in% c("interaction", "interaction_line")
@@ -97,7 +130,7 @@ star_ggplot_means <- function(x, effect = NULL, data = NULL, error = c("se", "sd
       pts <- data.frame(Treatment = factor(as.character(raw[[f]]), levels = levels(m$Treatment)), y = raw[[x$response]])
       p <- p + ggplot2::geom_point(data = pts, ggplot2::aes(x = Treatment, y = y), inherit.aes = FALSE,
                                    position = ggplot2::position_jitter(width = 0.12, height = 0, seed = 1),
-                                   shape = 21, size = 1.8, fill = "white", colour = "grey20", alpha = 0.85)
+                                   shape = pch, size = 1.8 * point_size, fill = "white", colour = "grey20", alpha = 0.85)
       top <- pmax(top, tapply(pts$y, pts$Treatment, max)[as.character(m$Treatment)])
     }
     m$ytxt <- top
@@ -145,15 +178,15 @@ star_ggplot_means <- function(x, effect = NULL, data = NULL, error = c("se", "sd
     if (!is.null(pts))
       p <- p + ggplot2::geom_point(data = pts, ggplot2::aes(x = x, y = y, group = g), inherit.aes = FALSE,
                                    position = ggplot2::position_jitterdodge(jitter.width = 0.08, dodge.width = 0.8, seed = 1),
-                                   shape = 21, size = 1.6, fill = "white", colour = "grey20", alpha = 0.85)
+                                   shape = pch, size = 1.6 * point_size, fill = "white", colour = "grey20", alpha = 0.85)
     p <- p + ggplot2::geom_text(ggplot2::aes(y = ytxt, label = lab, group = g), position = dodge, vjust = -0.5, fontface = "bold")
   } else {
     p <- ggplot2::ggplot(cd, ggplot2::aes(x = x, y = Mean, colour = g, group = g)) +
       ggplot2::geom_line(linewidth = 0.8, position = ggplot2::position_dodge(width = 0.15)) +
       ggplot2::geom_errorbar(ggplot2::aes(ymin = lo, ymax = hi), width = 0.12, position = ggplot2::position_dodge(width = 0.15)) +
-      ggplot2::geom_point(size = 3, position = ggplot2::position_dodge(width = 0.15)) +
+      ggplot2::geom_point(ggplot2::aes(fill = g), shape = pch, size = 3 * point_size, colour = "grey20", position = ggplot2::position_dodge(width = 0.15)) +
       ggplot2::geom_text(ggplot2::aes(y = ytxt, label = lab), position = ggplot2::position_dodge(width = 0.15), vjust = -0.9, fontface = "bold", show.legend = FALSE) +
-      ggplot2::scale_colour_manual(values = cols, name = f1)
+      ggplot2::scale_colour_manual(values = cols, name = f1) + ggplot2::scale_fill_manual(values = cols, name = f1)
   }
   p + ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = c(0, 0.12))) +
     ggplot2::labs(x = .star_gg_or(xlab, f2), y = y_lab, title = ttl, subtitle = paste(strwrap(sub, 70), collapse = "\n")) +
