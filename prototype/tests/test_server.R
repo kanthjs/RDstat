@@ -9,6 +9,24 @@ testServer(app, {
   n <- 0
   run <- function(...) { n <<- n + 1; session$setInputs(..., go_aov = n) }
   session$setInputs(src = "ex", alpha = "0.05", pw = "auto")
+  run_script <- function(txt) { e <- new.env(); old <- setwd(tempdir()); on.exit(setwd(old)); invisible(capture.output(eval(parse(text = txt), e))); e }   # in another folder: the script must not need the app files
+  # the R code offered on the ANOVA screen, run on its own, must give the same table, means, letters and simple effects
+  aov_script_check <- function(label) {
+    r <- ok(); e <- run_script(aov_script())
+    pv <- if (!is.null(r$by_env)) NULL else if (inherits(e$fit, "aovlist")) unlist(lapply(summary(e$fit), function(s) s[[1]][["Pr(>F)"]])) else summary(e$fit)[[1]][["Pr(>F)"]]
+    same_table <- if (is.null(r$by_env)) (isTRUE(all.equal(unname(pv[!is.na(pv)]), r$anova$P[!is.na(r$anova$P)])) && (if (!is.null(e$cv_a)) isTRUE(all.equal(c(e$cv_a, e$cv_b), c(r$cv_a, r$cv_b))) else isTRUE(all.equal(e$cv, r$cv)))) else {
+      ai <- function(src) r$anova$P[r$anova$Source == src]; tr <- r$treatment
+      p_env <- if (!is.null(e$p_env)) unname(e$p_env) else e$tab[["Pr(>F)"]][e$i_env]
+      isTRUE(all.equal(e$tab[["Pr(>F)"]][c(e$i_trt, e$i_int)], c(ai(tr), ai(paste(tr, r$env, sep = ":"))))) && isTRUE(all.equal(p_env, ai(r$env))) && isTRUE(all.equal(e$cv, r$cv)) &&
+        isTRUE(all.equal(e$by_env$ErrorMS, r$by_env$ErrorMS)) && isTRUE(all.equal(e$by_env$ErrorDF, r$by_env$ErrorDF)) && isTRUE(all.equal(e$by_env$P, r$by_env$P)) && isTRUE(all.equal(unname(e$bartlett_p), r$bartlett$p))
+    }
+    same_means <- all(vapply(r$factors, function(f) { m <- r$means[[f]]; g <- trimws(e$cmp[[f]]$groups[m$Treatment, "groups"])
+      isTRUE(all.equal(unname(e$cmp[[f]]$means[m$Treatment, 1]), m$Mean)) && (r$interaction_significant || identical(unname(g), m$Group)) }, NA))
+    same_simple <- all(vapply(names(r$simple), function(nm) { sm <- r$simple[[nm]]; cf <- attr(sm, "compare"); af <- attr(sm, "at")
+      all(vapply(seq_len(nrow(sm)), function(i) { x <- e$simple[[paste(cf, "within", af, "=", sm[[af]][i])]]
+        identical(trimws(x$groups[sm[[cf]][i], "groups"]), sm$Group[i]) }, NA)) }, NA))
+    check(same_table && same_means && same_simple, paste("ANOVA script reproduces the app:", label))
+  }
 
   # ---- RCBD, one factor (rice yield vs nitrogen) ----
   session$setInputs(design = "RCBD", example = "rcbd1", resp = "Yield", trt = "Nitrogen", blk = "Rep")
@@ -19,6 +37,7 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(identical(tables()$anova$`Pr(>F)`[2], "0.0022"), "RCBD 1 factor: p formatted 0.0022")
   check(identical(tables()$means$Nitrogen$Group, c("b", "a", "a", "a", "a", "a")), "RCBD 1 factor: letters")
   check(identical(tables()$means$Nitrogen$N, rep("3", 6)), "RCBD 1 factor: N as integers")
+  aov_script_check("RCBD, one factor, LSD")
   html <- function(x) paste(as.character(x$html), collapse = "")
   ui <- html(output$results_ui); check(grepl("Significant effects", ui) && grepl("1 of 1", ui) && grepl("9.4%", ui, fixed = TRUE) && grepl("Highest mean of Nitrogen", ui) && grepl("result-card", ui), "RCBD 1 factor: key numbers and result cards")
   check(grepl("No results yet", html(output$corr_msg)), "Correlation: empty state before the first run")
@@ -28,6 +47,9 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   run(pw = "HSD")
   check(is.null(ok()$block) && round(ok()$anova$F[1], 2) == 9.83, "CRD 1 factor: no block, F = 9.83")
   check(identical(tables()$means$Insecticide$Group, c("ab", "c", "a", "bc", "bc", "ab", "a")), "CRD 1 factor: letters match the original")
+  aov_script_check("CRD, one factor, Tukey")
+  session$setInputs(transform = "log"); run(pw = "duncan"); aov_script_check("CRD, log-transformed response, Duncan")
+  session$setInputs(transform = "none"); run(pw = "HSD")
   check(!grepl("assumptions are not met", html(output$results_ui)) && !grepl("ข้อตกลงเบื้องต้น", html(output$results_ui)), "Results tab: no verdict on the assumptions")
   check(round(np_res()$statistic, 2) == 20.85 && np_res()$name == "Kruskal-Wallis" && grepl("Rank-based alternative", html(output$diag_ui)), "CRD 1 factor: Kruskal-Wallis chi-square = 20.85 (kruskal.test)")
 
@@ -40,6 +62,7 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(setequal(names(tables()$simple), c("supp within dose", "dose within supp")), "CRD 2 factors: simple-effect tables")
   check(identical(names(tables()$cells), c("supp", "dose = 0.5", "dose = 1", "dose = 2")), "CRD 2 factors: wide cell means")
   check(identical(tables()$simple[["supp within dose"]][["dose = 0.5"]], c("13.23 a", "7.98 b")), "CRD 2 factors: simple effect letters (original STAR)")
+  aov_script_check("CRD, two factors, significant interaction (simple effects)")
   check(!("Group" %in% names(tables()$means$supp)), "CRD 2 factors: no main-effect letters when the interaction is significant")
 
   # ---- RCBD, two factors (nitrogen x variety) ----
@@ -48,6 +71,7 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   r <- ok()
   check(identical(r$anova$Source, c("Rep", "Nitrogen", "Variety", "Nitrogen:Variety", "Error", "Total")), "RCBD 2 factors: ANOVA rows")
   check(round(r$cv, 2) == 10.07, "RCBD 2 factors: CV = 10.07")
+  aov_script_check("RCBD, two factors")
   check(identical(tables()$simple[["Nitrogen within Variety"]][["Variety = IR8"]][1:2], c("4,252.67 d", "5,672.00 c")), "RCBD 2 factors: Nitrogen within IR8 letters")
   check("Simple effects" %in% names(xlsx_sheets()), "RCBD 2 factors: simple effects in Excel")
 
@@ -56,6 +80,7 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   run(pw = "auto")
   r <- ok()
   check(identical(r$anova$Source, c("Rep", "Nitrogen", "Error(a)", "Variety", "Nitrogen:Variety", "Error(b)", "Total")), "Split plot: ANOVA rows")
+  aov_script_check("split plot (RCBD), significant interaction")
   check(round(c(r$cv_a, r$cv_b), 2)[2] == 10.79 && round(r$cv_a, 2) == 6.88, "Split plot: CV(a) = 6.88, CV(b) = 10.79")
   check(identical(tables()$simple[["Nitrogen within Variety"]][["Variety = IR8"]][1:2], c("4,252.67 d", "5,672.00 c")), "Split plot: Nitrogen within IR8 letters (original STAR)")
   check(grepl("Error (a) / Error (b)", html(output$results_ui), fixed = TRUE), "Split plot: CV(a) and CV(b) in the key numbers")
@@ -74,6 +99,7 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(identical(r$anova$DF, c(2, 9, 3, 6, 27, 47)), "Split plot CRD: DF a(r-1) = 9 and a(r-1)(b-1) = 27")
   check(round(r$anova$F[1], 2) == 29.80 && round(r$cv_a, 2) == 7.56 && round(r$cv_b, 2) == 5.15, "Split plot CRD: F = 29.80, CV(a) = 7.56, CV(b) = 5.15 (original STAR)")
   check(identical(tables()$means$Irrigation$Group, c("b", "a", "c")) && identical(tables()$means$Variety$Group, c("d", "c", "b", "a")), "Split plot CRD: letters match the original STAR")
+  aov_script_check("split plot (CRD)")
   check(grepl("Split Plot in Completely Randomized Design", output$report), "Split plot CRD: classic STAR report")
   check(grepl("not available for split-plot", html(output$diag_ui)), "Split plot CRD: no assumption checks yet")
   check(identical(tables()$agronomy$Irrigation[[1]][4:9], c("F test (Irrigation)", "Grand mean", "CV (%)", "SE(m)", "SED", "LSD (0.05)")),
@@ -98,6 +124,7 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   run(pw = "LSD")
   r <- ok()
   check(identical(r$anova$Source, c("Season", "Rep within Season", "NitrogenRate", "NitrogenRate:Season", "Error", "Total")), "Combined RCBD: ANOVA rows")
+  aov_script_check("combined RCBD over seasons")
   check(identical(round(r$anova$F[1:4], 2), c(14.25, 0.71, 10.62, 5.47)) && round(r$cv, 2) == 12.05, "Combined RCBD: F and CV match STAR")
   ui <- html(output$results_ui)
   check(grepl("Analysis of each Season", ui) && grepl("Bartlett", ui), "Combined RCBD: each environment and Bartlett's test")
@@ -107,6 +134,7 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   session$setInputs(design = "CombCRD", example = "comb_crd1", resp = "Tillers", trt = "Variety", env = "Site")
   run(pw = "LSD")
   check(identical(ok()$anova$DF, c(2, 3, 6, 36, 47)), "Combined CRD: ANOVA df")
+  aov_script_check("combined CRD over sites")
 
   # ---- Thai summary and Word report ----
   session$setInputs(design = "SplitRCBD", example = "split1", resp = "Yield", trt_main = "Nitrogen", trt_sub = "Variety", blk = "Rep"); run(pw = "auto")
@@ -142,12 +170,20 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(identical(corr_tables()$matrix$mpg, c("1", "-0.776***", "-0.868***")), "Correlation: matrix with significance stars")
   check(identical(names(corr_tables()$pairs)[c(3, 5)], c("r", "p")) && corr_tables()$pairs$p[1] == "<0.0001", "Correlation: pairs table")
   ui <- html(output$corr_results_ui); check(grepl("3 of 3", ui) && grepl("r = -0.868", ui, fixed = TRUE), "Correlation: key numbers")
+  r <- corr_ok()
+  run_script <- function(txt) { e <- new.env(); old <- setwd(tempdir()); on.exit(setwd(old)); invisible(capture.output(eval(parse(text = txt), e))); e }   # in another folder: the script must not need the app files
+  e <- run_script(corr_script()); check(isTRUE(all.equal(e$pairs$r, r$pairs$r)) && isTRUE(all.equal(e$pairs$P, r$pairs$P)) && isTRUE(all.equal(e$pairs$PAdj, r$pairs$PAdj)) && isTRUE(all.equal(e$pairs$N, r$pairs$N)) && isTRUE(all.equal(unname(e$r_matrix), unname(r$r))), "Correlation script: Pearson reproduces the app")
   session$setInputs(corr_view = "matrix"); check(file.size(output$dl_corr_plot) > 3000, "Correlation: scatter plot matrix png")
   session$setInputs(corr_view = "heat"); p <- output$dl_corr_plot; check(file.exists(p) && file.size(p) > 3000, "Correlation: heatmap png")
   session$setInputs(corr_view = "scatter", corr_x = "mpg", corr_y = "wt"); check(file.size(output$dl_corr_plot) > 3000, "Correlation: scatter png")
   x <- output$dl_corr_xlsx; check(identical(readxl::excel_sheets(x), c("Correlation (r)", "P values", "N", "Pairs", "Info")), "Correlation: xlsx sheets")
   session$setInputs(corr_method = "spearman", go_corr = 2)
   check(!("CI lower" %in% names(corr_tables()$pairs)) && names(corr_tables()$pairs)[3] == "rho", "Correlation: Spearman has rho and no CI")
+  r <- corr_ok()
+  e <- run_script(corr_script()); check(isTRUE(all.equal(e$pairs$r, r$pairs$r)) && isTRUE(all.equal(e$pairs$P, r$pairs$P)) && isTRUE(all.equal(e$pairs$PAdj, r$pairs$PAdj)) && isTRUE(all.equal(e$pairs$N, r$pairs$N)) && isTRUE(all.equal(unname(e$r_matrix), unname(r$r))), "Correlation script: Spearman reproduces the app")
+  session$setInputs(corr_method = "kendall", corr_adjust = "holm", corr_alt = "greater", go_corr = 4); r <- corr_ok()
+  e <- run_script(corr_script()); check(isTRUE(all.equal(e$pairs$r, r$pairs$r)) && isTRUE(all.equal(e$pairs$P, r$pairs$P)) && isTRUE(all.equal(e$pairs$PAdj, r$pairs$PAdj)) && isTRUE(all.equal(e$pairs$N, r$pairs$N)) && isTRUE(all.equal(unname(e$r_matrix), unname(r$r))), "Correlation script: Kendall, Holm, one-sided reproduces the app")
+  session$setInputs(corr_method = "spearman", corr_adjust = "none", corr_alt = "two.sided", go_corr = 5)
   session$setInputs(corr_vars = "mpg", go_corr = 3); check(inherits(corr_res(), "star_error"), "Correlation: one variable is reported as an error")
   session$setInputs(cp_corr_matrix = 1, cp_corr_pairs = 1, cp_corr_apa = 1)
 
@@ -155,11 +191,18 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   session$setInputs(reg_src = "ex", reg_example = "cars_multi", reg_resp = "mpg", reg_pred = c("wt", "hp"), reg_degree = "1", reg_alpha = "0.05", go_reg = 1)
   check(round(reg_ok()$anova$F[1], 2) == 69.21 && round(reg_ok()$fit$adj_r2, 4) == 0.8148, "Regression: F = 69.21, adjusted R-squared = 0.8148 (original STAR)")
   check(identical(reg_tables()$coef$Term, c("(Intercept)", "wt", "hp")) && "VIF" %in% names(reg_tables()$coef), "Regression: coefficient table with VIF")
+  r <- reg_ok()
+  e <- run_script(reg_script()); check(isTRUE(all.equal(unname(coef(e$fit)), unname(coef(r$model)))) && isTRUE(all.equal(unname(summary(e$fit)$fstatistic[1]), r$fit$f)) && isTRUE(all.equal(summary(e$fit)$adj.r.squared, r$fit$adj_r2)) && isTRUE(all.equal(AIC(e$fit), r$fit$aic)) && isTRUE(all.equal(unname(confint(e$fit)[, 1]), r$coefficients$Lower)) && isTRUE(all.equal(unname(e$vif), r$coefficients$VIF[-1])) && isTRUE(all.equal(unname(e$beta), r$coefficients$StdBeta[-1])), "Regression script: multiple regression reproduces the app (coefficients, F, AIC, CI, VIF, beta)")
   ui <- html(output$reg_results_ui); check(grepl("R-squared", ui) && grepl("0.827", ui, fixed = TRUE) && grepl("Parameter estimates", ui), "Regression: key numbers and result cards")
   check(file.size(output$dl_reg_plot) > 3000, "Regression: observed vs fitted png")
   x <- output$dl_reg_xlsx; check(identical(readxl::excel_sheets(x), c("Model", "ANOVA", "Coefficients", "Residuals")), "Regression: xlsx sheets")
   session$setInputs(reg_example = "seeding", reg_resp = "GrainYield", reg_pred = "SeedingRate", reg_degree = "2", go_reg = 2)
   check(!is.null(reg_ok()$optimum) && reg_ok()$optimum$inside, "Regression: quadratic finds an optimum inside the range")
+  r <- reg_ok()
+  e <- run_script(reg_script()); check(isTRUE(all.equal(unname(coef(e$fit)), unname(coef(r$model)))) && isTRUE(all.equal(unname(summary(e$fit)$fstatistic[1]), r$fit$f)) && isTRUE(all.equal(summary(e$fit)$adj.r.squared, r$fit$adj_r2)) && isTRUE(all.equal(AIC(e$fit), r$fit$aic)) && isTRUE(all.equal(unname(confint(e$fit)[, 1]), r$coefficients$Lower)) && isTRUE(all.equal(unname(e$x_opt), r$optimum$x)) && isTRUE(all.equal(e$y_opt, r$optimum$y)), "Regression script: quadratic reproduces the app and its optimum")
+  session$setInputs(reg_degree = "3", go_reg = 21); r <- reg_ok()
+  e <- run_script(reg_script()); check(isTRUE(all.equal(unname(coef(e$fit)), unname(coef(r$model)))) && isTRUE(all.equal(unname(summary(e$fit)$fstatistic[1]), r$fit$f)) && isTRUE(all.equal(summary(e$fit)$adj.r.squared, r$fit$adj_r2)) && isTRUE(all.equal(AIC(e$fit), r$fit$aic)) && isTRUE(all.equal(unname(confint(e$fit)[, 1]), r$coefficients$Lower)) , "Regression script: cubic reproduces the app")
+  session$setInputs(reg_degree = "2", go_reg = 22)
   check(file.size(output$dl_reg_plot) > 3000, "Regression: curve png")
   session$setInputs(reg_newx = "50, 100, 400"); check(identical(reg_predictions()$Extrapolated, c(FALSE, FALSE, TRUE)), "Regression: predictions flag extrapolation")
 
@@ -170,18 +213,35 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   r <- tt_ok()
   check(round(r$test$t[2], 3) == 1.915 && round(r$test$DF[2], 2) == 55.31 && round(r$p, 4) == 0.0606 && !r$significant, "t-test: Welch t = 1.915, df = 55.31, p = 0.0606 (R t.test)")
   check(identical(tt_tables()$test$Used, c("", "yes")) && round(r$test$DF[1]) == 58, "t-test: pooled and Welch rows, Welch used")
+  # the R code offered to the user, run on its own, must reproduce the numbers on the screen
+  run_script <- function(txt) { e <- new.env(); old <- setwd(tempdir()); on.exit(setwd(old)); invisible(capture.output(eval(parse(text = txt), e))); e }   # in another folder: the script must not need the app files
+  e <- run_script(tt_script()); check(isTRUE(all.equal(unname(e$tt_welch$statistic), r$test$t[2])) && isTRUE(all.equal(e$tt$p.value, r$p)) && isTRUE(all.equal(e$var_test$p.value, r$variance$P)) && isTRUE(all.equal(e$wilcox$p.value, r$nonparametric$P)), "t-test script: independent samples reproduce the app (Welch, F test, Wilcoxon)")
   ui <- html(output$tt_results_ui); check(grepl("Difference in means", ui) && grepl("Cohen", ui) && grepl("F test", ui), "t-test: key numbers and variance test")
   session$setInputs(tt_var = "equal", go_tt = 2); check(tt_ok()$chosen == 1 && round(tt_ok()$p, 4) == 0.0604, "t-test: pooled version when variances assumed equal")
+  e <- run_script(tt_script()); check(isTRUE(all.equal(e$tt$p.value, tt_ok()$p)) && isTRUE(all.equal(unname(e$tt$statistic), tt_ok()$test$t[1])), "t-test script: pooled version when variances assumed equal")
   session$setInputs(tt_example = "insect", tt_resp = "GrainYield", tt_group = "Insecticide", tt_levels = c("Dol-Mix (2kg)", "Control"), tt_var = "welch", go_tt = 3)
   check(tt_ok()$significant && any(grepl("other 5 group", tt_ok()$data_notes)), "t-test: two of seven groups, the rest noted")
   session$setInputs(tt_example = "sleep", tt_type = "paired", tt_x = "Drug1", tt_y = "Drug2", go_tt = 4)
   r <- tt_ok(); check(round(r$test$t, 3) == -4.062 && r$test$DF == 9 && round(r$p, 4) == 0.0028, "t-test: paired t = -4.062, df = 9, p = 0.0028 (Student's sleep data)")
   check(identical(tt_tables()$desc$Measurement, c("Drug1", "Drug2", "Drug1 - Drug2")), "t-test: paired descriptives include the differences")
+  e <- run_script(tt_script()); check(isTRUE(all.equal(unname(e$tt$statistic), r$test$t)) && isTRUE(all.equal(e$tt$p.value, r$p)) && isTRUE(all.equal(e$wilcox$p.value, r$nonparametric$P)), "t-test script: paired reproduces the app")
   check(isTRUE(all.equal(r$nonparametric$P, suppressWarnings(wilcox.test(read.csv("example_sleep.csv")$Drug1, read.csv("example_sleep.csv")$Drug2, paired = TRUE)$p.value))) && grepl("Rank-based", html(output$tt_results_ui)), "t-test: Wilcoxon signed-rank alternative (wilcox.test)")
   check(file.size(output$dl_tt_plot) > 3000, "t-test: paired plot png")
   session$setInputs(tt_example = "rice", tt_type = "one", tt_resp = "Yield", tt_mu = 3, go_tt = 5)
   r <- tt_ok(); ref <- t.test(read.csv("example_rice.csv")$Yield, mu = 3)
   check(isTRUE(all.equal(r$test$t, unname(ref$statistic))) && isTRUE(all.equal(c(r$test$Lower, r$test$Upper), ref$conf.int[1:2] - 3)), "t-test: one sample matches t.test, CI of the difference")
+  e <- run_script(tt_script()); check(isTRUE(all.equal(unname(e$tt$statistic), r$test$t)) && isTRUE(all.equal(e$tt$p.value, r$p)) && isTRUE(all.equal(e$wilcox$p.value, r$nonparametric$P)), "t-test script: one sample reproduces the app")
+  check(grepl("t.test(v, mu = mu", tt_script(), fixed = TRUE) && grepl("R code to repeat", html(output$tt_results_ui)), "t-test script: shown on the results screen")
+  # scripts must not depend on the app: example data are carried inside, files are read as the app reads them
+  check(grepl("read.csv(text = ", tt_script(), fixed = TRUE) && !grepl("example_rice.csv", tt_script(), fixed = TRUE), "Script: a built-in example carries its data")
+  e <- new.env(); eval(parse(text = script_parse_number), e)
+  txt <- c("1,250.5", "12.5%", "12 kg", "12,5", "1.250,5", "", "NA", "-", "$ 7", "3")
+  check(isTRUE(all.equal(e$parse_number(txt), star_parse_number(txt))), "Script: numbers are parsed as the app parses them")
+  semi <- tempfile(fileext = ".csv"); writeLines(c("a;b;c", "1,5;x;3", "2,5;y;4"), semi)
+  e <- new.env(); invisible(capture.output(eval(parse(text = script_header("x", semi)), e)))
+  check(identical(names(e$d), c("a", "b", "c")) && identical(e$parse_number(e$d$a), c(1.5, 2.5)), "Script: a semicolon file is read with its separator and a decimal comma is parsed")
+  e <- new.env(); eval(parse(text = grep("shapiro_safe <-", tt_script(), value = TRUE, fixed = TRUE)[1]), e)
+  check(is.null(e$shapiro_safe(c(1, 2))) && is.null(e$shapiro_safe(c(5, 5, 5))) && !is.null(e$shapiro_safe(c(1, 2, 4))), "Script: Shapiro-Wilk is skipped where the app skips it (fewer than 3 values, all equal)")
   check(file.size(output$dl_tt_plot) > 3000, "t-test: one-sample plot png")
   x <- output$dl_tt_xlsx; check(identical(readxl::excel_sheets(x), c("Descriptives", "t-test", "Wilcoxon", "Normality", "Info")), "t-test: xlsx sheets")
   check(grepl("สรุปผล", html(output$tt_results_ui)) && file.size(output$dl_tt_doc) > 10000, "t-test: Thai summary and Word report")
@@ -282,6 +342,8 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(identical(g$trt[1], "Treatment") && !"Height" %in% g$trt, "Roles: another measured trait is not offered as a treatment")
   g <- guess_roles(data.frame(x = rep(1:3, 2), z = rep(c("a", "b"), each = 3), y = c(1.1, 2, 3.3, 4.2, 5, 6.7)), "y")
   check(identical(g$trt[1], "z") && identical(g$blk, "x"), "Roles: with no recognised names the block is the remaining label column")
+  g <- guess_roles(data.frame(A = rep(c("a1", "a2"), each = 6), B = rep(c("b1", "b2", "b3"), 4), Rep = rep(1:2, 6), Y = 1:12 + 0.5), "Y")
+  check(identical(g$blk, "Rep") && identical(g$trt[1:2], c("A", "B")), "Roles: factor B is a treatment, not the block, when there is a factor A")
   f4 <- tempfile(fileext = ".csv"); writeLines(c("พันธุ์,ซ้ำ,ผลผลิต", "กข41,1,5557", "กข41,2,5706", "กข47,1,4652", "กข47,2,4965"), f4)
   session$setInputs(design = "RCBD", src = "up", file = list(datapath = f4, name = "thai.csv", size = file.size(f4), type = "text/csv"))
   vp <- html(output$var_pickers)
@@ -294,6 +356,15 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(identical(dat()$Variety, rep(c("RD41", "RD47", "RD49"), each = 3)) && grepl("typed once", html(output$read_note)), "Merged labels: repeated on every row and shown")
   session$setInputs(resp = "Yield", trt = "Variety", blk = "Rep"); run(pw = "LSD")
   check(!inherits(res(), "star_error") && ok()$anova$DF[ok()$anova$Source == "Error"] == 4, "Merged labels: all 9 plots analysed as RCBD (error df 4)")
+  # a title merged over a block of cells (A1:C2) is not repeated into every cell of it
+  cells <- data.frame(a = c("Rice trial 2026", NA, "Trt", "A", "A", "B", "B"), b = c(NA, NA, "Rep", "1", "2", "1", "2"),
+                      c = c(NA, NA, "Y", "4.5", "4.7", "5.1", "5.3"), stringsAsFactors = FALSE)
+  rd <- star_table_from_cells(star_fill_merged(cells, cbind(r1 = 1L, c1 = 1L, r2 = 2L, c2 = 3L))$cells)
+  check(identical(names(rd), c("Trt", "Rep", "Y")) && nrow(rd) == 4, "Merged title: block merged over several columns is read as a title")
+  # a note typed beside one plot does not move the header down or drop plots
+  f5 <- tempfile(fileext = ".csv"); writeLines(c("Trt,Rep,Y", "A,1,4.5", "A,2,4.7,missing plot", "B,1,5.1", "B,2,5.3"), f5)
+  rd <- star_read_table(f5)
+  check(identical(names(rd), c("Trt", "Rep", "Y")) && nrow(rd) == 4 && any(grepl("missing plot", attr(rd, "notes"))), "Read: a note beside one plot is left out and the header kept")
   session$setInputs(src = "ex")
 
   # ---- split plot: the block / replication column is checked before running ----

@@ -15,6 +15,7 @@ source("src/ui_components.R", local = TRUE)  # data source / plot label / export
 source("src/ui_screens.R", local = TRUE)     # correlation, regression and t-test screens
 source("src/tt_display.R", local = TRUE)     # t-test result tables
 source("src/designs.R", local = TRUE)        # example datasets and design helpers
+source("src/script_gen.R", local = TRUE)     # R scripts that repeat an analysis outside the app
 
 copy_js <- "
 Shiny.addCustomMessageHandler('copy_text', function(msg) {

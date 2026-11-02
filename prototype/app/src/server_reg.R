@@ -43,7 +43,8 @@
       result_card("Model fit", html_table(tb$fit)),
       result_card("Analysis of variance", html_table(tb$anova), copy = "cp_reg_anova", copy_label = "Copy table"),
       result_card("Parameter estimates", html_table(tb$coef), copy = "cp_reg_coef", copy_label = "Copy table"),
-      result_card("APA-style report", p(r$apa), copy = "cp_reg_apa"))
+      result_card("APA-style report", p(r$apa), copy = "cp_reg_apa"),
+      result_card("R code to repeat this analysis", tags$pre(class = "small mb-0", style = "white-space: pre-wrap;", reg_script()), copy = "cp_reg_script", copy_label = "Copy code"))
   })
   gg_reg <- reactive(apply_plot_customizations(do.call(star_ggplot_regression, c(list(reg_ok(), main = input$reg_title, xlab = input$reg_xlab, ylab = input$reg_ylab), plot_style("reg"))), "reg"))
   output$reg_plot <- renderPlot(print(gg_reg()),
@@ -96,4 +97,7 @@
   copy_button("cp_reg_anova", "ANOVA table", function() tsv(reg_tables()$anova))
   copy_button("cp_reg_coef", "Parameter estimates", function() tsv(reg_tables()$coef))
   copy_button("cp_reg_apa", "APA text", function() reg_ok()$apa)
+  reg_file_name <- reactive(script_file(input$reg_src == "up", if (input$reg_src == "up") input$reg_file$name else reg_setup[[input$reg_example]]$file))
+  reg_script <- reactive(script_reg(reg_ok(), reg_file_name()))
+  copy_button("cp_reg_script", "R code", function() reg_script())
 

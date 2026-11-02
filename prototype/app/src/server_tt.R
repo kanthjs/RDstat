@@ -92,7 +92,8 @@
             "Estimate = Hodges-Lehmann ", if (r$type == "independent") "shift between the groups" else "median difference", "; ",
             "with tied values (or zero differences) the p value and the interval use a normal approximation."),
         copy = "cp_tt_np", copy_label = "Copy table"),
-      result_card("APA-style report", p(r$apa), copy = "cp_tt_apa"))
+      result_card("APA-style report", p(r$apa), copy = "cp_tt_apa"),
+      result_card("R code to repeat this analysis", tags$pre(class = "small mb-0", style = "white-space: pre-wrap;", tt_script()), copy = "cp_tt_script", copy_label = "Copy code"))
   })
   gg_tt <- reactive(apply_plot_customizations(do.call(star_ggplot_ttest, c(list(tt_ok(), main = input$tt_title, xlab = input$tt_xlab, ylab = input$tt_ylab), plot_style("tt"))), "tt"))
   output$tt_plot <- renderPlot(print(gg_tt()),
@@ -100,7 +101,8 @@
     height = function() live_plot_dims("tt")$height
   )
   output$dl_tt_plot <- plot_download("tt", gg_tt)
-  tt_file_name <- reactive(if (input$tt_src == "up") input$tt_file$name else tt_setup[[input$tt_example]]$file)
+  tt_script <- reactive(script_tt(tt_ok(), tt_file_name()))
+  tt_file_name <- reactive(script_file(input$tt_src == "up", if (input$tt_src == "up") input$tt_file$name else tt_setup[[input$tt_example]]$file))
   copy_button("cp_tt_th", "สรุปผล", function() thai_summary_tt(tt_ok()))
   output$dl_tt_doc <- downloadHandler("rdstat_ttest_report.doc", function(file) {
     r <- tt_ok(); tb <- tt_tables()
@@ -131,4 +133,5 @@
   copy_button("cp_tt_test", "t-test table", function() tsv(tt_tables()$test))
   copy_button("cp_tt_np", "Wilcoxon table", function() tsv(tt_tables()$nonpar))
   copy_button("cp_tt_apa", "APA text", function() tt_ok()$apa)
+  copy_button("cp_tt_script", "R code", function() tt_script())
 

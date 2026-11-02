@@ -270,6 +270,14 @@ test_that("star_read_table skips title lines above the header and summary rows b
   # empty columns before and after the table (it starts in column B, or rows end in extra commas)
   e <- star_read_table(w(c(",g,y,,", ",a,1,,", ",b,2,,")), "a.csv")
   expect_equal(names(e), c("g", "y")); expect_equal(e$y, c("1", "2"))
+  # a note typed beside one plot does not push the header down; the unnamed notes column is left out
+  o <- star_read_table(w(c("g,r,y", "a,1,4.5", "a,2,4.7,missing plot", "b,1,5.1", "b,2,5.3")), "a.csv")
+  expect_equal(names(o), c("g", "r", "y")); expect_equal(nrow(o), 4)
+  expect_match(attr(o, "notes"), "“missing plot”", fixed = TRUE)
+  # a title merged over a block of cells is not copied into every cell of it
+  cells <- data.frame(a = c("Trial", NA, "g", "a", "b"), b = c(NA, NA, "y", "1", "2"), stringsAsFactors = FALSE)
+  t2 <- star_table_from_cells(star_fill_merged(cells, cbind(r1 = 1L, c1 = 1L, r2 = 2L, c2 = 2L))$cells)
+  expect_equal(names(t2), c("g", "y")); expect_equal(t2$y, c("1", "2"))
   expect_true(star_is_summary_label("Grand mean:")); expect_false(star_is_summary_label("RD41"))
   skip_if_not_installed("writexl")
   f <- tempfile(fileext = ".xlsx")
