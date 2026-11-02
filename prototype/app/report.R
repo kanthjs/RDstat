@@ -58,6 +58,31 @@ thai_summary_tt <- function(r) {
   paste0(main, sprintf(" ขนาดอิทธิพล Cohen's d = %.2f (%s)", r$effect_size, size))
 }
 
+thai_summary_np <- function(np) {
+  m <- np$means; top <- m[which.max(m$Median), ]
+  st <- sprintf("χ² = %.2f, df = %d, %s", np$statistic, np$df, th_p(np$p))
+  how <- if (is.null(np$block)) "การทดสอบ Kruskal-Wallis" else sprintf("การทดสอบ Friedman (จัดอันดับภายในแต่ละ %s)", np$block)
+  if (np$significant)
+    sprintf("%s พบว่า %s ของ %s แตกต่างกันอย่างมีนัยสำคัญทางสถิติ (%s) ค่ามัธยฐานสูงสุดคือ %s (%s) สิ่งทดลองที่มีอักษรเหมือนกันไม่แตกต่างกันทางสถิติ (เปรียบเทียบ%s)",
+            how, np$response, np$treatment, st, top$Treatment, fmt_n(top$Median), if (is.null(np$block)) "อันดับเฉลี่ย" else "ผลรวมอันดับ")
+  else sprintf("%s พบว่า %s ของ %s ไม่แตกต่างกันอย่างมีนัยสำคัญทางสถิติ (%s)", how, np$response, np$treatment, st)
+}
+
+thai_summary_tt_np <- function(r) {
+  w <- r$nonparametric; sig <- !is.na(w$P) && w$P < r$alpha; md <- r$groups$Median
+  st <- sprintf("%s, %s", w$Statistic, th_p(w$P))
+  ci <- if (is.na(w$Lower)) "" else sprintf(" ช่วงความเชื่อมั่น %g%% %s ถึง %s", 100 * r$conf_level, fmt_n(w$Lower), fmt_n(w$Upper))
+  est <- sprintf("ค่าประมาณ Hodges-Lehmann = %s%s", fmt_n(w$Estimate), ci)
+  diff <- if (sig) "แตกต่างอย่างมีนัยสำคัญทางสถิติ" else "ไม่แตกต่างอย่างมีนัยสำคัญทางสถิติ"
+  switch(r$type,
+    independent = sprintf("การทดสอบ Wilcoxon rank-sum (Mann-Whitney) พบว่า %s ของ %s (มัธยฐาน %s) %sกับ %s (มัธยฐาน %s) (%s; %s)",
+                          r$response, r$labels[1], fmt_n(md[1]), diff, r$labels[2], fmt_n(md[2]), st, est),
+    paired = sprintf("การทดสอบ Wilcoxon signed-rank พบว่า %s (มัธยฐาน %s) และ %s (มัธยฐาน %s) %s (%s; %s)",
+                     r$x, fmt_n(md[1]), r$y, fmt_n(md[2]), diff, st, est),
+    one = sprintf("การทดสอบ Wilcoxon signed-rank พบว่า %s (มัธยฐาน %s) %sจากค่า %s (%s; %s)",
+                  r$response, fmt_n(md[1]), diff, format(r$mu), st, est))
+}
+
 # ---- report for Microsoft Word ------------------------------------------------------------------------------------
 # Word opens a single-file web page (MHTML) saved as .doc, with the tables as Word tables and the plot embedded; this
 # needs no extra R package, so it also works when the app runs in the browser.

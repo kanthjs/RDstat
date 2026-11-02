@@ -42,10 +42,10 @@ home_ui <- div(class = "container", style = "max-width: 1040px;",
   h4("ต้องการวิเคราะห์อะไร", class = "mt-0"),
   bslib::layout_column_wrap(width = "420px", fill = FALSE, heights_equal = "row",
     home_card("home_tt", "scale-balanced", "เปรียบเทียบค่าเฉลี่ยสองกลุ่ม",
-              "สองกลุ่มต่างกันหรือไม่ หรือหน่วยเดียวกันวัดสองครั้งแล้วเปลี่ยนไปหรือไม่ ทดสอบที (t-test) พร้อมช่วงความเชื่อมั่นและขนาดอิทธิพล",
+              "สองกลุ่มต่างกันหรือไม่ หรือหน่วยเดียวกันวัดสองครั้งแล้วเปลี่ยนไปหรือไม่ ทดสอบที (t-test) หรือ Wilcoxon (แบบ rank) พร้อมช่วงความเชื่อมั่น",
               "เช่น พันธุ์ A กับพันธุ์ B, ก่อนและหลังใส่ปุ๋ย · independent, paired, one sample"),
     home_card("home_aov", "chart-column", "เปรียบเทียบสิ่งทดลอง",
-              "กลุ่มต่าง ๆ ให้ผลผลิตหรือค่าที่วัดแตกต่างกันหรือไม่ วิเคราะห์ความแปรปรวน (ANOVA) พร้อมเปรียบเทียบค่าเฉลี่ย",
+              "กลุ่มต่าง ๆ ให้ผลผลิตหรือค่าที่วัดแตกต่างกันหรือไม่ วิเคราะห์ความแปรปรวน (ANOVA) พร้อมเปรียบเทียบค่าเฉลี่ย หรือ Kruskal-Wallis / Friedman (แบบ rank)",
               "เช่น พันธุ์ข้าว อัตราปุ๋ย · CRD, RCBD, split plot, วิเคราะห์ร่วมหลายสถานที่"),
     home_card("home_corr", "circle-nodes", "ดูความสัมพันธ์ระหว่างตัวแปร",
               "ค่าที่วัดตั้งแต่สองค่าขึ้นไปเพิ่มหรือลดไปด้วยกันหรือไม่ วิเคราะห์สหสัมพันธ์ (correlation) พร้อมกราฟ",
@@ -253,15 +253,23 @@ ui <- bslib::page_navbar(
   navbar_options = bslib::navbar_options(bg = brand[["main"]], theme = "dark"),
   header = tags$head(tags$script(HTML(copy_js)), tags$script(HTML(stale_js)), tags$style(HTML(app_css)), useBusyIndicators()),
   tabPanel("Home", home_ui),
-  tabPanel("t-test", tt_ui),
-  tabPanel("Analysis of variance", sidebarLayout(
+  tabPanel("Two groups", tt_ui, value = "t-test"),
+  tabPanel("Compare treatments", sidebarLayout(
     sidebarPanel(
       side_step(1, "Experimental design",
         radioButtons("design", NULL, c("Completely randomized (CRD)" = "CRD", "Randomized complete block (RCBD)" = "RCBD",
                                        "Split plot in CRD" = "SplitCRD", "Split plot in RCBD" = "SplitRCBD",
                                        "Combined over sites / seasons: RCBD" = "CombRCBD", "Combined over sites / seasons: CRD" = "CombCRD")),
         help_box("Which design?", p(strong("CRD:"), "treatments were assigned completely at random, no blocks."), p(strong("RCBD:"), "plots were grouped into blocks (replications) of similar conditions and every treatment appears once in each block."), p(strong("Split plot:"), "one factor (main plot) is applied to large plots and a second factor (sub plot) within each. ", strong("In CRD"), " the main plots were assigned at random with no blocks; ", strong("in RCBD"), " the main plots were grouped into blocks."),
-                 p(strong("Combined:"), "the same trial (one treatment factor, CRD or RCBD) was repeated at several sites, seasons or years, and the data of all of them are in one file with a column naming the environment. Tests whether the treatments differ overall and whether their ranking changes between environments (treatment x environment interaction)."))),
+                 p(strong("Combined:"), "the same trial (one treatment factor, CRD or RCBD) was repeated at several sites, seasons or years, and the data of all of them are in one file with a column naming the environment. Tests whether the treatments differ overall and whether their ranking changes between environments (treatment x environment interaction).")),
+        # a rank-based test exists only for one treatment factor in CRD (Kruskal-Wallis) or RCBD (Friedman)
+        conditionalPanel("input.design == 'CRD' || input.design == 'RCBD'",
+          radioButtons("aov_method", "Analysis", c("ANOVA: compare means" = "anova",
+                                                   "Rank-based: Kruskal-Wallis (CRD) or Friedman (RCBD)" = "rank")),
+          help_box("ANOVA or rank-based?",
+            p(strong("ANOVA"), " compares the treatment means. It assumes normal residuals and equal variances; check them on the Outliers & assumptions tab after running."),
+            p(strong("Rank-based"), " compares the ranks of the values instead, so it does not need those assumptions. Use it when the checks fail and a transformation does not help, or for scores and ranks. It needs one treatment factor; in RCBD each treatment must appear exactly once in every block (Friedman). It gives medians and a chi-square test instead of means, an ANOVA table and a CV."),
+            p("Choose the method before looking at the results, not the one that gives the smaller p value.")))),
       side_step(2, "Data",
         radioButtons("src", NULL, c("Built-in example" = "ex", "Upload file" = "up"), inline = TRUE),
         conditionalPanel("input.src == 'ex'", uiOutput("example_picker")),
@@ -282,7 +290,7 @@ ui <- bslib::page_navbar(
         helpText("Letters are shown only when the F test of the effect is significant (protected test); otherwise the table says why they are missing."),
         help_box("Which test?", p("LSD is the least strict, Duncan (DMRT) is in between, and Tukey HSD is the strictest: it is the safest when there are many levels because it controls the chance of a false difference among all pairs. Means sharing a letter are not significantly different.")),
         selectInput("alpha", "Significance level", c("0.05" = 0.05, "0.01" = 0.01, "0.10" = 0.10))),
-      run_bar("go_aov", "Run ANOVA")
+      run_bar("go_aov", "Run analysis")
     ),
     mainPanel(
       uiOutput("aov_msg"),
@@ -315,7 +323,7 @@ ui <- bslib::page_navbar(
 
 # ---- server ----------------------------------------------------------------------------------------------------
 server <- function(input, output, session) {
-  observeEvent(input$home_aov, updateNavbarPage(session, "nav", selected = "Analysis of variance"))
+  observeEvent(input$home_aov, updateNavbarPage(session, "nav", selected = "Compare treatments"))
   observeEvent(input$home_tt, updateNavbarPage(session, "nav", selected = "t-test"))
   observeEvent(input$home_corr, updateNavbarPage(session, "nav", selected = "Correlation"))
   observeEvent(input$home_reg, updateNavbarPage(session, "nav", selected = "Regression"))

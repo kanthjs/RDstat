@@ -167,12 +167,23 @@
     bindCache(dat(), input$design, input$resp, input$transform, input$trt, input$env, input$trt_main, input$trt_sub, input$blk, input$pw, input$alpha, cache = star_cache) |>
     bindEvent(input$go_aov)
   ok <- reactive({ r <- res(); req(!inherits(r, "star_error")); r })
-  # rank-based alternative for one treatment factor in a CRD (Kruskal-Wallis) or an RCBD (Friedman); NULL otherwise
-  np_res <- reactive({
+  # the method and the untransformed data at the time Run was pressed (ranks are taken of the original values, so that
+  # the medians are in the original unit); priority so that they are set before the results are drawn
+  aov_rank <- reactiveVal(FALSE)
+  run_data <- reactiveVal(NULL)
+  observeEvent(input$go_aov, {
+    aov_rank(identical(input$aov_method, "rank") && input$design %in% c("CRD", "RCBD"))
+    run_data(tryCatch(dat(), error = function(e) NULL))
+  }, priority = 10)
+  # rank-based test for one treatment factor in a CRD (Kruskal-Wallis) or an RCBD (Friedman); NULL for other designs,
+  # a star_error when it cannot be run (two factors, or a block without every treatment exactly once)
+  np_try <- reactive({
     r <- ok()
-    if (!r$design %in% c("CRD", "RCBD") || length(r$factors) != 1) return(NULL)
-    tryCatch(star_nonparametric(r$data, r$response, r$factors, r$block, r$alpha), error = function(e) NULL)
+    if (!r$design %in% c("CRD", "RCBD")) return(NULL)
+    d <- run_data(); req(d)
+    tryCatch(star_nonparametric(d, r$original_response %||% r$response, r$factors, r$block, r$alpha), error = as_error)
   })
+  np_res <- reactive({ np <- np_try(); if (inherits(np, "star_error")) NULL else np })
   np_display <- function(np) {
     m <- np$means
     out <- data.frame(m$Treatment, fmt_n(m$Median), formatC(m$N, format = "d"), fmt_n(m$Rank), stringsAsFactors = FALSE)
@@ -180,21 +191,42 @@
     if (np$significant) out$Group <- m$Group
     out
   }
-  np_ui <- function(np) tagList(
-    p(np$summary),
+  np_ui <- function(np, summary = TRUE) tagList(
+    if (summary) p(np$summary),
     html_table(np_display(np)),
     p(class = "text-muted small mb-0", if (np$significant) sprintf("Treatments with the same letter do not differ (comparison of %s, agricolae). ", tolower(np$rank_label)) else "",
-      "The rank-based test does not assume normal residuals or equal variances; use it when the checks above fail and a transformation does not help."))
+      "The rank-based test does not assume normal residuals or equal variances."))
+  # the results screen when Analysis is rank-based: the test, medians and letters take the place of the ANOVA
+  rank_results_ui <- function(r) {
+    np <- np_try()
+    if (inherits(np, "star_error")) return(error_box(paste("The rank-based test could not be run:", np$message)))
+    m <- np$means; top <- m[which.max(m$Median), ]
+    tagList(
+      notes_ui(r$data_notes),
+      div(class = if (np$significant) "alert alert-success" else "alert alert-info", np$summary),
+      key_stats(
+        stat("Test", np$name, if (is.null(np$block)) "CRD, ranks of all plots" else paste("RCBD, ranks within each", np$block)),
+        stat("Chi-square", sprintf("%.2f", np$statistic), paste("df =", np$df)),
+        stat("p value", fmt_p(np$p), if (np$significant) paste("significant at", format(np$alpha)) else paste("not significant at", format(np$alpha))),
+        stat("Highest median", fmt_n(top$Median), top$Treatment)),
+      if (!is.null(r$transform)) div(class = "alert alert-light small", icon("circle-info"),
+        " The data transformation is not used: ranks do not change under it, and the medians are in the original unit."),
+      result_card("สรุปผล (ภาษาไทย)", p(lang = "th", thai_summary_np(np)), copy = "cp_np_th", copy_label = "คัดลอก"),
+      result_card(paste(np$name, "test"), np_ui(np, summary = FALSE), copy = "cp_np", copy_label = "Copy table"),
+      result_card("APA-style report", p(np$apa), copy = "cp_np_apa"),
+      result_card("R code to repeat this analysis", tags$pre(class = "small mb-0", style = "white-space: pre-wrap;", np_script()), copy = "cp_np_script", copy_label = "Copy code"),
+      p(class = "text-muted small", icon("circle-info"), " The ANOVA table, means and CV are not shown because Analysis is set to rank-based. Choose ANOVA under Experimental design to see them."))
+  }
   # The data behind the current results (for plotting observations). Stored when Run is pressed: an eventReactive would
   # only read the data when first asked for, by which time the user may have switched to another example.
   used_data <- reactiveVal(NULL)
   # with a transformation the plotted observations must be on the transformed scale, like the means
   observeEvent(input$go_aov, used_data(tryCatch(transform_response(dat(), input$resp, input$transform)$data, error = function(e) dat())))
   aov_sig <- reactive(list(input$design, input$src, input$example, input$file$name, to_long(), input$resp, input$transform, input$trt, input$env, input$trt_main, input$trt_sub,
-                           input$blk, input$pw, input$alpha))
+                           input$blk, input$pw, input$alpha, input$aov_method))
   aov_stale <- stale_flag("go_aov", aov_sig)
   output$aov_msg <- renderUI({
-    if (!isTRUE(input$go_aov > 0)) return(run_hint("Run ANOVA"))
+    if (!isTRUE(input$go_aov > 0)) return(run_hint("Run analysis"))
     r <- res()
     tagList(if (aov_stale()) stale_note("go_aov"), if (inherits(r, "star_error")) error_box(r$message))
   })
@@ -216,7 +248,9 @@
   })
 
   output$results_ui <- renderUI({
-    r <- ok(); tb <- tables()
+    r <- ok()
+    if (aov_rank()) return(rank_results_ui(r))
+    tb <- tables()
     sig <- r$effects$Effect[r$effects$Significant %in% TRUE]
     # with a significant interaction the overall means are not compared, so the highest cell mean is shown instead
     top_stat <- if (isTRUE(r$interaction_significant) && !is.null(r$cells)) {
@@ -261,6 +295,7 @@
 
   output$plot_picker <- renderUI({
     r <- ok()
+    if (aov_rank()) return(p(class = "text-muted small", "Box plot of the observations, for the rank-based test (error bars and the classic style do not apply)."))
     ch <- c(setNames(r$factors, paste("Means of", r$factors)), if (!is.null(r$cells)) c("Interaction (grouped bars)" = "interaction", if (use_gg()) c("Interaction (lines)" = "interaction_line")))
     cur <- isolate(input$plot_effect)   # keep the choice when the style is switched
     if (length(ch) > 1) selectInput("plot_effect", "Plot", ch, selected = if (!is.null(cur) && cur %in% ch) cur else if (r$interaction_significant) "interaction" else r$factors[1])
@@ -270,8 +305,14 @@
   # the ggplot2 figure (a ggplot object); the classic style is drawn with base graphics instead
   gg_means <- reactive(apply_plot_customizations(do.call(star_ggplot_means, c(list(ok(), plot_effect(), data = if (isTRUE(input$gg_points)) used_data(), error = input$gg_error %||% "se",
                                                          main = input$gg_title, xlab = input$gg_xlab, ylab = input$gg_ylab), plot_style("aov"))), "gg", "aov"))
+  gg_rank <- reactive({ np <- np_try(); req(!is.null(np), !inherits(np, "star_error"))
+    apply_plot_customizations(do.call(star_ggplot_rank, c(list(np, points = isTRUE(input$gg_points), main = input$gg_title, xlab = input$gg_xlab, ylab = input$gg_ylab),
+                                                         plot_style("aov"))), "gg", "aov") })
+  # the figure shown and downloaded: the box plot for a rank-based analysis, else the means
+  gg_current <- reactive(if (aov_rank()) gg_rank() else gg_means())
   draw_means <- function() {
-    if (use_gg()) print(gg_means())
+    if (aov_rank()) print(gg_rank())
+    else if (use_gg()) print(gg_means())
     else star_plot_means(ok(), sub("_line$", "", plot_effect()), main = input$gg_title, xlab = input$gg_xlab, ylab = input$gg_ylab)
   }
   output$means_plot <- renderPlot(draw_means(),
@@ -289,7 +330,9 @@
         o[] <- lapply(o, function(v) if (is.numeric(v)) fmt_n(v, 3) else as.character(v))
         tagList(h4("Flagged observations"), p(class = "text-muted", "Row = row number in your data. |Studentized residual| > 3 = outlier, 2 to 3 = suspect."), html_table(o))
       },
-      if (!is.null(np <- np_res())) result_card(paste("Rank-based alternative:", np$name, "test"), np_ui(np), copy = "cp_np", copy_label = "Copy table"))
+      if (!aov_rank() && !is.null(np <- np_res())) result_card(paste("Rank-based alternative:", np$name, "test"), np_ui(np),
+        p(class = "text-muted small mb-0", "To report this test instead of the ANOVA, set Analysis to rank-based under Experimental design and run again."),
+        copy = "cp_np", copy_label = "Copy table"))
   })
   observeEvent(input$cp_np, session$sendCustomMessage("copy_text", list(what = "Rank-based test", text = paste(np_res()$summary, tsv(np_display(np_res())), sep = "\n"))))
   gg_diag <- function(dg, p) { st <- plot_style(p); star_ggplot_diagnostics(dg, st$base_size - 1, st$theme, st$legend) }
@@ -301,7 +344,15 @@
   output$report <- renderText(paste(report_text(), collapse = "\n"))
 
   xlsx_sheets <- reactive({
-    r <- ok(); tb <- tables()
+    r <- ok()
+    if (aov_rank()) {
+      np <- np_try(); req(!is.null(np), !inherits(np, "star_error"))
+      return(list(`Rank test` = np$means,
+                  Info = data.frame(Item = c("App version", "Design", "Response", "Treatment factor", "Block", "Test", "Chi-square", "df", "p value", "Alpha", "Summary", "Data checks"),
+                                    Value = c(version_label(), r$design, np$response, np$treatment, np$block %||% "-", np$name, round(np$statistic, 4), np$df, signif(np$p, 4), np$alpha, np$summary,
+                                              if (length(r$data_notes)) paste(r$data_notes, collapse = " | ") else "none"))))
+    }
+    tb <- tables()
     sheets <- list(ANOVA = r$anova,
                    # the factors' tables differ in their first column name and in having a Group column
                    `Publication table` = do.call(rbind, lapply(names(tb$agronomy), function(f) {
@@ -329,10 +380,10 @@
                                         if (length(r$data_notes)) paste(r$data_notes, collapse = " | ") else "none"))
     sheets
   })
-  output$dl_xlsx <- downloadHandler("rdstat_anova.xlsx", function(file) writexl::write_xlsx(xlsx_sheets(), file))
+  output$dl_xlsx <- downloadHandler(function() if (aov_rank()) "rdstat_rank_test.xlsx" else "rdstat_anova.xlsx", function(file) writexl::write_xlsx(xlsx_sheets(), file))
   output$dl_aov_plot <- downloadHandler(function() paste0("rdstat_means_plot.", input$aov_fmt), function(file) {
     fmt <- input$aov_fmt %||% "png"; dpi <- as.numeric(input$aov_dpi %||% 300); wh <- export_dims("aov")
-    if (use_gg()) { star_ggsave(gg_means(), file, width = wh[1], height = wh[2], dpi = dpi); return(invisible()) }
+    if (use_gg() || aov_rank()) { star_ggsave(gg_current(), file, width = wh[1], height = wh[2], dpi = dpi); return(invisible()) }
     if (fmt == "png") png(file, width = wh[1] * dpi, height = wh[2] * dpi, res = dpi)
     else if (fmt == "svg") svg(file, width = wh[1], height = wh[2]) else pdf(file, width = wh[1], height = wh[2])
     on.exit(dev.off()); draw_means()
@@ -342,13 +393,31 @@
   # ---- Thai summary and Word report ----
   aov_file_name <- reactive(script_file(input$src == "up", if (input$src == "up") input$file$name else setup()$file))
   aov_script <- reactive(script_aov(ok(), aov_file_name()))
+  np_script <- reactive({ np <- np_try(); req(!is.null(np), !inherits(np, "star_error")); script_np(np, aov_file_name()) })
+  observeEvent(input$cp_np_script, session$sendCustomMessage("copy_text", list(what = "R code", text = np_script())))
+  observeEvent(input$cp_np_th, session$sendCustomMessage("copy_text", list(what = "สรุปผล", text = thai_summary_np(np_try()))))
+  observeEvent(input$cp_np_apa, session$sendCustomMessage("copy_text", list(what = "APA text", text = np_try()$apa)))
   observeEvent(input$cp_aov_script, session$sendCustomMessage("copy_text", list(what = "R code", text = aov_script())))
   observeEvent(input$cp_aov_th, session$sendCustomMessage("copy_text", list(what = "สรุปผล", text = thai_summary_aov(ok()))))
   design_names <- c(CRD = "Completely randomized design (CRD)", RCBD = "Randomized complete block design (RCBD)",
                     SplitCRD = "Split plot in CRD", SplitRCBD = "Split plot in RCBD",
                     CombRCBD = "Combined analysis over environments (RCBD)", CombCRD = "Combined analysis over environments (CRD)")
-  output$dl_doc <- downloadHandler("rdstat_anova_report.doc", function(file) {
-    r <- ok(); tb <- tables(); np <- np_res(); dg <- r$diagnostics
+  output$dl_doc <- downloadHandler(function() if (aov_rank()) "rdstat_rank_test_report.doc" else "rdstat_anova_report.doc", function(file) {
+    r <- ok(); np <- np_res(); dg <- r$diagnostics
+    if (aov_rank()) {
+      req(!is.null(np))
+      png <- tryCatch({ f <- tempfile(fileext = ".png"); star_ggsave(gg_rank(), f, width = 6.5, height = 4.5, dpi = 200); f }, error = function(e) NULL)
+      info <- data.frame(Item = c("Design", "Response", "Treatment factor", "Block", "Test", "Alpha", "Data", "Date", "App"),
+                         Value = c(design_names[[r$design]], np$response, np$treatment, np$block %||% "-", np$name, np$alpha,
+                                   aov_file_name() %||% "-", format(Sys.Date()), paste(app_name, version_label())), stringsAsFactors = FALSE)
+      blocks <- c(word_table(info), w_h2("สรุปผล"), w_p(thai_summary_np(np)), w_p(np$summary),
+        w_h2(paste(np$name, "test")), word_table(np_display(np)),
+        if (np$significant) w_p(sprintf("Treatments with the same letter do not differ (comparison of %s, agricolae).", tolower(np$rank_label)), "small"),
+        w_h2("APA-style report"), w_p(np$apa),
+        w_h2("Methods and references"), w_p(methods_sentence(gg_version())), paste0("<ul>", paste0("<li>", htmltools::htmlEscape(package_refs()), "</li>", collapse = ""), "</ul>"))
+      return(word_doc(file, paste(app_name, "-", np$name, "test:", np$response), blocks, png))
+    }
+    tb <- tables()
     png <- tryCatch({ f <- tempfile(fileext = ".png"); star_ggsave(gg_means(), f, width = 6.5, height = 4.5, dpi = 200); f }, error = function(e) NULL)
     info <- data.frame(Item = c("Design", "Response", "Treatment factor(s)", "Block", "Transformation", "Mean comparison", "Alpha", "Data", "Date", "App"),
                        Value = c(design_names[[r$design]], r$original_response %||% r$response, paste(r$factors, collapse = ", "), r$block %||% "-",

@@ -40,5 +40,41 @@ star_nonparametric <- function(data, response, treatment, block = NULL, alpha = 
   test$summary <- sprintf("%s test: chi-square = %.2f, df = %d, p %s. %s", test$name, test$statistic, test$df, .star_fmt_p(test$p),
                           if (test$significant) sprintf("The %s differ (letters compare the %s).", treatment, tolower(test$rank_label))
                           else sprintf("No significant difference among the %s.", treatment))
-  structure(c(test, list(means = out, treatment = treatment, response = response, alpha = alpha)), class = "star_nonparametric")
+  res <- structure(c(test, list(means = out, treatment = treatment, response = response, block = block, alpha = alpha,
+                                data = data.frame(Treatment = tr, y = y, stringsAsFactors = FALSE))), class = "star_nonparametric")
+  res$apa <- .star_np_apa(res)
+  res
+}
+
+## APA-style sentence for a Kruskal-Wallis or Friedman test
+.star_np_apa <- function(x) {
+  p <- if (is.na(x$p)) "p = NA" else if (x$p < 0.001) "p < .001" else paste("p =", sub("^0\\.", ".", formatC(x$p, format = "f", digits = 3)))
+  sprintf("A %s test showed that %s %s among the levels of %s, χ²(%d, N = %d) = %.2f, %s.", x$name, x$response,
+          if (x$significant) "differed significantly" else "did not differ significantly", x$treatment, x$df, sum(x$means$N), x$statistic, p)
+}
+
+## box plot of the observations of each treatment, with the letters of the rank comparison above the boxes
+star_ggplot_rank <- function(x, main = NULL, xlab = NULL, ylab = NULL, points = TRUE, palette = NULL, base_size = 12,
+                             theme = "classic", legend = "auto") {
+  if (!inherits(x, "star_nonparametric")) stop("'x' must be a result of star_nonparametric().")
+  th <- star_gg_theme(base_size, theme, .star_gg_legend(legend))
+  d <- x$data
+  lv <- levels(d$Treatment)
+  m <- x$means
+  m$Treatment <- factor(m$Treatment, levels = lv)
+  m$top <- as.numeric(tapply(d$y, d$Treatment, max)[as.character(m$Treatment)])
+  p <- ggplot2::ggplot(d, ggplot2::aes(x = .data$Treatment, y = .data$y)) +
+    ggplot2::geom_boxplot(fill = .star_gg_palette(1, palette), alpha = 0.35, width = 0.6, outlier.shape = if (isTRUE(points)) NA else 19)
+  if (isTRUE(points)) p <- p + ggplot2::geom_point(position = ggplot2::position_jitter(width = 0.12, height = 0, seed = 1),
+                                                   shape = 21, size = 1.8, fill = "white", colour = "grey20", alpha = 0.85)
+  if (x$significant) p <- p + ggplot2::geom_text(data = m, ggplot2::aes(x = .data$Treatment, y = .data$top, label = .data$Group),
+                                                 vjust = -0.6, fontface = "bold", inherit.aes = FALSE)
+  note <- if (x$significant) sprintf("Letters: comparison of %s (agricolae), alpha = %s.", tolower(x$rank_label), format(x$alpha))
+          else "No significant difference."
+  p + ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = c(0.02, 0.12))) +
+    ggplot2::labs(x = .star_gg_or(xlab, x$treatment), y = .star_gg_or(ylab, x$response),
+                  title = .star_gg_or(main, paste(x$response, "by", x$treatment)),
+                  subtitle = paste(strwrap(sprintf("%s test, p %s. Boxes: median and quartiles%s. %s", x$name, .star_fmt_p(x$p),
+                                                   if (isTRUE(points)) "; circles: observations" else "", note), 70), collapse = "\n")) +
+    th + .star_gg_xlab_theme(lv)
 }

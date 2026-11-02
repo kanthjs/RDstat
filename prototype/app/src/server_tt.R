@@ -27,7 +27,7 @@
     s <- example_of("tt", tt_setup)
     sel <- if (!is.null(s) && identical(s$group, input$tt_group) && !is.null(s$levels)) s$levels else head(lv, 2)
     tagList(selectizeInput("tt_levels", "Groups to compare (first, second)", lv, selected = sel, multiple = TRUE, options = list(maxItems = 2)),
-            if (length(lv) > 2) helpText(sprintf("This column has %d groups; the t-test compares two. For all of them use Analysis of variance.", length(lv))))
+            if (length(lv) > 2) helpText(sprintf("This column has %d groups; the t-test compares two. For all of them use Compare treatments.", length(lv))))
   })
   observeEvent(input$tt_resp, {   # the response cannot also be the group column
     if (identical(input$tt_type, "independent") && identical(input$tt_group, input$tt_resp))
@@ -50,16 +50,44 @@
   }) |> bindEvent(input$go_tt)
   tt_ok <- reactive({ r <- tt_res(); req(!inherits(r, "star_error")); r })
   tt_stale <- stale_flag("go_tt", reactive(list(input$tt_src, input$tt_example, input$tt_file$name, input$tt_type, input$tt_resp, input$tt_group,
-                                                input$tt_levels, input$tt_x, input$tt_y, input$tt_mu, input$tt_alt, input$tt_var, input$tt_alpha)))
+                                                input$tt_levels, input$tt_x, input$tt_y, input$tt_mu, input$tt_alt, input$tt_var, input$tt_alpha, input$tt_method)))
+  # the test chosen when Run was pressed; priority so that it is set before the results are drawn
+  tt_rank <- reactiveVal(FALSE)
+  observeEvent(input$go_tt, tt_rank(identical(input$tt_method, "wilcox")), priority = 10)
   output$tt_msg <- renderUI({
-    if (!isTRUE(input$go_tt > 0)) return(run_hint("Run t-test"))
+    if (!isTRUE(input$go_tt > 0)) return(run_hint("Run test"))
     r <- tt_res()
     tagList(if (tt_stale()) stale_note("go_tt"), if (inherits(r, "star_error")) error_box(r$message))
   })
   tt_tables <- reactive({ r <- tt_ok(); list(desc = tt_desc_display(r), test = tt_test_display(r), normal = tt_normal_display(r), nonpar = tt_nonpar_display(r)) })
 
+  # the results screen when the Wilcoxon test is chosen: it takes the place of the t-test
+  tt_rank_ui <- function(r, tb) {
+    w <- r$nonparametric; k <- tt_digits(r); sig <- !is.na(w$P) && w$P < r$alpha
+    g <- r$groups[!is.na(r$groups$N), ]   # the groups or measurements, not the row of their difference
+    tagList(
+      notes_ui(r$data_notes),
+      div(class = if (sig) "alert alert-success" else "alert alert-info", r$nonparametric_summary),
+      key_stats(
+        stat("p value", fmt_p(w$P), if (sig) paste("significant at", format(r$alpha)) else paste("not significant at", format(r$alpha))),
+        stat(if (r$type == "independent") "Hodges-Lehmann shift" else "Hodges-Lehmann estimate", fmt_n(w$Estimate, k),
+             if (is.na(w$Lower)) "no interval" else sprintf("%g%% CI %s to %s", 100 * r$conf_level, fmt_n(w$Lower, k), fmt_n(w$Upper, k))),
+        stat("Statistic", sub(" = .*", "", w$Statistic), sub(".* = ", "", w$Statistic)),
+        stat("Medians", paste(fmt_n(g$Median, k), collapse = " / "), paste(g$Group, collapse = " / "))),
+      result_card("สรุปผล (ภาษาไทย)", p(lang = "th", thai_summary_tt_np(r)), copy = "cp_tt_th", copy_label = "คัดลอก"),
+      result_card("Descriptive statistics", html_table(tb$desc), copy = "cp_tt_desc", copy_label = "Copy table"),
+      result_card(w$Method, html_table(tb$nonpar),
+        p(class = "text-muted small mb-0", "Estimate = Hodges-Lehmann ", if (r$type == "independent") "shift between the groups" else "median difference",
+          "; with tied values (or zero differences), or 50 or more values, the p value and the interval use a normal approximation."),
+        copy = "cp_tt_np", copy_label = "Copy table"),
+      result_card("APA-style report", p(r$nonparametric_apa), copy = "cp_tt_apa"),
+      result_card("R code to repeat this analysis", tags$pre(class = "small mb-0", style = "white-space: pre-wrap;", tt_script()), copy = "cp_tt_script", copy_label = "Copy code"),
+      p(class = "text-muted small", icon("circle-info"), " The t-test is not shown because the Wilcoxon test is chosen under Kind of comparison."))
+  }
   output$tt_results_ui <- renderUI({
-    r <- tt_ok(); tb <- tt_tables(); tr <- r$test[r$chosen, ]; k <- tt_digits(r)
+    r <- tt_ok(); tb <- tt_tables()
+    if (tt_rank()) return(tt_rank_ui(r, tb))
+    tr <- r$test[r$chosen, ]; k <- tt_digits(r)
     nrm <- r$normality; bad_norm <- nrm$Data[!is.na(nrm$P) & nrm$P < r$alpha]
     small <- min(nrm$N) < 30
     tagList(
@@ -83,12 +111,12 @@
         if (!is.null(r$variance)) p(sprintf("Equality of variances, F test: F(%d, %d) = %.2f, p %s. %s", r$variance$DF1, r$variance$DF2, r$variance$F, .star_fmt_p(r$variance$P),
                                             if (r$variance$P < r$alpha) "The variances differ, so use the Welch test." else "No evidence that the variances differ.")),
         p(class = "text-muted small mb-0",
-          if (length(bad_norm) && small) "The data depart from a normal distribution and the sample is small, so the t-test may be unreliable; check the plot for outliers, or use the rank-based (Wilcoxon) test below or a transformation."
+          if (length(bad_norm) && small) "The data depart from a normal distribution and the sample is small, so the t-test may be unreliable; check the plot for outliers, or choose the Wilcoxon test under Kind of comparison."
           else if (length(bad_norm)) "The data depart somewhat from a normal distribution, but with 30 or more observations per group the t-test is usually still reliable."
           else "The normality tests are only a guide: with few observations they have little power, so also look at the plot.")),
       result_card("Rank-based alternative (nonparametric)", html_table(tb$nonpar),
         div(class = paste("small mb-0", if (length(bad_norm) && small) "alert alert-warning" else "text-muted"),
-            "Does not assume a normal distribution. ", if (length(bad_norm) && small) strong("Report this test, because the data are not normal and the sample is small. "),
+            "Does not assume a normal distribution. ", if (length(bad_norm) && small) strong("Consider reporting this test, because the data are not normal and the sample is small: choose Wilcoxon under Kind of comparison. "),
             "Estimate = Hodges-Lehmann ", if (r$type == "independent") "shift between the groups" else "median difference", "; ",
             "with tied values (or zero differences) the p value and the interval use a normal approximation."),
         copy = "cp_tt_np", copy_label = "Copy table"),
@@ -103,20 +131,20 @@
   output$dl_tt_plot <- plot_download("tt", gg_tt)
   tt_script <- reactive(script_tt(tt_ok(), tt_file_name()))
   tt_file_name <- reactive(script_file(input$tt_src == "up", if (input$tt_src == "up") input$tt_file$name else tt_setup[[input$tt_example]]$file))
-  copy_button("cp_tt_th", "สรุปผล", function() thai_summary_tt(tt_ok()))
+  copy_button("cp_tt_th", "สรุปผล", function() if (tt_rank()) thai_summary_tt_np(tt_ok()) else thai_summary_tt(tt_ok()))
   output$dl_tt_doc <- downloadHandler("rdstat_ttest_report.doc", function(file) {
     r <- tt_ok(); tb <- tt_tables()
     png <- tryCatch({ f <- tempfile(fileext = ".png"); star_ggsave(gg_tt(), f, width = 6.5, height = 4.5, dpi = 200); f }, error = function(e) NULL)
     blocks <- c(w_p(paste("Data:", tt_file_name() %||% "-", "| Date:", format(Sys.Date()), "|", app_name, version_label()), "small"),
-      w_h2("สรุปผล"), w_p(thai_summary_tt(r)), w_p(r$summary),
+      w_h2("สรุปผล"), if (tt_rank()) c(w_p(thai_summary_tt_np(r)), w_p(r$nonparametric_summary)) else c(w_p(thai_summary_tt(r)), w_p(r$summary)),
       w_h2("Descriptive statistics"), word_table(tb$desc),
-      w_h2("t-test"), word_table(tb$test),
+      if (tt_rank()) c(w_h2(r$nonparametric$Method), word_table(tb$nonpar)) else c(w_h2("t-test"), word_table(tb$test)),
       w_h2("Assumption checks"), word_table(tb$normal),
       if (!is.null(r$variance)) w_p(sprintf("Equality of variances, F test: F(%d, %d) = %.2f, p %s.", r$variance$DF1, r$variance$DF2, r$variance$F, .star_fmt_p(r$variance$P))),
-      w_h2("Rank-based alternative"), word_table(tb$nonpar),
-      w_h2("APA-style report"), w_p(r$apa),
+      if (!tt_rank()) c(w_h2("Rank-based alternative"), word_table(tb$nonpar)),
+      w_h2("APA-style report"), w_p(if (tt_rank()) r$nonparametric_apa else r$apa),
       w_h2("Methods and references"), w_p(methods_sentence(gg_version())), paste0("<ul>", paste0("<li>", htmltools::htmlEscape(package_refs()), "</li>", collapse = ""), "</ul>"))
-    word_doc(file, paste(app_name, "-", r$method_name), blocks, png)
+    word_doc(file, paste(app_name, "-", if (tt_rank()) r$nonparametric$Method else r$method_name), blocks, png)
   })
   output$dl_tt_xlsx <- downloadHandler("rdstat_ttest.xlsx", function(file) {
     r <- tt_ok()
@@ -125,13 +153,13 @@
     vars <- switch(r$type, independent = sprintf("%s by %s (%s vs %s)", r$response, r$group, r$labels[1], r$labels[2]),
                    paired = paste(r$x, "-", r$y), one = sprintf("%s vs %s", r$response, format(r$mu)))
     sheets$Info <- data.frame(Item = c("App version", "Test", "Variables", "Alternative", "Alpha", "Effect size (Cohen's d)", "Summary", "Data checks"),
-                              Value = c(version_label(), r$method_name, vars, r$alternative, r$alpha, round(r$effect_size, 4), r$summary,
+                              Value = c(version_label(), if (tt_rank()) r$nonparametric$Method else r$method_name, vars, r$alternative, r$alpha, round(r$effect_size, 4), if (tt_rank()) r$nonparametric_summary else r$summary,
                                         if (length(r$data_notes)) paste(r$data_notes, collapse = " | ") else "none"))
     writexl::write_xlsx(sheets, file)
   })
   copy_button("cp_tt_desc", "Descriptive statistics", function() tsv(tt_tables()$desc))
   copy_button("cp_tt_test", "t-test table", function() tsv(tt_tables()$test))
   copy_button("cp_tt_np", "Wilcoxon table", function() tsv(tt_tables()$nonpar))
-  copy_button("cp_tt_apa", "APA text", function() tt_ok()$apa)
+  copy_button("cp_tt_apa", "APA text", function() if (tt_rank()) tt_ok()$nonparametric_apa else tt_ok()$apa)
   copy_button("cp_tt_script", "R code", function() tt_script())
 

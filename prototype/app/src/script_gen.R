@@ -247,6 +247,27 @@ script_aov <- function(r, file = NULL) {
   paste(c(head, "", body), collapse = "\n")
 }
 
+# Kruskal-Wallis (CRD) or Friedman (RCBD) test with the rank comparisons of agricolae, as the app runs them
+script_np <- function(np, file = NULL) {
+  f <- np$treatment; blk <- np$block
+  head <- script_header(sprintf("%s test of %s by %s%s", np$name, np$response, f, if (!is.null(blk)) paste(", block", blk) else ""), file)
+  body <- c(
+    "# rank-based tests use the agricolae package: install.packages(\"agricolae\")",
+    script_num("y", np$response),
+    "d$y <- y",
+    sprintf("for (v in %s) d[[v]] <- factor(trimws(as.character(d[[v]])))", r_vec(c(f, blk))),
+    sprintf("d <- d[complete.cases(d[c(\"y\", %s)]), ]   # rows with a missing value are left out", paste(r_str(c(f, blk)), collapse = ", ")),
+    "",
+    if (is.null(blk)) sprintf("np <- agricolae::kruskal(d$y, d[[%s]], alpha = %s, console = FALSE)   # Kruskal-Wallis", r_str(f), r_num(np$alpha))
+    else c("# Friedman: each treatment exactly once in every block; the values are ranked within each block",
+           sprintf("np <- agricolae::friedman(d[[%s]], d[[%s]], d$y, alpha = %s, console = FALSE)", r_str(blk), r_str(f), r_num(np$alpha))),
+    "np$statistics   # chi-square, df and p value (p.chisq)",
+    "np$means        # medians (Q50) and ranks",
+    "np$groups       # letters: use them only when the test is significant")
+  paste(c(head, "", body), collapse = "
+")
+}
+
 # Split plot: whole plots are block x main-plot level; Error(a) tests the main-plot factor, Error(b) the sub-plot
 # factor and the interaction. Sub-plot means use Error(b), main-plot means Error(a); with a significant interaction the
 # main factor is compared within sub-plot levels with the pooled error and Satterthwaite df, as in the app.

@@ -52,12 +52,33 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   session$setInputs(transform = "none"); run(pw = "HSD")
   check(!grepl("assumptions are not met", html(output$results_ui)) && !grepl("ข้อตกลงเบื้องต้น", html(output$results_ui)), "Results tab: no verdict on the assumptions")
   check(round(np_res()$statistic, 2) == 20.85 && np_res()$name == "Kruskal-Wallis" && grepl("Rank-based alternative", html(output$diag_ui)), "CRD 1 factor: Kruskal-Wallis chi-square = 20.85 (kruskal.test)")
+  # rank-based analysis chosen by the user: it replaces the ANOVA on the results screen and in the downloads
+  run(aov_method = "rank")
+  ui <- html(output$results_ui)
+  check(aov_rank() && grepl("Kruskal-Wallis test", ui) && !grepl("Analysis of variance", ui) && !grepl("Means (publication layout)", ui, fixed = TRUE) && grepl("χ²(6, N = 28) = 20.85", ui, fixed = TRUE),
+        "Rank method: Kruskal-Wallis replaces the ANOVA on the results screen")
+  check(!grepl("Rank-based alternative", html(output$diag_ui)), "Rank method: not repeated on the assumptions tab")
+  e <- run_script(np_script()); check(isTRUE(all.equal(e$np$statistics$p.chisq, np_try()$p)) && identical(trimws(e$np$groups[np_try()$means$Treatment, "groups"]), np_try()$means$Group),
+                                      "Rank method: Kruskal-Wallis script reproduces the app (p and letters)")
+  session$setInputs(aov_fmt = "png")
+  check(identical(names(xlsx_sheets()), c("Rank test", "Info")) && inherits(gg_current(), "ggplot") && file.size(output$dl_aov_plot) > 3000, "Rank method: Excel sheets and box plot")
+  doc <- readLines(output$dl_doc, warn = FALSE); html_part <- rawToChar(jsonlite::base64_dec(paste(doc[(grep("Content-Location: file:///C:/rdstat/report.htm", doc) + 2):(grep("^------=_NextPart_RDstat", doc)[2] - 2)], collapse = "")))
+  Encoding(html_part) <- "UTF-8"
+  check(grepl("Kruskal-Wallis test", html_part) && !grepl("<h2>Analysis of variance</h2>", html_part, fixed = TRUE), "Rank method: Word report gives the rank test, not the ANOVA")
+  session$setInputs(transform = "log"); run(aov_method = "rank")
+  crd <- read.csv("example_crd.csv", stringsAsFactors = FALSE)
+  check(isTRUE(all.equal(np_try()$means$Median, as.numeric(tapply(crd$GrainYield, factor(crd$Insecticide, levels = np_try()$means$Treatment), median)))) &&
+        grepl("transformation is not used", html(output$results_ui)), "Rank method: medians in the original unit when a transformation is set")
+  session$setInputs(transform = "none"); run(aov_method = "anova")
+  check(!aov_rank() && grepl("Analysis of variance", html(output$results_ui)), "Rank method: back to ANOVA")
 
   # ---- CRD, two factors (tooth growth) ----
   session$setInputs(design = "CRD", example = "crd2", resp = "len", trt = c("supp", "dose"))
   run(pw = "auto")
   r <- ok()
   check(identical(r$anova$Source, c("supp", "dose", "supp:dose", "Error", "Total")), "CRD 2 factors: ANOVA rows")
+  run(aov_method = "rank"); check(grepl("needs exactly one treatment factor", html(output$results_ui)), "Rank method: two factors give a reason, not a blank screen")
+  run(aov_method = "anova")
   check(r$interaction_significant, "CRD 2 factors: interaction significant")
   check(setequal(names(tables()$simple), c("supp within dose", "dose within supp")), "CRD 2 factors: simple-effect tables")
   check(identical(names(tables()$cells), c("supp", "dose = 0.5", "dose = 1", "dose = 2")), "CRD 2 factors: wide cell means")
@@ -230,6 +251,16 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   session$setInputs(tt_example = "rice", tt_type = "one", tt_resp = "Yield", tt_mu = 3, go_tt = 5)
   r <- tt_ok(); ref <- t.test(read.csv("example_rice.csv")$Yield, mu = 3)
   check(isTRUE(all.equal(r$test$t, unname(ref$statistic))) && isTRUE(all.equal(c(r$test$Lower, r$test$Upper), ref$conf.int[1:2] - 3)), "t-test: one sample matches t.test, CI of the difference")
+  # the Wilcoxon test chosen by the user replaces the t-test
+  session$setInputs(tt_method = "wilcox", go_tt = 6)
+  ui <- html(output$tt_results_ui); r <- tt_ok()
+  check(tt_rank() && grepl("Hodges-Lehmann", ui) && !grepl("Mean - test value", ui) && grepl("Wilcoxon signed-rank", r$nonparametric_apa) && grepl(r$nonparametric_apa, ui, fixed = TRUE),
+        "Wilcoxon method: replaces the t-test on the results screen, with its APA sentence")
+  check(isTRUE(all.equal(r$groups$Median[1], median(read.csv("example_rice.csv")$Yield))) && grepl("Median", ui), "Wilcoxon method: medians shown")
+  session$setInputs(tt_example = "tooth", tt_type = "independent", tt_resp = "len", tt_group = "supp", tt_levels = c("OJ", "VC"), go_tt = 7)
+  check(grepl("W = 575.5", tt_ok()$nonparametric_summary) && grepl("Mann-Whitney", html(output$tt_results_ui)), "Wilcoxon method: rank-sum test for two independent groups")
+  session$setInputs(tt_method = "t", tt_example = "rice", tt_type = "one", tt_resp = "Yield", tt_mu = 3, go_tt = 8)
+  check(!tt_rank() && grepl("Mean - test value", html(output$tt_results_ui)), "Wilcoxon method: back to the t-test")
   e <- run_script(tt_script()); check(isTRUE(all.equal(unname(e$tt$statistic), r$test$t)) && isTRUE(all.equal(e$tt$p.value, r$p)) && isTRUE(all.equal(e$wilcox$p.value, r$nonparametric$P)), "t-test script: one sample reproduces the app")
   check(grepl("t.test(v, mu = mu", tt_script(), fixed = TRUE) && grepl("R code to repeat", html(output$tt_results_ui)), "t-test script: shown on the results screen")
   # scripts must not depend on the app: example data are carried inside, files are read as the app reads them
