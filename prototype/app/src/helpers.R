@@ -309,6 +309,15 @@ result_card <- function(title, ..., copy = NULL, copy_label = "Copy") bslib::car
   bslib::card_header(class = "d-flex justify-content-between align-items-center", span(title),
                      if (!is.null(copy)) actionButton(copy, tagList(icon("copy"), " ", copy_label), class = "btn-sm")),
   bslib::card_body(...))
+# the R code that repeats an analysis, folded under a one-line heading: most users never need it, and those who want
+# to check the results or rerun them in R open it. `missing` is shown instead when there is no code for the analysis.
+code_card <- function(code, copy, missing = NULL) tags$details(class = "code-card",
+  tags$summary(icon("code"), " R code to repeat this analysis",
+               span(class = "code-card-hint", "for checking the results or running them again in R")),
+  div(class = "code-card-body",
+      if (is.null(code)) p(class = "text-muted mb-0", missing)
+      else tagList(div(class = "text-end mb-2", actionButton(copy, tagList(icon("copy"), " Copy code"), class = "btn-sm")),
+                   tags$pre(class = "small mb-0", style = "white-space: pre-wrap;", code))))
 # settings changed after the last run: the results on the screen no longer match the controls
 # outputs that show results; greyed out and made inert (no clicks, copying or downloading) while the results are stale
 stale_dim <- function(tag) tagAppendAttributes(tag, class = "stale-dim")

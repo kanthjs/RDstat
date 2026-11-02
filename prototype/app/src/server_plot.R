@@ -8,7 +8,7 @@
   })
   plot_style <- function(p) {
     get <- function(k) input[[paste0(p, "_", k)]] %||% style_defaults[[k]]
-    list(palette = get("pal"), theme = get("theme"), base_size = as.numeric(get("size")), legend = get("legend"))
+    list(palette = get("pal"), theme = get("theme"), base_size = as.numeric(get("size")), legend = get("legend"), shape = get("shape"), point_size = as.numeric(get("psize")))
   }
   # width and height in inches of a downloaded plot
   export_dims <- function(p) {

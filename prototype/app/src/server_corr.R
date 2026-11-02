@@ -36,7 +36,7 @@
         copy = "cp_corr_matrix", copy_label = "Copy table"),
       result_card("All pairs", html_table(tb$pairs), copy = "cp_corr_pairs", copy_label = "Copy table"),
       result_card("APA-style report", lapply(r$apa, p), copy = "cp_corr_apa"),
-      result_card("R code to repeat this analysis", tags$pre(class = "small mb-0", style = "white-space: pre-wrap;", corr_script()), copy = "cp_corr_script", copy_label = "Copy code"))
+      code_card(corr_script(), "cp_corr_script"))
   })
   output$corr_view_picker <- renderUI({
     v <- corr_ok()$vars
@@ -53,7 +53,7 @@
       c(x, y)
     }
     apply_plot_customizations(do.call(star_ggplot_correlation, c(list(r, pair, main = input$corr_title, xlab = input$corr_xlab, ylab = input$corr_ylab,
-                                            type = if (v == "heat") "heatmap" else "matrix"), plot_style("corr"))), "corr")
+                                            type = if (v == "heat") "heatmap" else "matrix", heat = input$corr_heat), plot_style("corr"))), "corr")
   })
   output$corr_plot <- renderPlot(print(gg_corr()),
     width = function() {
