@@ -24,22 +24,31 @@ plot_labels_ui <- function(p) tags$details(class = "plot-labels",
 # unique) and the server keeps the copies in step, so a change on one screen applies to all of them.
 style_screens <- c("aov", "tt", "corr", "reg")
 style_choices <- list(
-  pal = c("Okabe-Ito (colour-blind)" = "okabe", "Greyscale (B&W print)" = "grey", "Viridis" = "viridis",
-          "Soft colours (Set2)" = "set2", "Greens" = "green"),
+  pal = c("Okabe-Ito (colour-blind)" = "okabe", "Dark2" = "dark2", "Soft colours (Set2)" = "set2",
+          "Nature (NPG)" = "npg", "Science (AAAS)" = "aaas", "The Lancet" = "lancet", "J Clin Oncol (JCO)" = "jco",
+          "Viridis" = "viridis", "Cividis (colour-blind)" = "cividis", "Mako" = "mako", "Blues" = "blues", "Yellow-green-blue" = "ylgnbu",
+          "Greyscale (B&W print)" = "grey", "Greens" = "green"),
+  heat = c("Same as colours" = "auto", "Red - blue (RdBu)" = "rdbu", "Brown - teal (BrBG)" = "brbg", "Pink - green (PiYG)" = "piyg",
+           "Vik" = "vik", "Berlin" = "berlin"),
+  psize = c("Small" = 0.6, "Medium (default)" = 1, "Large" = 1.4, "Extra large" = 1.8, "Huge" = 2.4),
+  shape = c("Circle" = "circle", "Square" = "square", "Diamond" = "diamond", "Triangle" = "triangle", "Triangle (down)" = "triangle_down"),
   theme = c("Classic (axes only)" = "classic", "White with grid lines" = "bw", "Minimal" = "minimal", "Grey background" = "grey"),
   size = c("9 (journal figure)" = 9, "10" = 10, "11" = 11, "12 (default)" = 12, "14" = 14, "16 (slides)" = 16, "18" = 18, "20" = 20),
   legend = c("Automatic" = "auto", "Top" = "top", "Right" = "right", "Bottom" = "bottom", "None" = "none"),
   xangle = c("Automatic" = "auto", "Horizontal (0°)" = "0", "Angled (45°)" = "45", "Vertical (90°)" = "90"))
-style_defaults <- c(pal = "okabe", theme = "classic", size = "12", legend = "auto", xangle = "auto")
+style_defaults <- c(pal = "okabe", theme = "classic", size = "12", legend = "auto", xangle = "auto", shape = "circle", psize = "1")
 plot_style_ui <- function(p) tags$details(class = "plot-labels",
-  tags$summary("Plot style: colours, theme, font size"),
+  tags$summary("Plot style: colours, points, theme, font size"),
   fluidRow(
     column(3, selectInput(paste0(p, "_pal"), "Colours", style_choices$pal)),
     column(3, selectInput(paste0(p, "_theme"), "Theme", style_choices$theme)),
     column(3, selectInput(paste0(p, "_size"), "Font size (pt)", style_choices$size, selected = 12)),
     column(3, selectInput(paste0(p, "_legend"), "Legend", style_choices$legend))),
   fluidRow(
-    column(4, selectInput(paste0(p, "_xangle"), "X-axis labels", style_choices$xangle))),
+    column(3, selectInput(paste0(p, "_shape"), "Point shape", style_choices$shape)),
+    column(3, selectInput(paste0(p, "_psize"), "Point size", style_choices$psize, selected = 1)),
+    column(3, selectInput(paste0(p, "_xangle"), "X-axis labels", style_choices$xangle)),
+    if (p == "corr") column(3, selectInput("corr_heat", "Heatmap colours (+/- correlation)", style_choices$heat))),
   p(class = "text-muted", style = "font-size: 13px;", "These settings apply to every plot in the app. For a one-column journal figure, use font size 9 or 10."))
 # downloaded plot size, width x height in cm
 export_sizes <- list(std = c(20, 14), j1 = c(8.5, 6.5), j2 = c(17.5, 12), slide = c(25, 14))
