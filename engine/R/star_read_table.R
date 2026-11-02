@@ -69,19 +69,20 @@ star_xlsx_merges <- function(path) {
   }, error = function(e) none, warning = function(w) none)
 }
 
-## copy the value of each merged range spanning several rows into its empty cells. Ranges within one row (a heading
-## over several columns) are left alone: those are headings, not labels of rows.
+## copy the value of each merged range spanning several rows of one column into its empty cells. Ranges over several
+## columns (a heading, or a title merged over a block of cells) are left alone: those are not labels of rows, and
+## filling a title into every cell of its block would make it look like the header row.
 star_fill_merged <- function(cells, merges) {
   n <- 0L; ranges <- 0L
   for (i in seq_len(nrow(merges))) {
     g <- merges[i, ]
-    if (g[["r2"]] <= g[["r1"]] || g[["r1"]] > nrow(cells) || g[["c1"]] > ncol(cells)) next
-    rows <- g[["r1"]]:min(g[["r2"]], nrow(cells)); cols <- g[["c1"]]:min(g[["c2"]], ncol(cells))
-    v <- cells[[g[["c1"]]]][g[["r1"]]]
+    if (g[["r2"]] <= g[["r1"]] || g[["c2"]] > g[["c1"]] || g[["r1"]] > nrow(cells) || g[["c1"]] > ncol(cells)) next
+    rows <- g[["r1"]]:min(g[["r2"]], nrow(cells)); j <- g[["c1"]]
+    v <- cells[[j]][g[["r1"]]]
     if (is.na(v) || !nzchar(trimws(v))) next
-    hit <- 0L
-    for (j in cols) { e <- is.na(cells[[j]][rows]) | !nzchar(trimws(cells[[j]][rows])); cells[[j]][rows[e]] <- v; hit <- hit + sum(e) }
-    if (hit) { n <- n + hit; ranges <- ranges + 1L }
+    e <- is.na(cells[[j]][rows]) | !nzchar(trimws(cells[[j]][rows]))
+    cells[[j]][rows[e]] <- v
+    if (any(e)) { n <- n + sum(e); ranges <- ranges + 1L }
   }
   list(cells = cells, n = n, ranges = ranges)
 }
@@ -130,12 +131,13 @@ star_table_from_cells <- function(raw, notes = character()) {
   m <- m[rowSums(m != "") > 0, , drop = FALSE]
   if (!nrow(m)) stop("The file is empty.")
   filled <- rowSums(m != "")
-  # the header is the first row with at least two cells and no fewer cells than the rows that follow it
-  # (a title line has one cell, or fewer than the table is wide)
+  # the header is the first row with at least two cells and no fewer cells than most of the rows that follow it
+  # (a title line has one cell, or fewer than the table is wide). The median, not the maximum, so that a note typed
+  # beside one plot does not push the header down; an empty top-left cell (row names written by R) counts as filled.
   hdr <- 1L
   for (i in seq_len(min(nrow(m), 20L))) {
     nxt <- filled[seq.int(i + 1L, length.out = min(5L, nrow(m) - i))]
-    if (filled[i] >= 2 && (!length(nxt) || filled[i] >= max(nxt))) { hdr <- i; break }
+    if (filled[i] >= 2 && (!length(nxt) || filled[i] + (!nzchar(m[i, 1])) >= stats::median(nxt))) { hdr <- i; break }
   }
   if (hdr > 1) {
     skipped <- apply(m[seq_len(hdr - 1), , drop = FALSE], 1, \(r) paste(r[nzchar(r)], collapse = " "))
@@ -147,6 +149,14 @@ star_table_from_cells <- function(raw, notes = character()) {
   # columns with neither a name nor any data under the header (e.g. a note beside the title)
   keep <- nzchar(nm) | colSums(m != "") > 0
   nm <- nm[keep]; m <- m[, keep, drop = FALSE]
+  # a column without a name that holds a few notes beside some plots ("missing plot") is not data
+  notes_col <- !nzchar(nm) & colSums(m != "") < nrow(m) / 2
+  if (any(notes_col)) {
+    txt <- unique(m[, notes_col][m[, notes_col] != ""])
+    notes <- c(notes, sprintf("Left out %d column%s without a name holding only notes: %s.", sum(notes_col),
+                              if (sum(notes_col) > 1) "s" else "", paste0("“", utils::head(txt, 3), "”", collapse = ", ")))
+    nm <- nm[!notes_col]; m <- m[, !notes_col, drop = FALSE]
+  }
   # summary rows at the bottom of the table, labelled in their first filled cell
   lab <- apply(m, 1, \(r) r[nzchar(r)][1])
   is_sum <- star_is_summary_label(lab)

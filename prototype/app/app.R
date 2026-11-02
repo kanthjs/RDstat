@@ -240,7 +240,9 @@ wide_rep_cols <- function(d) {
 guess_roles <- function(d, resp) {
   nm <- names(d)
   match1 <- function(rx) nm[grepl(rx, trimws(nm), ignore.case = TRUE, perl = TRUE) & nm != resp][1]
-  blk <- match1("^(rep(lication)?s?|r|block|blocks|blk|b|ซ้ำ(ที่)?|บล็อ[กค](ที่)?)\\s*(no\\.?|number|#)?$")
+  blk <- match1("^(rep(lication)?s?|block|blocks|blk|ซ้ำ(ที่)?|บล็อ[กค](ที่)?)\\s*(no\\.?|number|#)?$")
+  # a bare R or B only when nothing above matched and the columns are not factors named A, B, ...
+  if (is.na(blk) && !any(toupper(trimws(nm)) == "A")) blk <- match1("^[rb]$")
   env <- match1("^(env(ironment)?|site|location|loc|year|season|trial|สถานที่|ปี|ฤดู(กาล)?|ฤดูปลูก|จังหวัด)$")
   rest <- setdiff(nm, c(resp, blk, env))
   num <- numeric_cols(d)

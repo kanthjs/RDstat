@@ -282,6 +282,8 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(identical(g$trt[1], "Treatment") && !"Height" %in% g$trt, "Roles: another measured trait is not offered as a treatment")
   g <- guess_roles(data.frame(x = rep(1:3, 2), z = rep(c("a", "b"), each = 3), y = c(1.1, 2, 3.3, 4.2, 5, 6.7)), "y")
   check(identical(g$trt[1], "z") && identical(g$blk, "x"), "Roles: with no recognised names the block is the remaining label column")
+  g <- guess_roles(data.frame(A = rep(c("a1", "a2"), each = 6), B = rep(c("b1", "b2", "b3"), 4), Rep = rep(1:2, 6), Y = 1:12 + 0.5), "Y")
+  check(identical(g$blk, "Rep") && identical(g$trt[1:2], c("A", "B")), "Roles: factor B is a treatment, not the block, when there is a factor A")
   f4 <- tempfile(fileext = ".csv"); writeLines(c("พันธุ์,ซ้ำ,ผลผลิต", "กข41,1,5557", "กข41,2,5706", "กข47,1,4652", "กข47,2,4965"), f4)
   session$setInputs(design = "RCBD", src = "up", file = list(datapath = f4, name = "thai.csv", size = file.size(f4), type = "text/csv"))
   vp <- html(output$var_pickers)
@@ -294,6 +296,15 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(identical(dat()$Variety, rep(c("RD41", "RD47", "RD49"), each = 3)) && grepl("typed once", html(output$read_note)), "Merged labels: repeated on every row and shown")
   session$setInputs(resp = "Yield", trt = "Variety", blk = "Rep"); run(pw = "LSD")
   check(!inherits(res(), "star_error") && ok()$anova$DF[ok()$anova$Source == "Error"] == 4, "Merged labels: all 9 plots analysed as RCBD (error df 4)")
+  # a title merged over a block of cells (A1:C2) is not repeated into every cell of it
+  cells <- data.frame(a = c("Rice trial 2026", NA, "Trt", "A", "A", "B", "B"), b = c(NA, NA, "Rep", "1", "2", "1", "2"),
+                      c = c(NA, NA, "Y", "4.5", "4.7", "5.1", "5.3"), stringsAsFactors = FALSE)
+  rd <- star_table_from_cells(star_fill_merged(cells, cbind(r1 = 1L, c1 = 1L, r2 = 2L, c2 = 3L))$cells)
+  check(identical(names(rd), c("Trt", "Rep", "Y")) && nrow(rd) == 4, "Merged title: block merged over several columns is read as a title")
+  # a note typed beside one plot does not move the header down or drop plots
+  f5 <- tempfile(fileext = ".csv"); writeLines(c("Trt,Rep,Y", "A,1,4.5", "A,2,4.7,missing plot", "B,1,5.1", "B,2,5.3"), f5)
+  rd <- star_read_table(f5)
+  check(identical(names(rd), c("Trt", "Rep", "Y")) && nrow(rd) == 4 && any(grepl("missing plot", attr(rd, "notes"))), "Read: a note beside one plot is left out and the header kept")
   session$setInputs(src = "ex")
 
   # ---- split plot: the block / replication column is checked before running ----
