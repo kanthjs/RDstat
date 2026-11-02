@@ -6,16 +6,23 @@ library(shiny)
 # first use costs far more than it saves (native R: first split-plot analysis 2.2 s with JIT, 0.5 s without).
 compiler::enableJIT(0)
 # Packages used by the code in ./star; this line (never run) lets Shinylive see that they must be bundled
-if (FALSE) { readxl::read_excel; agricolae::LSD.test; nortest::lillie.test; lmtest::bptest }
-for (f in sort(list.files("star", pattern = "[.]R$", full.names = TRUE))) source(f, local = FALSE)
+if (FALSE) {
+  readxl::read_excel
+  agricolae::LSD.test
+  nortest::lillie.test
+  lmtest::bptest
+}
+for (f in sort(list.files("star", pattern = "[.]R$", full.names = TRUE))) {
+  source(f, local = FALSE)
+}
 
 # Code is split by role into ./src; each file is sourced in the same order as before, so definitions keep their dependencies.
-source("src/helpers.R", local = TRUE)        # formatting, display tables, data reading, UI building blocks
-source("src/ui_components.R", local = TRUE)  # data source / plot label / export controls
-source("src/ui_screens.R", local = TRUE)     # correlation, regression and t-test screens
-source("src/tt_display.R", local = TRUE)     # t-test result tables
-source("src/designs.R", local = TRUE)        # example datasets and design helpers
-source("src/script_gen.R", local = TRUE)     # R scripts that repeat an analysis outside the app
+source("src/helpers.R", local = TRUE) # formatting, display tables, data reading, UI building blocks
+source("src/ui_components.R", local = TRUE) # data source / plot label / export controls
+source("src/ui_screens.R", local = TRUE) # correlation, regression and t-test screens
+source("src/tt_display.R", local = TRUE) # t-test result tables
+source("src/designs.R", local = TRUE) # example datasets and design helpers
+source("src/script_gen.R", local = TRUE) # R scripts that repeat an analysis outside the app
 
 copy_js <- "
 Shiny.addCustomMessageHandler('copy_text', function(msg) {
@@ -31,74 +38,196 @@ Shiny.addCustomMessageHandler('copy_text', function(msg) {
   } else { fallback(); }
 });"
 
-home_card <- function(id, icon_name, title, text, examples) bslib::card(class = "home-card",
-  bslib::card_body(div(class = "icon", icon(icon_name)), h4(title), p(text), p(class = "text-muted small mb-0", examples)),
-  bslib::card_footer(class = "bg-white border-0", actionButton(id, tagList("เริ่มวิเคราะห์ ", icon("arrow-right")), class = "btn-primary w-100")))
-home_step <- function(n, title, text) div(class = "step", div(class = "num", n), div(strong(title), br(), span(class = "text-muted small", text)))
-home_ui <- div(class = "container", style = "max-width: 1040px;",
-  div(class = "hero",
+home_card <- function(id, icon_name, title, text, examples) {
+  bslib::card(
+    class = "home-card",
+    bslib::card_body(
+      div(class = "icon", icon(icon_name)),
+      h4(title),
+      p(text),
+      p(class = "text-muted small mb-0", examples)
+    ),
+    bslib::card_footer(
+      class = "bg-white border-0",
+      actionButton(
+        id,
+        tagList("เริ่มวิเคราะห์ ", icon("arrow-right")),
+        class = "btn-primary w-100"
+      )
+    )
+  )
+}
+home_step <- function(n, title, text) {
+  div(
+    class = "step",
+    div(class = "num", n),
+    div(strong(title), br(), span(class = "text-muted small", text))
+  )
+}
+home_ui <- div(
+  class = "container",
+  style = "max-width: 1040px;",
+  div(
+    class = "hero",
     h2(icon("seedling"), " ", app_name),
-    p("เครื่องมือวิเคราะห์สถิติสำหรับงานทดลองเกษตร พัฒนาต่อยอดจากโปรแกรม STAR ของ IRRI ใช้งานผ่านเบราว์เซอร์ได้ทันที ไม่ต้องติดตั้งโปรแกรม")),
+    p(
+      "เครื่องมือวิเคราะห์สถิติสำหรับงานทดลองเกษตร พัฒนาต่อยอดจากโปรแกรม STAR ของ IRRI ใช้งานผ่านเบราว์เซอร์ได้ทันที ไม่ต้องติดตั้งโปรแกรม"
+    )
+  ),
   h4("ต้องการวิเคราะห์อะไร", class = "mt-0"),
-  bslib::layout_column_wrap(width = "420px", fill = FALSE, heights_equal = "row",
-    home_card("home_tt", "scale-balanced", "เปรียบเทียบค่าเฉลี่ยสองกลุ่ม",
-              "สองกลุ่มต่างกันหรือไม่ หรือหน่วยเดียวกันวัดสองครั้งแล้วเปลี่ยนไปหรือไม่ ทดสอบที (t-test) พร้อมช่วงความเชื่อมั่นและขนาดอิทธิพล",
-              "เช่น พันธุ์ A กับพันธุ์ B, ก่อนและหลังใส่ปุ๋ย · independent, paired, one sample"),
-    home_card("home_aov", "chart-column", "เปรียบเทียบสิ่งทดลอง",
-              "กลุ่มต่าง ๆ ให้ผลผลิตหรือค่าที่วัดแตกต่างกันหรือไม่ วิเคราะห์ความแปรปรวน (ANOVA) พร้อมเปรียบเทียบค่าเฉลี่ย",
-              "เช่น พันธุ์ข้าว อัตราปุ๋ย · CRD, RCBD, split plot, วิเคราะห์ร่วมหลายสถานที่"),
-    home_card("home_corr", "circle-nodes", "ดูความสัมพันธ์ระหว่างตัวแปร",
-              "ค่าที่วัดตั้งแต่สองค่าขึ้นไปเพิ่มหรือลดไปด้วยกันหรือไม่ วิเคราะห์สหสัมพันธ์ (correlation) พร้อมกราฟ",
-              "เช่น ความสูงต้นกับผลผลิต · Pearson, Spearman, Kendall"),
-    home_card("home_reg", "chart-line", "ทำนายค่า",
-              "ค่าตอบสนองเปลี่ยนไปอย่างไรตามตัวแปรอิสระ ได้สมการและค่าทำนายที่ x ใหม่ วิเคราะห์การถดถอย (regression)",
-              "เช่น ผลผลิตตามอัตราเมล็ดพันธุ์ · เส้นตรง, พหุนาม, พหุคูณ")),
+  bslib::layout_column_wrap(
+    width = "420px",
+    fill = FALSE,
+    heights_equal = "row",
+    home_card(
+      "home_tt",
+      "scale-balanced",
+      "เปรียบเทียบค่าเฉลี่ยสองกลุ่ม",
+      "สองกลุ่มต่างกันหรือไม่ หรือหน่วยเดียวกันวัดสองครั้งแล้วเปลี่ยนไปหรือไม่ t-test พร้อมช่วงความเชื่อมั่นและขนาดอิทธิพล",
+      "เช่น พันธุ์ A กับพันธุ์ B, ก่อนและหลังใส่ปุ๋ย · independent, paired, one sample"
+    ),
+    home_card(
+      "home_aov",
+      "chart-column",
+      "เปรียบเทียบสิ่งทดลอง",
+      "กลุ่มต่าง ๆ ให้ผลผลิตหรือค่าที่วัดแตกต่างกันหรือไม่ วิเคราะห์ความแปรปรวน (ANOVA) พร้อมเปรียบเทียบค่าเฉลี่ย",
+      "เช่น พันธุ์ข้าว อัตราปุ๋ย · CRD, RCBD, split plot, วิเคราะห์ร่วมหลายสถานที่"
+    ),
+    home_card(
+      "home_corr",
+      "circle-nodes",
+      "ดูความสัมพันธ์ระหว่างตัวแปร",
+      "ค่าที่วัดตั้งแต่สองค่าขึ้นไปเพิ่มหรือลดไปด้วยกันหรือไม่ วิเคราะห์สหสัมพันธ์ (correlation) พร้อมกราฟ",
+      "เช่น ความสูงต้นกับผลผลิต · Pearson, Spearman, Kendall"
+    ),
+    home_card(
+      "home_reg",
+      "chart-line",
+      "ทำนายค่า",
+      "ค่าตอบสนองเปลี่ยนไปอย่างไรตามตัวแปรอิสระ ได้สมการและค่าทำนายที่ x ใหม่ วิเคราะห์การถดถอย (regression)",
+      "เช่น ผลผลิตตามอัตราเมล็ดพันธุ์ · เส้นตรง, พหุนาม, พหุคูณ"
+    )
+  ),
   h4("ใช้งานอย่างไร"),
-  div(class = "steps",
+  div(
+    class = "steps",
     home_step(1, "เลือกการวิเคราะห์", "จากการ์ดด้านบน หรือเมนูด้านบนของหน้า"),
-    home_step(2, "เลือกข้อมูล", "เริ่มด้วยข้อมูลตัวอย่าง หรืออัปโหลดไฟล์ .csv / .xlsx แถวแรกเป็นชื่อคอลัมน์ หนึ่งแถวต่อหนึ่งแปลง และซ้ำ (Rep) อยู่ในคอลัมน์ของตัวเอง (แบบยาว ไม่ใช่ ซ้ำ 1 | ซ้ำ 2 | ซ้ำ 3)"),
-    home_step(3, "กด Run แล้วดูผล", "ตาราง กราฟ และดาวน์โหลดเป็น Excel หรือรูปภาพ")),
-  div(class = "alert alert-success d-flex gap-2 align-items-start", icon("lock"),
-      span("ข้อมูลของคุณถูกวิเคราะห์ในเบราว์เซอร์ของคุณเท่านั้น ไม่ได้ถูกส่งไปยังเซิร์ฟเวอร์ใด")))
+    home_step(
+      2,
+      "เลือกข้อมูล",
+      "เริ่มด้วยข้อมูลตัวอย่าง หรืออัปโหลดไฟล์ .csv / .xlsx แถวแรกเป็นชื่อคอลัมน์ หนึ่งแถวต่อหนึ่งแปลง และซ้ำ (Rep) อยู่ในคอลัมน์ของตัวเอง (แบบยาว ไม่ใช่ ซ้ำ 1 | ซ้ำ 2 | ซ้ำ 3)"
+    ),
+    home_step(3, "กด Run แล้วดูผล", "ตาราง กราฟ และดาวน์โหลดเป็น Excel หรือรูปภาพ")
+  ),
+  div(
+    class = "alert alert-success d-flex gap-2 align-items-start",
+    icon("lock"),
+    span("ข้อมูลของคุณถูกวิเคราะห์ในเบราว์เซอร์ของคุณเท่านั้น ไม่ได้ถูกส่งไปยังเซิร์ฟเวอร์ใด")
+  )
+)
 
-source("methods.R", local = TRUE)   # methods_sections, method_refs
-source("report.R", local = TRUE)    # Thai summaries, Word report
+source("methods.R", local = TRUE) # methods_sections, method_refs
+source("report.R", local = TRUE) # Thai summaries, Word report
 
-methods_ui <- div(class = "container", style = "max-width: 800px;",
+methods_ui <- div(
+  class = "container",
+  style = "max-width: 800px;",
   h3("วิธีการและซอฟต์แวร์"),
-  p("ใช้หน้านี้อธิบายวิธีวิเคราะห์เมื่อรายงานผล ประโยคบรรยายซอฟต์แวร์และเอกสารอ้างอิงด้านล่างเป็นภาษาอังกฤษ คัดลอกไปใส่ในต้นฉบับบทความได้ทันที"),
+  p(
+    "ใช้หน้านี้อธิบายวิธีวิเคราะห์เมื่อรายงานผล ประโยคบรรยายซอฟต์แวร์และเอกสารอ้างอิงด้านล่างเป็นภาษาอังกฤษ คัดลอกไปใส่ในต้นฉบับบทความได้ทันที"
+  ),
   h3("ซอฟต์แวร์"),
   uiOutput("methods_text"),
   h3("แต่ละการวิเคราะห์ทำอะไร"),
   methods_sections,
   h3("เอกสารอ้างอิงของวิธีการ"),
-  tags$ul(lapply(method_refs, tags$li)), actionButton("cp_mrefs", "คัดลอกเอกสารอ้างอิงของวิธีการ"))
+  tags$ul(lapply(method_refs, tags$li)),
+  actionButton("cp_mrefs", "คัดลอกเอกสารอ้างอิงของวิธีการ")
+)
 
-about_ui <- div(class = "container", style = "max-width: 800px;",
-  h3("เกี่ยวกับแอปนี้"),
-  p(sprintf("%s เป็น STAR (Statistical Tools for Agricultural Research) ของสถาบันวิจัยข้าวนานาชาติ (IRRI) ฉบับเว็บ ใช้โดยได้รับอนุญาตจาก IRRI แอปนี้รันโค้ด R ของ STAR 2.0.2 ที่กู้คืนมา ภายในเบราว์เซอร์ของคุณเอง", app_name)),
-  div(class = "alert alert-warning", strong("รุ่นทดลอง (beta) "), "ผลลัพธ์ได้ตรวจเทียบกับ STAR 2.0.2 ด้วยข้อมูลตัวอย่างในแอปแล้ว แต่รุ่นนี้ยังอยู่ระหว่างการพัฒนา ผลที่สำคัญ (เช่น ก่อนตีพิมพ์) ควรตรวจสอบด้วยโปรแกรมอื่นหรือปรึกษานักสถิติ และแจ้งเมื่อพบผลที่ดูผิดปกติ"),
-  h4("ข้อมูลของคุณ"), p("ไฟล์ของคุณถูกอ่านและวิเคราะห์ภายในเบราว์เซอร์ ไม่ได้ถูกอัปโหลดไปยังเซิร์ฟเวอร์ใด"),
-  h4("รุ่นของแอป"), p(code(version_label()), " โปรดระบุรุ่นนี้เมื่อแจ้งปัญหา"),
-  h4("ผู้ดูแล"), p(app_maintainer, " ปัญหาจะได้รับการแก้ไขเมื่อมีเวลา ไม่มีการรับประกันระยะเวลาตอบกลับ"),
-  h4("การอ้างอิง"), p("International Rice Research Institute (IRRI). STAR: Statistical Tools for Agricultural Research, version 2.0.2, and this web version", version_label(), "(https://github.com/kanthjs/STAR-Rev). ดูเพิ่มเติมที่หน้า Methods"),
-  h4("ส่งข้อเสนอแนะและแจ้งปัญหา"),
-  p("หากพบข้อผิดพลาด ผลการวิเคราะห์ดูผิดปกติ หรือมีข้อเสนอแนะฟังก์ชันที่อยากให้มีเพิ่มเติม สามารถแจ้งผ่านแบบฟอร์มออนไลน์ได้เลยครับ:"),
-  div(class = "d-flex gap-2 flex-wrap mb-2",
-    actionButton("btn_about_feedback", tagList(icon("comment-dots"), " แบบฟอร์มส่งข้อเสนอแนะ / แจ้งปัญหา (Google Form)"), class = "btn btn-success"),
-    actionButton("cp_diagnostic", tagList(icon("copy"), " คัดลอกข้อมูลวินิจฉัยระบบ"), class = "btn btn-outline-secondary")
+about_ui <- div(
+  class = "container",
+  style = "max-width: 800px;",
+  h3("About"),
+  p(sprintf(
+    "%s เป็น โปรแกรมวิเคราะห์ข้อมูลทางสถิติ ที่มีฐานการพัฒนาต่อยอดจาก โปรแกรม STAR (Statistical Tools for Agricultural Research) ของสถาบันวิจัยข้าวนานาชาติ (IRRI) ฉบับเว็บ แอปนี้รันโค้ด R ของ STAR 2.0.2 ภายในเบราว์เซอร์",
+    app_name
+  )),
+  div(
+    class = "alert alert-warning",
+    strong("รุ่นทดลอง (beta) "),
+    "ผลลัพธ์ได้ตรวจเทียบกับ STAR ด้วยข้อมูลตัวอย่างในแอปแล้ว แต่อยู่ระหว่างการพัฒนา ผลที่สำคัญ (เช่น ก่อนตีพิมพ์) ควรตรวจสอบด้วยโปรแกรมอื่นหรือปรึกษานักสถิติ และแจ้งเมื่อพบผลที่ดูผิดปกติ"
   ),
-  p(class = "text-muted small", "หรือแจ้งผ่าน ", tags$a(href = "https://github.com/kanthjs/STAR-Rev/issues", target = "_blank", "GitHub Issues"), " สำหรับนักพัฒนา"),
-  h4("ฟอนต์"), p("ข้อความในแอปนี้ใช้ฟอนต์ จุฬาภรณ์ลิขิต (Chulabhorn Likhit) ฟอนต์แห่งชาติจากราชวิทยาลัยจุฬาภรณ์ กราฟใช้ฟอนต์มาตรฐานของ R"),
-  h4("สัญญาอนุญาต"), p("GNU General Public License รุ่น 2 หรือใหม่กว่า ซอร์สโค้ด: ", tags$a(href = "https://github.com/kanthjs/STAR-Rev", target = "_blank", "github.com/kanthjs/STAR-Rev"))
+  h4("ข้อมูลของคุณ"),
+  p("ไฟล์ของคุณถูกอ่านและวิเคราะห์ภายในเบราว์เซอร์ ไม่ได้ถูกอัปโหลดไปยังเซิร์ฟเวอร์ใด"),
+  h4("รุ่นของแอป"),
+  p(code(version_label()), " โปรดระบุรุ่นนี้เมื่อแจ้งปัญหา"),
+  h4("ผู้ดูแล"),
+  p(app_maintainer, " ปัญหาจะได้รับการแก้ไขเมื่อมีเวลา ไม่มีการรับประกันระยะเวลาตอบกลับ"),
+  h4("การอ้างอิง"),
+  p(
+    "International Rice Research Institute (IRRI). STAR: Statistical Tools for Agricultural Research, version 2.0.2, and this web version",
+    version_label(),
+    "(https://github.com/kanthjs/RDstat). ดูเพิ่มเติมที่หน้า Methods"
+  ),
+  h4("ส่งข้อเสนอแนะและแจ้งปัญหา"),
+  p(
+    "หากพบข้อผิดพลาด ผลการวิเคราะห์ดูผิดปกติ หรือมีข้อเสนอแนะฟังก์ชันที่อยากให้มีเพิ่มเติม สามารถแจ้งผ่านแบบฟอร์มออนไลน์ได้เลยครับ:"
+  ),
+  div(
+    class = "d-flex gap-2 flex-wrap mb-2",
+    actionButton(
+      "btn_about_feedback",
+      tagList(
+        icon("comment-dots"),
+        " แบบฟอร์มส่งข้อเสนอแนะ / แจ้งปัญหา (Google Form)"
+      ),
+      class = "btn btn-success"
+    ),
+    actionButton(
+      "cp_diagnostic",
+      tagList(icon("copy"), " คัดลอกข้อมูลวินิจฉัยระบบ"),
+      class = "btn btn-outline-secondary"
+    )
+  ),
+  p(
+    class = "text-muted small",
+    "หรือแจ้งผ่าน ",
+    tags$a(
+      href = "https://github.com/kanthjs/STAR-Rev/issues",
+      target = "_blank",
+      "GitHub Issues"
+    ),
+    " สำหรับนักพัฒนา"
+  ),
+  h4("ฟอนต์"),
+  p(
+    "ข้อความในแอปนี้ใช้ฟอนต์ จุฬาภรณ์ลิขิต (Chulabhorn Likhit) ฟอนต์แห่งชาติจากราชวิทยาลัยจุฬาภรณ์ กราฟใช้ฟอนต์มาตรฐานของ R"
+  ),
+  h4("สัญญาอนุญาต"),
+  p(
+    "GNU General Public License รุ่น 2 หรือใหม่กว่า ซอร์สโค้ด: ",
+    tags$a(
+      href = "https://github.com/kanthjs/RDstat",
+      target = "_blank",
+      "github.com/kanthjs/RDstat"
+    )
+  )
 )
 
 # Bootstrap 5 through bslib. bs_theme(version = 5) with no Sass variables changed is served precompiled, so the
 # browser does not compile Sass when the app opens; the colours of this app are set in app_css instead.
 brand <- c(main = "#2E7D32", dark = "#1B5E20", light = "#F4F7F4")
 # sprintf() refuses format strings over 8192 characters, so the brand colours are filled in by css_fill()
-css_fill <- function(x, ...) { a <- c(...); for (i in seq_along(a)) x <- gsub(sprintf("%%%d$s", i), a[[i]], x, fixed = TRUE); gsub("%%", "%", x, fixed = TRUE) }
-app_css <- css_fill("@font-face { font-family: 'Chulabhorn Likit'; src: url('fonts/ChulabhornLikitText-Regular.ttf') format('truetype'); font-weight: normal; }
+css_fill <- function(x, ...) {
+  a <- c(...)
+  for (i in seq_along(a)) {
+    x <- gsub(sprintf("%%%d$s", i), a[[i]], x, fixed = TRUE)
+  }
+  gsub("%%", "%", x, fixed = TRUE)
+}
+app_css <- css_fill(
+  "@font-face { font-family: 'Chulabhorn Likit'; src: url('fonts/ChulabhornLikitText-Regular.ttf') format('truetype'); font-weight: normal; }
     @font-face { font-family: 'Chulabhorn Likit'; src: url('fonts/ChulabhornLikitText-Bold.ttf') format('truetype'); font-weight: bold; }
     :root { --bs-body-font-family: 'Chulabhorn Likit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             --bs-body-font-size: 15px;
@@ -253,89 +382,279 @@ app_css <- css_fill("@font-face { font-family: 'Chulabhorn Likit'; src: url('fon
       display: block;
       border-radius: 4px;
     }
-    .empty-state i { font-size: 32px; color: %1$s; margin-bottom: 10px; } .empty-state h5 { font-weight: 600; color: #333; }", brand[["main"]], brand[["dark"]], brand[["light"]])
+    .empty-state i { font-size: 32px; color: %1$s; margin-bottom: 10px; } .empty-state h5 { font-weight: 600; color: #333; }",
+  brand[["main"]],
+  brand[["dark"]],
+  brand[["light"]]
+)
 
 ui <- bslib::page_navbar(
-  title = tags$span(icon("seedling"), app_name, tags$span(class = "badge bg-light text-success", "beta")), window_title = app_name, id = "nav",
-  theme = bslib::bs_theme(version = 5), fillable = FALSE, lang = "th",
+  title = tags$span(
+    icon("seedling"),
+    app_name,
+    tags$span(class = "badge bg-light text-success", "beta")
+  ),
+  window_title = app_name,
+  id = "nav",
+  theme = bslib::bs_theme(version = 5),
+  fillable = FALSE,
+  lang = "th",
   navbar_options = bslib::navbar_options(bg = brand[["main"]], theme = "dark"),
-  header = tags$head(tags$script(HTML(copy_js)), tags$script(HTML(stale_js)), tags$style(HTML(app_css)), useBusyIndicators()),
+  header = tags$head(
+    tags$script(HTML(copy_js)),
+    tags$script(HTML(stale_js)),
+    tags$style(HTML(app_css)),
+    useBusyIndicators()
+  ),
   tabPanel("Home", home_ui),
   tabPanel("t-test", tt_ui),
-  tabPanel("Analysis of variance", sidebarLayout(
-    sidebarPanel(
-      side_step(1, "Experimental design",
-        radioButtons("design", NULL, c("Completely randomized (CRD)" = "CRD", "Randomized complete block (RCBD)" = "RCBD",
-                                       "Split plot in CRD" = "SplitCRD", "Split plot in RCBD" = "SplitRCBD",
-                                       "Combined over sites / seasons: RCBD" = "CombRCBD", "Combined over sites / seasons: CRD" = "CombCRD")),
-        help_box("Which design?", p(strong("CRD:"), "treatments were assigned completely at random, no blocks."), p(strong("RCBD:"), "plots were grouped into blocks (replications) of similar conditions and every treatment appears once in each block."), p(strong("Split plot:"), "one factor (main plot) is applied to large plots and a second factor (sub plot) within each. ", strong("In CRD"), " the main plots were assigned at random with no blocks; ", strong("in RCBD"), " the main plots were grouped into blocks."),
-                 p(strong("Combined:"), "the same trial (one treatment factor, CRD or RCBD) was repeated at several sites, seasons or years, and the data of all of them are in one file with a column naming the environment. Tests whether the treatments differ overall and whether their ranking changes between environments (treatment x environment interaction)."))),
-      side_step(2, "Data",
-        radioButtons("src", NULL, c("Built-in example" = "ex", "Upload file" = "up"), inline = TRUE),
-        conditionalPanel("input.src == 'ex'", uiOutput("example_picker")),
-        conditionalPanel("input.src == 'up'", fileInput("file", "Data file (.csv, .txt, .xlsx)", accept = c(".csv", ".txt", ".tsv", ".xlsx")),
-                         div(style = "margin: -6px 0 10px;",
-                             downloadLink("dl_template", tagList(icon("file-arrow-down"), " Download blank Excel template (", textOutput("template_label", inline = TRUE), ")"))),
-                         uiOutput("read_note"), long_format_help(), uiOutput("wide_note"))),
-      side_step(3, "Variables", uiOutput("var_pickers")),
-      advanced_box(
-        selectInput("transform", "Data transformation",
-                    c("None (original values)" = "none",
-                      "Logarithm: log(y + 1)" = "log",
-                      "Square root: sqrt(y + 0.5)" = "sqrt",
-                      "Arcsine: arcsin(sqrt(y/100))" = "arcsin")),
-        selectInput("pw", "Mean comparison",
-                    c("Automatic: LSD if <= 5 levels, else Tukey" = "auto", "LSD" = "LSD", "Tukey HSD" = "HSD",
-                      "Duncan (DMRT)" = "duncan")),
-        helpText("Letters are shown only when the F test of the effect is significant (protected test); otherwise the table says why they are missing."),
-        help_box("Which test?", p("LSD is the least strict, Duncan (DMRT) is in between, and Tukey HSD is the strictest: it is the safest when there are many levels because it controls the chance of a false difference among all pairs. Means sharing a letter are not significantly different.")),
-        selectInput("alpha", "Significance level", c("0.05" = 0.05, "0.01" = 0.01, "0.10" = 0.10))),
-      run_bar("go_aov", "Run ANOVA")
-    ),
-    mainPanel(
-      uiOutput("aov_msg"),
-      div(id = "aov_out", tabsetPanel(
-        tabPanel("Results", br(), stale_dim(uiOutput("results_ui")), br(), stale_dim(conditionalPanel("input.go_aov > 0", downloadButton("dl_xlsx", "Download Excel (.xlsx)"), downloadButton("dl_doc", "Download report (Word)")))),
-        tabPanel("Data", br(), uiOutput("data_ui")),
-        tabPanel("Plot", br(),
-                 fluidRow(column(4, radioButtons("plot_style", "Style", c("ggplot2" = "gg", "Classic" = "classic"), inline = TRUE)),
-                          column(8, conditionalPanel("input.plot_style == 'gg'", fluidRow(
-                            column(6, selectInput("gg_error", "Error bars", c("SE" = "se", "SD" = "sd", "95% CI" = "ci"))),
-                            column(6, br(), checkboxInput("gg_points", "Show observations", TRUE)))))),
-                 plot_labels_ui("gg"), conditionalPanel("input.plot_style == 'gg'", plot_style_ui("aov")),
-                 stale_dim(uiOutput("plot_picker")), plot_live_ui("means_plot", "aov"), plot_export_ui("aov")),
-        tabPanel("Outliers & assumptions", br(),
-                 radioButtons("diag_style", "Plot style", c("ggplot2" = "gg", "Classic" = "classic"), inline = TRUE),
-                 stale_dim(uiOutput("diag_ui")), stale_dim(plotOutput("diag_plot", height = "440px"))),
-        tabPanel("Classic STAR report", br(),
-                 stale_dim(div(actionButton("cp_report", "Copy report"), downloadButton("dl_txt", "Download TXT"),
-                 verbatimTextOutput("report"))))
-      ))
+  tabPanel(
+    "Analysis of variance",
+    sidebarLayout(
+      sidebarPanel(
+        side_step(
+          1,
+          "Experimental design",
+          radioButtons(
+            "design",
+            NULL,
+            c(
+              "Completely randomized (CRD)" = "CRD",
+              "Randomized complete block (RCBD)" = "RCBD",
+              "Split plot in CRD" = "SplitCRD",
+              "Split plot in RCBD" = "SplitRCBD",
+              "Combined over sites / seasons: RCBD" = "CombRCBD",
+              "Combined over sites / seasons: CRD" = "CombCRD"
+            )
+          ),
+          help_box(
+            "Which design?",
+            p(
+              strong("CRD:"),
+              "treatments were assigned completely at random, no blocks."
+            ),
+            p(
+              strong("RCBD:"),
+              "plots were grouped into blocks (replications) of similar conditions and every treatment appears once in each block."
+            ),
+            p(
+              strong("Split plot:"),
+              "one factor (main plot) is applied to large plots and a second factor (sub plot) within each. ",
+              strong("In CRD"),
+              " the main plots were assigned at random with no blocks; ",
+              strong("in RCBD"),
+              " the main plots were grouped into blocks."
+            ),
+            p(
+              strong("Combined:"),
+              "the same trial (one treatment factor, CRD or RCBD) was repeated at several sites, seasons or years, and the data of all of them are in one file with a column naming the environment. Tests whether the treatments differ overall and whether their ranking changes between environments (treatment x environment interaction)."
+            )
+          )
+        ),
+        side_step(
+          2,
+          "Data",
+          radioButtons(
+            "src",
+            NULL,
+            c("Built-in example" = "ex", "Upload file" = "up"),
+            inline = TRUE
+          ),
+          conditionalPanel("input.src == 'ex'", uiOutput("example_picker")),
+          conditionalPanel(
+            "input.src == 'up'",
+            fileInput(
+              "file",
+              "Data file (.csv, .txt, .xlsx)",
+              accept = c(".csv", ".txt", ".tsv", ".xlsx")
+            ),
+            div(
+              style = "margin: -6px 0 10px;",
+              downloadLink(
+                "dl_template",
+                tagList(
+                  icon("file-arrow-down"),
+                  " Download blank Excel template (",
+                  textOutput("template_label", inline = TRUE),
+                  ")"
+                )
+              )
+            ),
+            uiOutput("read_note"),
+            long_format_help(),
+            uiOutput("wide_note")
+          )
+        ),
+        side_step(3, "Variables", uiOutput("var_pickers")),
+        advanced_box(
+          selectInput(
+            "transform",
+            "Data transformation",
+            c(
+              "None (original values)" = "none",
+              "Logarithm: log(y + 1)" = "log",
+              "Square root: sqrt(y + 0.5)" = "sqrt",
+              "Arcsine: arcsin(sqrt(y/100))" = "arcsin"
+            )
+          ),
+          selectInput(
+            "pw",
+            "Mean comparison",
+            c(
+              "Automatic: LSD if <= 5 levels, else Tukey" = "auto",
+              "LSD" = "LSD",
+              "Tukey HSD" = "HSD",
+              "Duncan (DMRT)" = "duncan"
+            )
+          ),
+          helpText(
+            "Letters are shown only when the F test of the effect is significant (protected test); otherwise the table says why they are missing."
+          ),
+          help_box(
+            "Which test?",
+            p(
+              "LSD is the least strict, Duncan (DMRT) is in between, and Tukey HSD is the strictest: it is the safest when there are many levels because it controls the chance of a false difference among all pairs. Means sharing a letter are not significantly different."
+            )
+          ),
+          selectInput(
+            "alpha",
+            "Significance level",
+            c("0.05" = 0.05, "0.01" = 0.01, "0.10" = 0.10)
+          )
+        ),
+        run_bar("go_aov", "Run ANOVA")
+      ),
+      mainPanel(
+        uiOutput("aov_msg"),
+        div(
+          id = "aov_out",
+          tabsetPanel(
+            tabPanel(
+              "Results",
+              br(),
+              stale_dim(uiOutput("results_ui")),
+              br(),
+              stale_dim(conditionalPanel(
+                "input.go_aov > 0",
+                downloadButton("dl_xlsx", "Download Excel (.xlsx)"),
+                downloadButton("dl_doc", "Download report (Word)")
+              ))
+            ),
+            tabPanel("Data", br(), uiOutput("data_ui")),
+            tabPanel(
+              "Plot",
+              br(),
+              fluidRow(
+                column(
+                  4,
+                  radioButtons(
+                    "plot_style",
+                    "Style",
+                    c("ggplot2" = "gg", "Classic" = "classic"),
+                    inline = TRUE
+                  )
+                ),
+                column(
+                  8,
+                  conditionalPanel(
+                    "input.plot_style == 'gg'",
+                    fluidRow(
+                      column(
+                        6,
+                        selectInput(
+                          "gg_error",
+                          "Error bars",
+                          c("SE" = "se", "SD" = "sd", "95% CI" = "ci")
+                        )
+                      ),
+                      column(
+                        6,
+                        br(),
+                        checkboxInput("gg_points", "Show observations", TRUE)
+                      )
+                    )
+                  )
+                )
+              ),
+              plot_labels_ui("gg"),
+              conditionalPanel(
+                "input.plot_style == 'gg'",
+                plot_style_ui("aov")
+              ),
+              stale_dim(uiOutput("plot_picker")),
+              plot_live_ui("means_plot", "aov"),
+              plot_export_ui("aov")
+            ),
+            tabPanel(
+              "Outliers & assumptions",
+              br(),
+              radioButtons(
+                "diag_style",
+                "Plot style",
+                c("ggplot2" = "gg", "Classic" = "classic"),
+                inline = TRUE
+              ),
+              stale_dim(uiOutput("diag_ui")),
+              stale_dim(plotOutput("diag_plot", height = "440px"))
+            ),
+            tabPanel(
+              "Classic STAR report",
+              br(),
+              stale_dim(div(
+                actionButton("cp_report", "Copy report"),
+                downloadButton("dl_txt", "Download TXT"),
+                verbatimTextOutput("report")
+              ))
+            )
+          )
+        )
+      )
     )
-  )),
+  ),
   tabPanel("Correlation", corr_ui),
   tabPanel("Regression", reg_ui),
   # information pages are kept apart from the analyses, in a menu on the right
   bslib::nav_spacer(),
-  bslib::nav_item(actionLink("open_feedback", tagList(icon("comment-dots"), " ส่งข้อเสนอแนะ"), class = "nav-link text-white fw-semibold")),
-  bslib::nav_menu("Info", tabPanel("Methods", methods_ui), tabPanel("About", about_ui), align = "right")
+  bslib::nav_item(actionLink(
+    "open_feedback",
+    tagList(icon("comment-dots"), " ส่งข้อเสนอแนะ"),
+    class = "nav-link text-white fw-semibold"
+  )),
+  bslib::nav_menu(
+    "Info",
+    tabPanel("Methods", methods_ui),
+    tabPanel("About", about_ui),
+    align = "right"
+  )
 )
 
 # ---- server ----------------------------------------------------------------------------------------------------
 server <- function(input, output, session) {
-  observeEvent(input$home_aov, updateNavbarPage(session, "nav", selected = "Analysis of variance"))
-  observeEvent(input$home_tt, updateNavbarPage(session, "nav", selected = "t-test"))
-  observeEvent(input$home_corr, updateNavbarPage(session, "nav", selected = "Correlation"))
-  observeEvent(input$home_reg, updateNavbarPage(session, "nav", selected = "Regression"))
+  observeEvent(
+    input$home_aov,
+    updateNavbarPage(session, "nav", selected = "Analysis of variance")
+  )
+  observeEvent(
+    input$home_tt,
+    updateNavbarPage(session, "nav", selected = "t-test")
+  )
+  observeEvent(
+    input$home_corr,
+    updateNavbarPage(session, "nav", selected = "Correlation")
+  )
+  observeEvent(
+    input$home_reg,
+    updateNavbarPage(session, "nav", selected = "Regression")
+  )
   # Each file below holds one part of the server. They are sourced into this function (local = TRUE), so they share
   # input, output, session and the helpers defined above them, and must stay in this order.
-  source("src/server_plot.R", local = TRUE)      # plot style, export size, methods text
-  source("src/server_aov.R", local = TRUE)       # analysis of variance (also defines stale_flag)
-  source("src/server_shared.R", local = TRUE)    # helpers for the t-test, correlation and regression screens
+  source("src/server_plot.R", local = TRUE) # plot style, export size, methods text
+  source("src/server_aov.R", local = TRUE) # analysis of variance (also defines stale_flag)
+  source("src/server_shared.R", local = TRUE) # helpers for the t-test, correlation and regression screens
   source("src/server_tt.R", local = TRUE)
   source("src/server_corr.R", local = TRUE)
   source("src/server_reg.R", local = TRUE)
-  source("src/server_feedback.R", local = TRUE)  # feedback form and diagnostics
+  source("src/server_feedback.R", local = TRUE) # feedback form and diagnostics
 }
 
 shinyApp(ui, server)
