@@ -180,6 +180,14 @@ app_css <- css_fill("@font-face { font-family: 'Chulabhorn Likit'; src: url('fon
     .result-card .card-header .btn { margin: 0; background: #fcfdfc; border: 1px solid #dce4dc; color: #4b5d4c; font-size: 12px; padding: 2px 10px; border-radius: 5px; }
     .result-card .card-header .btn:hover { background: #edf5ed; color: %1$s; border-color: %1$s; }
     .result-card h6 { font-weight: 600; margin: 6px 0 4px; } .result-card .table { margin-bottom: 8px; }
+    details.code-card { border: 1px solid #e5ebe5; border-radius: 8px; background: #fff; margin-bottom: 16px; }
+    details.code-card > summary { cursor: pointer; padding: 9px 16px; color: #5c6e5d; font-weight: 500; font-size: 13.5px; user-select: none; }
+    details.code-card > summary:hover { color: %1$s; }
+    details.code-card[open] > summary { border-bottom: 1px solid #f0f4f0; }
+    details.code-card .code-card-hint { color: #8a978b; font-weight: 400; font-size: 12.5px; margin-left: 6px; }
+    .code-card-body { padding: 12px 16px; }
+    .code-card-body .btn { background: #fcfdfc; border: 1px solid #dce4dc; color: #4b5d4c; font-size: 12px; padding: 2px 10px; border-radius: 5px; }
+    .code-card-body .btn:hover { background: #edf5ed; color: %1$s; border-color: %1$s; }
 
     /* Academic / Journal Table Styling (Data-ink ratio / Tufte style) */
     .table { margin-bottom: 8px; }

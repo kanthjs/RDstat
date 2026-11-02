@@ -102,7 +102,7 @@
         p(class = "text-muted small mb-0", "Winsorized variances; no normal distribution or equal variances assumed. The bootstrap interval uses a fixed seed, so the same data give the same interval."),
         copy = "cp_tt_trim", copy_label = "Copy table"),
       result_card("APA-style report", p(s$apa), copy = "cp_tt_apa"),
-      result_card("R code to repeat this analysis", tags$pre(class = "small mb-0", style = "white-space: pre-wrap;", tt_trim_script()), copy = "cp_tt_trim_script", copy_label = "Copy code"),
+      code_card(tt_trim_script(), "cp_tt_trim_script"),
       p(class = "text-muted small", icon("circle-info"), " The t-test is not shown because trimmed means are chosen under Kind of comparison."))
   }
   output$tt_msg <- renderUI({
@@ -133,7 +133,7 @@
           "; with tied values (or zero differences), or 50 or more values, the p value and the interval use a normal approximation."),
         copy = "cp_tt_np", copy_label = "Copy table"),
       result_card("APA-style report", p(r$nonparametric_apa), copy = "cp_tt_apa"),
-      result_card("R code to repeat this analysis", tags$pre(class = "small mb-0", style = "white-space: pre-wrap;", tt_script()), copy = "cp_tt_script", copy_label = "Copy code"),
+      code_card(tt_script(), "cp_tt_script"),
       p(class = "text-muted small", icon("circle-info"), " The t-test is not shown because the Wilcoxon test is chosen under Kind of comparison."))
   }
   output$tt_results_ui <- renderUI({
@@ -169,7 +169,7 @@
           else if (length(bad_norm)) "The data depart somewhat from a normal distribution, but with 30 or more observations per group the t-test is usually still reliable."
           else "The normality tests are only a guide: with few observations they have little power, so also look at the plot.")),
       result_card("APA-style report", p(r$apa), copy = "cp_tt_apa"),
-      result_card("R code to repeat this analysis", tags$pre(class = "small mb-0", style = "white-space: pre-wrap;", tt_script()), copy = "cp_tt_script", copy_label = "Copy code"))
+      code_card(tt_script(), "cp_tt_script"))
   })
   gg_tt <- reactive(apply_plot_customizations(do.call(star_ggplot_ttest, c(list(tt_ok(), main = input$tt_title, xlab = input$tt_xlab, ylab = input$tt_ylab), plot_style("tt"))), "tt"))
   output$tt_plot <- renderPlot(print(gg_tt()),

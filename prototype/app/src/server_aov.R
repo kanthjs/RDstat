@@ -270,7 +270,7 @@
           "SE is the group's own standard error."), copy = "cp_welch", copy_label = "Copy table"),
       result_card("Games-Howell comparisons", html_table(gh_display(w)), copy = "cp_gh", copy_label = "Copy table"),
       result_card("APA-style report", p(w$apa), copy = "cp_welch_apa"),
-      result_card("R code to repeat this analysis", tags$pre(class = "small mb-0", style = "white-space: pre-wrap;", welch_script()), copy = "cp_welch_script", copy_label = "Copy code"),
+      code_card(welch_script(), "cp_welch_script"),
       p(class = "text-muted small", icon("circle-info"), " The standard ANOVA table and its letters are not shown because Analysis is set to Welch's ANOVA."))
   }
   trimmed_display <- function(x) {
@@ -304,7 +304,7 @@
           sprintf("Percentile bootstrap intervals from %d resamples (fixed seed, so the same data give the same interval).", x$B)), copy = "cp_trim", copy_label = "Copy table"),
       result_card("Yuen's comparisons", html_table(yuen_display(x)), copy = "cp_yuen", copy_label = "Copy table"),
       result_card("APA-style report", p(x$apa), copy = "cp_trim_apa"),
-      result_card("R code to repeat this analysis", tags$pre(class = "small mb-0", style = "white-space: pre-wrap;", trimmed_script()), copy = "cp_trim_script", copy_label = "Copy code"),
+      code_card(trimmed_script(), "cp_trim_script"),
       p(class = "text-muted small", icon("circle-info"), " The ANOVA table and its letters are not shown because Analysis is set to trimmed means."))
   }
   # the results screen when Analysis is rank-based: the test, medians and letters take the place of the ANOVA
@@ -327,7 +327,7 @@
       result_card("สรุปผล (ภาษาไทย)", p(lang = "th", thai_summary_np(np)), copy = "cp_np_th", copy_label = "คัดลอก"),
       result_card(paste(np$name, "test"), np_ui(np, summary = FALSE), copy = "cp_np", copy_label = "Copy table"),
       result_card("APA-style report", p(np$apa), copy = "cp_np_apa"),
-      result_card("R code to repeat this analysis", tags$pre(class = "small mb-0", style = "white-space: pre-wrap;", np_script()), copy = "cp_np_script", copy_label = "Copy code"),
+      code_card(np_script(), "cp_np_script"),
       p(class = "text-muted small", icon("circle-info"), " The ANOVA table, means and CV are not shown because Analysis is set to rank-based. Choose ANOVA under Experimental design to see them."))
   }
   # The data behind the current results (for plotting observations). Stored when Run is pressed: an eventReactive would
@@ -409,8 +409,8 @@
                     p(class = "text-muted small mb-0", "Means with the same letter (within a column) are not significantly different."))
       }),
       result_card("APA-style report", lapply(r$apa, p), copy = "cp_apa"),
-      result_card("R code to repeat this analysis", if (is.null(code <- aov_script())) p(class = "text-muted mb-0", "R code is not available yet for an RCBD with missing responses (the app estimates the missing values).") else tags$pre(class = "small mb-0", style = "white-space: pre-wrap;", code),
-                  copy = if (!is.null(code)) "cp_aov_script", copy_label = "Copy code")
+      code_card(aov_script(), "cp_aov_script",
+                missing = "R code is not available yet for an RCBD with missing responses (the app estimates the missing values).")
     )
   })
 

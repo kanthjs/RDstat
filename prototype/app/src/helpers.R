@@ -324,6 +324,15 @@ advice_ui <- function(rc, current, prefix, kept, current_label) {
       div(class = "mt-2", actionButton(paste0(prefix, "_stay"), sprintf("Continue with %s", current_label), class = "btn-light btn-sm border")),
       div(class = "small text-muted mt-1", "Advice only: the analyst decides which method to report."))
 }
+# the R code that repeats an analysis, folded under a one-line heading: most users never need it, and those who want
+# to check the results or rerun them in R open it. `missing` is shown instead when there is no code for the analysis.
+code_card <- function(code, copy, missing = NULL) tags$details(class = "code-card",
+  tags$summary(icon("code"), " R code to repeat this analysis",
+               span(class = "code-card-hint", "for checking the results or running them again in R")),
+  div(class = "code-card-body",
+      if (is.null(code)) p(class = "text-muted mb-0", missing)
+      else tagList(div(class = "text-end mb-2", actionButton(copy, tagList(icon("copy"), " Copy code"), class = "btn-sm")),
+                   tags$pre(class = "small mb-0", style = "white-space: pre-wrap;", code))))
 # settings changed after the last run: the results on the screen no longer match the controls
 # outputs that show results; greyed out and made inert (no clicks, copying or downloading) while the results are stale
 stale_dim <- function(tag) tagAppendAttributes(tag, class = "stale-dim")
