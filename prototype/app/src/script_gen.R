@@ -5,19 +5,61 @@ r_str <- function(x) encodeString(as.character(x), quote = "\"")
 r_vec <- function(x) if (length(x) == 1) r_str(x) else paste0("c(", paste(r_str(x), collapse = ", "), ")")
 r_num <- function(x) format(x, digits = 15)
 
+script_parse_number <- c(
+  "parse_number <- function(x) {",
+  "  if (is.numeric(x)) return(x)",
+  "  s <- trimws(gsub(intToUtf8(8203), \"\", gsub(intToUtf8(160), \" \", as.character(x), fixed = TRUE), fixed = TRUE))",
+  "  s[tolower(s) %in% c(\"\", \"na\", \"n/a\", \"nan\", \"null\", \"none\", \"missing\", \"-\", \"--\", \".\")] <- NA",
+  "  s <- sub(\"%$\", \"\", s)",
+  "  s <- sub(\"^\\\\$\\\\s*(?=[-+]?[0-9.,])\", \"\", s, perl = TRUE)",
+  "  s <- sub(\"(?<=[0-9.])\\\\s*[A-Za-z/%]+$\", \"\", s, perl = TRUE)",
+  "  s <- gsub(\" \", \"\", s)",
+  "  has_dot <- grepl(\".\", s, fixed = TRUE); has_com <- grepl(\",\", s, fixed = TRUE)",
+  "  both <- has_dot & has_com & !is.na(s); last_comma <- both & grepl(\",[^.]*$\", s)",
+  "  s[last_comma] <- gsub(\",\", \".\", gsub(\".\", \"\", s[last_comma], fixed = TRUE), fixed = TRUE)",
+  "  only_com <- has_com & !has_dot & !is.na(s)",
+  "  thousands <- only_com & grepl(\"^[-+]?[0-9]{1,3}(,[0-9]{3})+$\", s)",
+  "  s[thousands] <- gsub(\",\", \"\", s[thousands], fixed = TRUE)",
+  "  s[only_com & !thousands] <- sub(\",\", \".\", s[only_com & !thousands], fixed = TRUE)",
+  "  s[both & !last_comma] <- gsub(\",\", \"\", s[both & !last_comma], fixed = TRUE)",
+  "  suppressWarnings(as.numeric(s))",
+  "}")
+
 script_header <- function(title, file) {
-  read <- if (is.null(file) || is.na(file)) "# d <- read.csv(\"your_file.csv\", check.names = FALSE, strip.white = TRUE, stringsAsFactors = FALSE)"
-          else if (grepl("[.]xlsx?$", file, ignore.case = TRUE)) sprintf("d <- as.data.frame(readxl::read_excel(%s))", r_str(file))
-          else sprintf("d <- read.csv(%s, check.names = FALSE, strip.white = TRUE, stringsAsFactors = FALSE)", r_str(file))
+  has_file <- !is.null(file) && !is.na(file)
+  xl <- has_file && grepl("[.]xlsx?$", file, ignore.case = TRUE)
+  embedded <- attr(file, "data")
+  read <- if (!is.null(embedded)) c("# the example data are included here, so this script needs no data file",
+                                    sprintf("d <- read.csv(text = %s, check.names = FALSE, strip.white = TRUE, colClasses = \"character\")", encodeString(embedded, quote = "\"")))
+          else if (xl) c("# install.packages(\"readxl\")   # needed to read Excel files", sprintf("d <- as.data.frame(readxl::read_excel(%s, col_types = \"text\"))", r_str(file)))
+          else c(sprintf("f <- %s", if (has_file) r_str(file) else "\"your_file.csv\""),
+                 "# the separator is found from the first line, as the app does (comma, semicolon, tab or bar)",
+                 "first <- readLines(f, n = 1, warn = FALSE)",
+                 "seps <- c(\",\", \";\", \"\\t\", \"|\")",
+                 "sep <- seps[which.max(sapply(seps, function(s) lengths(regmatches(first, gregexpr(s, first, fixed = TRUE)))))]",
+                 "# for a Thai CSV saved by Excel add fileEncoding = \"windows-874\"",
+                 "d <- read.table(f, header = TRUE, sep = sep, quote = \"\\\"\", colClasses = \"character\", comment.char = \"\", strip.white = TRUE,",
+                 "                na.strings = c(\"\", \"NA\"), check.names = FALSE, fill = TRUE)")
   c(sprintf("# %s", title),
-    sprintf("# Made by %s %s on %s. Runs with base R; set the working directory to the folder that holds the data file.", app_name, version_label(), format(Sys.Date())),
+    sprintf("# Made by %s %s on %s. Set the working directory to the folder that holds the data file.", app_name, version_label(), format(Sys.Date())),
     "# If the file has title lines above the column names, add skip = <number of lines> to the read function.",
     "",
-    read)
+    read,
+    "",
+    "# numbers as the app reads them: 1,250.5  12.5%  12 kg  12,5 (decimal comma) and blanks such as NA or - are handled",
+    script_parse_number)
+}
+
+# the data file for a script: the name when the user uploaded it; for a built-in example the data themselves are carried
+# along (attribute "data") so the script does not depend on a file that only exists inside the app
+script_file <- function(uploaded, name) {
+  if (!isTRUE(uploaded) && !is.null(name) && !is.na(name) && file.exists(name))
+    structure(name, data = paste(readLines(name, warn = FALSE, encoding = "UTF-8"), collapse = "\n"))
+  else name
 }
 
 # numeric column as the app reads it: text trimmed, then converted to a number
-script_num <- function(var, col) sprintf("%s <- suppressWarnings(as.numeric(d[[%s]]))", var, r_str(col))
+script_num <- function(var, col) sprintf("%s <- parse_number(d[[%s]])", var, r_str(col))
 
 script_tt <- function(r, file = NULL) {
   alt <- r$alternative; cl <- r$conf_level
@@ -37,7 +79,8 @@ script_tt <- function(r, file = NULL) {
       "tt",
       "var_test <- var.test(a, b)   # equality of variances",
       "var_test",
-      "shapiro_a <- shapiro.test(a); shapiro_b <- shapiro.test(b)   # normality",
+      "shapiro_safe <- function(x) if (length(x) >= 3 && length(x) <= 5000 && diff(range(x)) > 0) shapiro.test(x)   # needs 3 to 5000 values that are not all equal",
+      "shapiro_a <- shapiro_safe(a); shapiro_b <- shapiro_safe(b)   # normality",
       "shapiro_a; shapiro_b",
       sprintf("wilcox <- suppressWarnings(wilcox.test(a, b, conf.int = TRUE, %s))   # rank-based alternative", args),
       "wilcox",
@@ -52,7 +95,8 @@ script_tt <- function(r, file = NULL) {
       "c(n = length(dif), mean_diff = mean(dif), sd_diff = sd(dif))",
       sprintf("tt <- t.test(x, y, paired = TRUE, %s)", args),
       "tt",
-      "shapiro <- shapiro.test(dif)   # normality of the differences",
+      "shapiro_safe <- function(x) if (length(x) >= 3 && length(x) <= 5000 && diff(range(x)) > 0) shapiro.test(x)   # needs 3 to 5000 values that are not all equal",
+      "shapiro <- shapiro_safe(dif)   # normality of the differences",
       "shapiro",
       sprintf("wilcox <- suppressWarnings(wilcox.test(x, y, paired = TRUE, conf.int = TRUE, %s))   # rank-based alternative", args),
       "wilcox",
@@ -65,7 +109,8 @@ script_tt <- function(r, file = NULL) {
       "c(n = length(v), mean = mean(v), sd = sd(v))",
       sprintf("tt <- t.test(v, mu = mu, %s)", args),
       "tt",
-      "shapiro <- shapiro.test(v)   # normality",
+      "shapiro_safe <- function(x) if (length(x) >= 3 && length(x) <= 5000 && diff(range(x)) > 0) shapiro.test(x)   # needs 3 to 5000 values that are not all equal",
+      "shapiro <- shapiro_safe(v)   # normality",
       "shapiro",
       sprintf("wilcox <- suppressWarnings(wilcox.test(v, mu = mu, conf.int = TRUE, %s))   # rank-based alternative", args),
       "wilcox",
@@ -77,7 +122,7 @@ script_corr <- function(r, file = NULL) {
   head <- script_header(sprintf("%s correlation of %d variables", r$method_name, length(r$vars)), file)
   body <- c(
     sprintf("vars <- %s", r_vec(r$vars)),
-    "d[vars] <- lapply(d[vars], function(x) suppressWarnings(as.numeric(x)))",
+    "d[vars] <- lapply(d[vars], parse_number)",
     "",
     "# one test per pair of variables, using the rows where both values are present",
     "idx <- t(combn(length(vars), 2))",
@@ -109,7 +154,7 @@ script_reg <- function(r, file = NULL) {
   vars <- c(y, x)
   body <- c(
     sprintf("vars <- %s", r_vec(vars)),
-    "d[vars] <- lapply(d[vars], function(x) suppressWarnings(as.numeric(x)))",
+    "d[vars] <- lapply(d[vars], parse_number)",
     "d <- d[complete.cases(d[vars]), vars]   # rows with a missing value are left out",
     "",
     sprintf("fit <- lm(`%s` ~ %s, data = d)", y, rhs),
@@ -131,7 +176,8 @@ script_reg <- function(r, file = NULL) {
       sprintf("c(x = unname(x_opt), y = y_opt, inside_range = x_opt >= min(d[[%s]]) && x_opt <= max(d[[%s]]))", r_str(x), r_str(x))),
     "",
     "# assumptions",
-    "shapiro <- shapiro.test(residuals(fit))   # normality of residuals",
+    "shapiro_safe <- function(x) if (length(x) >= 3 && length(x) <= 5000 && diff(range(x)) > 0) shapiro.test(x)   # needs 3 to 5000 values that are not all equal",
+    "shapiro <- shapiro_safe(residuals(fit))   # normality of residuals",
     "shapiro",
     "# lmtest::bptest(fit)                     # constant variance (needs the lmtest package)",
     "head(sort(abs(rstudent(fit)), decreasing = TRUE))   # largest studentised residuals (outliers if above about 3)")
@@ -171,7 +217,7 @@ script_aov <- function(r, file = NULL) {
   y <- "d[[\"y\"]]"
   body <- c(
     "# mean comparisons use the agricolae package: install.packages(\"agricolae\")",
-    sprintf("y <- suppressWarnings(as.numeric(d[[%s]]))", r_str(resp)),
+    sprintf("y <- parse_number(d[[%s]])", r_str(resp)),
     trans,
     "d$y <- y",
     sprintf("for (v in %s) d[[v]] <- factor(trimws(as.character(d[[v]])))", r_vec(c(f, blk))),
@@ -213,7 +259,7 @@ script_split <- function(r, file = NULL) {
   fml <- if (crd) sprintf("y ~ %s * %s + Error(.wp)", bt(main), bt(sub)) else sprintf("y ~ %s + %s * %s + Error(.wp)", bt(blk), bt(main), bt(sub))
   body <- c(
     "# mean comparisons use the agricolae package: install.packages(\"agricolae\")",
-    sprintf("y <- suppressWarnings(as.numeric(d[[%s]]))", r_str(resp)),
+    sprintf("y <- parse_number(d[[%s]])", r_str(resp)),
     trans,
     "d$y <- y",
     sprintf("for (v in %s) d[[v]] <- factor(trimws(as.character(d[[v]])))", r_vec(c(main, sub, blk))),
@@ -268,7 +314,7 @@ script_combined <- function(r, file = NULL) {
   a <- r_num(r$alpha)
   body <- c(
     "# mean comparisons use the agricolae package: install.packages(\"agricolae\")",
-    sprintf("y <- suppressWarnings(as.numeric(d[[%s]]))", r_str(resp)),
+    sprintf("y <- parse_number(d[[%s]])", r_str(resp)),
     trans,
     "d$y <- y",
     sprintf("for (v in %s) d[[v]] <- factor(trimws(as.character(d[[v]])))", r_vec(c(trt, env, blk))),

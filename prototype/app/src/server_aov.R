@@ -340,7 +340,7 @@
   output$dl_txt <- downloadHandler("rdstat_anova_report.txt", function(file) writeLines(c(paste(app_name, "web app", version_label()), "", report_text()), file))
 
   # ---- Thai summary and Word report ----
-  aov_file_name <- reactive(if (input$src == "up") input$file$name else setup()$file)
+  aov_file_name <- reactive(script_file(input$src == "up", if (input$src == "up") input$file$name else setup()$file))
   aov_script <- reactive(script_aov(ok(), aov_file_name()))
   observeEvent(input$cp_aov_script, session$sendCustomMessage("copy_text", list(what = "R code", text = aov_script())))
   observeEvent(input$cp_aov_th, session$sendCustomMessage("copy_text", list(what = "สรุปผล", text = thai_summary_aov(ok()))))

@@ -9,7 +9,7 @@ testServer(app, {
   n <- 0
   run <- function(...) { n <<- n + 1; session$setInputs(..., go_aov = n) }
   session$setInputs(src = "ex", alpha = "0.05", pw = "auto")
-  run_script <- function(txt) { e <- new.env(); invisible(capture.output(eval(parse(text = txt), e))); e }
+  run_script <- function(txt) { e <- new.env(); old <- setwd(tempdir()); on.exit(setwd(old)); invisible(capture.output(eval(parse(text = txt), e))); e }   # in another folder: the script must not need the app files
   # the R code offered on the ANOVA screen, run on its own, must give the same table, means, letters and simple effects
   aov_script_check <- function(label) {
     r <- ok(); e <- run_script(aov_script())
@@ -171,7 +171,7 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(identical(names(corr_tables()$pairs)[c(3, 5)], c("r", "p")) && corr_tables()$pairs$p[1] == "<0.0001", "Correlation: pairs table")
   ui <- html(output$corr_results_ui); check(grepl("3 of 3", ui) && grepl("r = -0.868", ui, fixed = TRUE), "Correlation: key numbers")
   r <- corr_ok()
-  run_script <- function(txt) { e <- new.env(); invisible(capture.output(eval(parse(text = txt), e))); e }
+  run_script <- function(txt) { e <- new.env(); old <- setwd(tempdir()); on.exit(setwd(old)); invisible(capture.output(eval(parse(text = txt), e))); e }   # in another folder: the script must not need the app files
   e <- run_script(corr_script()); check(isTRUE(all.equal(e$pairs$r, r$pairs$r)) && isTRUE(all.equal(e$pairs$P, r$pairs$P)) && isTRUE(all.equal(e$pairs$PAdj, r$pairs$PAdj)) && isTRUE(all.equal(e$pairs$N, r$pairs$N)) && isTRUE(all.equal(unname(e$r_matrix), unname(r$r))), "Correlation script: Pearson reproduces the app")
   session$setInputs(corr_view = "matrix"); check(file.size(output$dl_corr_plot) > 3000, "Correlation: scatter plot matrix png")
   session$setInputs(corr_view = "heat"); p <- output$dl_corr_plot; check(file.exists(p) && file.size(p) > 3000, "Correlation: heatmap png")
@@ -214,7 +214,7 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(round(r$test$t[2], 3) == 1.915 && round(r$test$DF[2], 2) == 55.31 && round(r$p, 4) == 0.0606 && !r$significant, "t-test: Welch t = 1.915, df = 55.31, p = 0.0606 (R t.test)")
   check(identical(tt_tables()$test$Used, c("", "yes")) && round(r$test$DF[1]) == 58, "t-test: pooled and Welch rows, Welch used")
   # the R code offered to the user, run on its own, must reproduce the numbers on the screen
-  run_script <- function(txt) { e <- new.env(); invisible(capture.output(eval(parse(text = txt), e))); e }
+  run_script <- function(txt) { e <- new.env(); old <- setwd(tempdir()); on.exit(setwd(old)); invisible(capture.output(eval(parse(text = txt), e))); e }   # in another folder: the script must not need the app files
   e <- run_script(tt_script()); check(isTRUE(all.equal(unname(e$tt_welch$statistic), r$test$t[2])) && isTRUE(all.equal(e$tt$p.value, r$p)) && isTRUE(all.equal(e$var_test$p.value, r$variance$P)) && isTRUE(all.equal(e$wilcox$p.value, r$nonparametric$P)), "t-test script: independent samples reproduce the app (Welch, F test, Wilcoxon)")
   ui <- html(output$tt_results_ui); check(grepl("Difference in means", ui) && grepl("Cohen", ui) && grepl("F test", ui), "t-test: key numbers and variance test")
   session$setInputs(tt_var = "equal", go_tt = 2); check(tt_ok()$chosen == 1 && round(tt_ok()$p, 4) == 0.0604, "t-test: pooled version when variances assumed equal")
@@ -232,6 +232,16 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(isTRUE(all.equal(r$test$t, unname(ref$statistic))) && isTRUE(all.equal(c(r$test$Lower, r$test$Upper), ref$conf.int[1:2] - 3)), "t-test: one sample matches t.test, CI of the difference")
   e <- run_script(tt_script()); check(isTRUE(all.equal(unname(e$tt$statistic), r$test$t)) && isTRUE(all.equal(e$tt$p.value, r$p)) && isTRUE(all.equal(e$wilcox$p.value, r$nonparametric$P)), "t-test script: one sample reproduces the app")
   check(grepl("t.test(v, mu = mu", tt_script(), fixed = TRUE) && grepl("R code to repeat", html(output$tt_results_ui)), "t-test script: shown on the results screen")
+  # scripts must not depend on the app: example data are carried inside, files are read as the app reads them
+  check(grepl("read.csv(text = ", tt_script(), fixed = TRUE) && !grepl("example_rice.csv", tt_script(), fixed = TRUE), "Script: a built-in example carries its data")
+  e <- new.env(); eval(parse(text = script_parse_number), e)
+  txt <- c("1,250.5", "12.5%", "12 kg", "12,5", "1.250,5", "", "NA", "-", "$ 7", "3")
+  check(isTRUE(all.equal(e$parse_number(txt), star_parse_number(txt))), "Script: numbers are parsed as the app parses them")
+  semi <- tempfile(fileext = ".csv"); writeLines(c("a;b;c", "1,5;x;3", "2,5;y;4"), semi)
+  e <- new.env(); invisible(capture.output(eval(parse(text = script_header("x", semi)), e)))
+  check(identical(names(e$d), c("a", "b", "c")) && identical(e$parse_number(e$d$a), c(1.5, 2.5)), "Script: a semicolon file is read with its separator and a decimal comma is parsed")
+  e <- new.env(); eval(parse(text = grep("shapiro_safe <-", tt_script(), value = TRUE, fixed = TRUE)[1]), e)
+  check(is.null(e$shapiro_safe(c(1, 2))) && is.null(e$shapiro_safe(c(5, 5, 5))) && !is.null(e$shapiro_safe(c(1, 2, 4))), "Script: Shapiro-Wilk is skipped where the app skips it (fewer than 3 values, all equal)")
   check(file.size(output$dl_tt_plot) > 3000, "t-test: one-sample plot png")
   x <- output$dl_tt_xlsx; check(identical(readxl::excel_sheets(x), c("Descriptives", "t-test", "Wilcoxon", "Normality", "Info")), "t-test: xlsx sheets")
   check(grepl("สรุปผล", html(output$tt_results_ui)) && file.size(output$dl_tt_doc) > 10000, "t-test: Thai summary and Word report")

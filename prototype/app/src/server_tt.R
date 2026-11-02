@@ -102,7 +102,7 @@
   )
   output$dl_tt_plot <- plot_download("tt", gg_tt)
   tt_script <- reactive(script_tt(tt_ok(), tt_file_name()))
-  tt_file_name <- reactive(if (input$tt_src == "up") input$tt_file$name else tt_setup[[input$tt_example]]$file)
+  tt_file_name <- reactive(script_file(input$tt_src == "up", if (input$tt_src == "up") input$tt_file$name else tt_setup[[input$tt_example]]$file))
   copy_button("cp_tt_th", "สรุปผล", function() thai_summary_tt(tt_ok()))
   output$dl_tt_doc <- downloadHandler("rdstat_ttest_report.doc", function(file) {
     r <- tt_ok(); tb <- tt_tables()
