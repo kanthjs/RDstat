@@ -9,6 +9,19 @@ testServer(app, {
   n <- 0
   run <- function(...) { n <<- n + 1; session$setInputs(..., go_aov = n) }
   session$setInputs(src = "ex", alpha = "0.05", pw = "auto")
+  run_script <- function(txt) { e <- new.env(); invisible(capture.output(eval(parse(text = txt), e))); e }
+  # the R code offered on the ANOVA screen, run on its own, must give the same table, means, letters and simple effects
+  aov_script_check <- function(label) {
+    r <- ok(); e <- run_script(aov_script())
+    pv <- summary(e$fit)[[1]][["Pr(>F)"]]
+    same_table <- isTRUE(all.equal(pv[!is.na(pv)], r$anova$P[!is.na(r$anova$P)])) && isTRUE(all.equal(e$cv, r$cv))
+    same_means <- all(vapply(r$factors, function(f) { m <- r$means[[f]]; g <- trimws(e$cmp[[f]]$groups[m$Treatment, "groups"])
+      isTRUE(all.equal(unname(e$cmp[[f]]$means[m$Treatment, 1]), m$Mean)) && (r$interaction_significant || identical(unname(g), m$Group)) }, NA))
+    same_simple <- all(vapply(names(r$simple), function(nm) { sm <- r$simple[[nm]]; cf <- attr(sm, "compare"); af <- attr(sm, "at")
+      all(vapply(seq_len(nrow(sm)), function(i) { x <- e$simple[[paste(cf, "within", af, "=", sm[[af]][i])]]
+        identical(trimws(x$groups[sm[[cf]][i], "groups"]), sm$Group[i]) }, NA)) }, NA))
+    check(same_table && same_means && same_simple, paste("ANOVA script reproduces the app:", label))
+  }
 
   # ---- RCBD, one factor (rice yield vs nitrogen) ----
   session$setInputs(design = "RCBD", example = "rcbd1", resp = "Yield", trt = "Nitrogen", blk = "Rep")
@@ -19,6 +32,7 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(identical(tables()$anova$`Pr(>F)`[2], "0.0022"), "RCBD 1 factor: p formatted 0.0022")
   check(identical(tables()$means$Nitrogen$Group, c("b", "a", "a", "a", "a", "a")), "RCBD 1 factor: letters")
   check(identical(tables()$means$Nitrogen$N, rep("3", 6)), "RCBD 1 factor: N as integers")
+  aov_script_check("RCBD, one factor, LSD")
   html <- function(x) paste(as.character(x$html), collapse = "")
   ui <- html(output$results_ui); check(grepl("Significant effects", ui) && grepl("1 of 1", ui) && grepl("9.4%", ui, fixed = TRUE) && grepl("Highest mean of Nitrogen", ui) && grepl("result-card", ui), "RCBD 1 factor: key numbers and result cards")
   check(grepl("No results yet", html(output$corr_msg)), "Correlation: empty state before the first run")
@@ -28,6 +42,9 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   run(pw = "HSD")
   check(is.null(ok()$block) && round(ok()$anova$F[1], 2) == 9.83, "CRD 1 factor: no block, F = 9.83")
   check(identical(tables()$means$Insecticide$Group, c("ab", "c", "a", "bc", "bc", "ab", "a")), "CRD 1 factor: letters match the original")
+  aov_script_check("CRD, one factor, Tukey")
+  session$setInputs(transform = "log"); run(pw = "duncan"); aov_script_check("CRD, log-transformed response, Duncan")
+  session$setInputs(transform = "none"); run(pw = "HSD")
   check(!grepl("assumptions are not met", html(output$results_ui)) && !grepl("ข้อตกลงเบื้องต้น", html(output$results_ui)), "Results tab: no verdict on the assumptions")
   check(round(np_res()$statistic, 2) == 20.85 && np_res()$name == "Kruskal-Wallis" && grepl("Rank-based alternative", html(output$diag_ui)), "CRD 1 factor: Kruskal-Wallis chi-square = 20.85 (kruskal.test)")
 
@@ -40,6 +57,7 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(setequal(names(tables()$simple), c("supp within dose", "dose within supp")), "CRD 2 factors: simple-effect tables")
   check(identical(names(tables()$cells), c("supp", "dose = 0.5", "dose = 1", "dose = 2")), "CRD 2 factors: wide cell means")
   check(identical(tables()$simple[["supp within dose"]][["dose = 0.5"]], c("13.23 a", "7.98 b")), "CRD 2 factors: simple effect letters (original STAR)")
+  aov_script_check("CRD, two factors, significant interaction (simple effects)")
   check(!("Group" %in% names(tables()$means$supp)), "CRD 2 factors: no main-effect letters when the interaction is significant")
 
   # ---- RCBD, two factors (nitrogen x variety) ----
@@ -48,6 +66,7 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   r <- ok()
   check(identical(r$anova$Source, c("Rep", "Nitrogen", "Variety", "Nitrogen:Variety", "Error", "Total")), "RCBD 2 factors: ANOVA rows")
   check(round(r$cv, 2) == 10.07, "RCBD 2 factors: CV = 10.07")
+  aov_script_check("RCBD, two factors")
   check(identical(tables()$simple[["Nitrogen within Variety"]][["Variety = IR8"]][1:2], c("4,252.67 d", "5,672.00 c")), "RCBD 2 factors: Nitrogen within IR8 letters")
   check("Simple effects" %in% names(xlsx_sheets()), "RCBD 2 factors: simple effects in Excel")
 
@@ -56,6 +75,7 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   run(pw = "auto")
   r <- ok()
   check(identical(r$anova$Source, c("Rep", "Nitrogen", "Error(a)", "Variety", "Nitrogen:Variety", "Error(b)", "Total")), "Split plot: ANOVA rows")
+  check(is.null(aov_script()), "ANOVA script: not offered for a split plot")
   check(round(c(r$cv_a, r$cv_b), 2)[2] == 10.79 && round(r$cv_a, 2) == 6.88, "Split plot: CV(a) = 6.88, CV(b) = 10.79")
   check(identical(tables()$simple[["Nitrogen within Variety"]][["Variety = IR8"]][1:2], c("4,252.67 d", "5,672.00 c")), "Split plot: Nitrogen within IR8 letters (original STAR)")
   check(grepl("Error (a) / Error (b)", html(output$results_ui), fixed = TRUE), "Split plot: CV(a) and CV(b) in the key numbers")

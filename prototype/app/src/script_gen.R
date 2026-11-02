@@ -137,3 +137,64 @@ script_reg <- function(r, file = NULL) {
     "head(sort(abs(rstudent(fit)), decreasing = TRUE))   # largest studentised residuals (outliers if above about 3)")
   paste(c(head, "", body), collapse = "\n")
 }
+
+# CRD and RCBD with one or two factors. Other designs (split plot, combined over sites) and RCBD data with a missing
+# response (the app estimates the missing values) return NULL, and the screen says the script is not available.
+script_aov_supported <- function(r) {
+  r$design %in% c("CRD", "RCBD") && !(r$design == "RCBD" && anyNA(r$data[[r$response]]))
+}
+
+script_compare <- function(test, y, tr, alpha) {
+  a <- r_num(alpha)
+  switch(test,
+    LSD = sprintf("agricolae::LSD.test(%s, %s, dfe, mse, %s, console = FALSE)", y, tr, a),
+    bonferroni = sprintf("agricolae::LSD.test(%s, %s, dfe, mse, %s, p.adj = \"bonferroni\", console = FALSE)", y, tr, a),
+    HSD = sprintf("agricolae::HSD.test(%s, %s, dfe, mse, %s, unbalanced = length(unique(table(%s))) > 1, console = FALSE)", y, tr, a, tr),
+    duncan = sprintf("agricolae::duncan.test(%s, %s, dfe, mse, %s, console = FALSE)", y, tr, a),
+    SNK = sprintf("agricolae::SNK.test(%s, %s, dfe, mse, %s, console = FALSE)", y, tr, a),
+    scheffe = sprintf("agricolae::scheffe.test(%s, %s, dfe, mse, Fc = NA_real_, alpha = %s, console = FALSE)", y, tr, a))
+}
+
+script_aov <- function(r, file = NULL) {
+  if (!script_aov_supported(r)) return(NULL)
+  f <- r$factors; blk <- r$block
+  resp <- if (!is.null(r$transform)) r$original_response else r$response
+  title <- sprintf("%s of %s by %s%s", r$design, resp, paste(f, collapse = " x "), if (!is.null(blk)) paste(", block", blk) else "")
+  head <- script_header(title, file)
+  trans <- if (!is.null(r$transform)) c(
+    sprintf("y <- switch(%s, log = log(y + 1), sqrt = sqrt(y + 0.5), arcsin = asin(sqrt(y / 100)) * 180 / pi)   # transformed response", r_str(r$transform))
+  )
+  bt <- function(x) sprintf("`%s`", x)
+  fml <- paste(c(if (!is.null(blk)) bt(blk), paste(bt(f), collapse = " * ")), collapse = " + ")
+  y <- "d[[\"y\"]]"
+  body <- c(
+    "# mean comparisons use the agricolae package: install.packages(\"agricolae\")",
+    sprintf("y <- suppressWarnings(as.numeric(d[[%s]]))", r_str(resp)),
+    trans,
+    "d$y <- y",
+    sprintf("for (v in %s) d[[v]] <- factor(trimws(as.character(d[[v]])))", r_vec(c(f, blk))),
+    sprintf("d <- d[complete.cases(d[c(\"y\", %s)]), ]   # rows with a missing value are left out", paste(r_str(c(f, blk)), collapse = ", ")),
+    "",
+    sprintf("fit <- aov(y ~ %s, data = d)", fml),
+    "summary(fit)                         # analysis of variance table",
+    "dfe <- df.residual(fit); mse <- deviance(fit) / dfe   # error df and mean square",
+    "cv <- 100 * sqrt(mse) / mean(d$y)    # coefficient of variation (%)",
+    "",
+    "# mean comparisons: use them for effects that are significant",
+    if (length(f) == 2) "# (with two factors, compare the main effects only when the interaction is not significant)",
+    "cmp <- list()",
+    unlist(lapply(f, function(v) sprintf("cmp[[%s]] <- %s", r_str(v), script_compare(r$tests_used[[v]], "d$y", sprintf("d[[%s]]", r_str(v)), r$alpha)))),
+    sprintf("cmp   # means and letters; %s", "see cmp[[\"<factor>\"]]$groups"))
+  if (length(f) == 2 && isTRUE(r$interaction_significant)) {
+    sim <- unlist(lapply(rev(seq_along(f)), function(i) {
+      cmp_f <- f[i]; at_f <- f[-i]
+      c(sprintf("for (lv in levels(d[[%s]])) {", r_str(at_f)),
+        sprintf("  s <- d[d[[%s]] == lv, ]", r_str(at_f)),
+        sprintf("  simple[[paste(%s, \"within\", %s, \"=\", lv)]] <- %s", r_str(cmp_f), r_str(at_f),
+                script_compare(r$tests_used[[cmp_f]], "s$y", sprintf("droplevels(s[[%s]])", r_str(cmp_f)), r$alpha)),
+        "}")
+    }))
+    body <- c(body, "", "# the interaction is significant, so each factor is compared within the levels of the other", "simple <- list()", sim, "simple")
+  }
+  paste(c(head, "", body), collapse = "\n")
+}
