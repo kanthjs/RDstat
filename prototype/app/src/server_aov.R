@@ -367,16 +367,6 @@
     if (aov_welch()) return(tagList(advice, welch_results_ui(r)))
     if (aov_trimmed()) return(tagList(advice, trimmed_results_ui(r)))
     tb <- tables()
-    sig <- r$effects$Effect[r$effects$Significant %in% TRUE]
-    # with a significant interaction the overall means are not compared, so the highest cell mean is shown instead
-    top_stat <- if (isTRUE(r$interaction_significant) && !is.null(r$cells)) {
-      cl <- r$cells[which.max(r$cells$Mean), ]
-      stat("Highest cell mean", fmt_n(cl$Mean), paste(r$factors, "=", c(cl[[r$factors[1]]], cl[[r$factors[2]]]), collapse = ", "))
-    } else {
-      top_f <- if (length(intersect(sig, r$factors))) intersect(sig, r$factors)[1] else r$factors[1]
-      top <- r$means[[top_f]][which.max(r$means[[top_f]]$Mean), ]
-      stat(paste("Highest mean of", top_f), fmt_n(top$Mean), top$Treatment)
-    }
     tagList(
       advice,
       if (welch_fallback()) div(class = "alert alert-light small py-2", icon("circle-info"),
@@ -385,11 +375,7 @@
                 if (identical(input$aov_method, "trimmed")) "The trimmed-means comparison" else "Welch's ANOVA")),
       notes_ui(r$data_notes),
       div(class = if (r$significant || r$interaction_significant) "alert alert-success" else "alert alert-info", r$summary),
-      key_stats(
-        stat("Significant effects", sprintf("%d of %d", length(sig), nrow(r$effects)), if (length(sig)) paste(sig, collapse = ", ") else "none"),
-        stat("Grand mean", fmt_n(r$grand_mean), r$original_response %||% r$response),
-        stat("CV", if (is.null(r$cv_a)) sprintf("%.1f%%", r$cv) else sprintf("%.1f%% / %.1f%%", r$cv_a, r$cv_b), if (!is.null(r$cv_a)) "Error (a) / Error (b)"),
-        top_stat),
+      result_card("APA-style report", lapply(r$apa, p), copy = "cp_apa"),
       result_card("สรุปผล (ภาษาไทย)", p(lang = "th", thai_summary_aov(r)), copy = "cp_aov_th", copy_label = "คัดลอก"),
       result_card("Analysis of variance", html_table(tb$anova), copy = "cp_anova", copy_label = "Copy table",
                   if (is_comb(r$design)) p(class = "text-muted small mb-0", sprintf("Environments are fixed effects, as in STAR: %s is tested against %s; the other effects against the pooled error.",
@@ -408,7 +394,6 @@
                     html_table(tb$simple[[nm]]),
                     p(class = "text-muted small mb-0", "Means with the same letter (within a column) are not significantly different."))
       }),
-      result_card("APA-style report", lapply(r$apa, p), copy = "cp_apa"),
       code_card(aov_script(), "cp_aov_script",
                 missing = "R code is not available yet for an RCBD with missing responses (the app estimates the missing values).")
     )

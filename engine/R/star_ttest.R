@@ -247,7 +247,8 @@ print.star_ttest <- function(x, ...) {
 ## Plot of a t test: observations with the mean and its confidence interval for each group. A paired test also joins
 ## the two measurements of each unit; a one-sample test shows the test value as a dashed line.
 star_ggplot_ttest <- function(x, main = NULL, xlab = NULL, ylab = NULL, points = TRUE, base_size = 12,
-                              palette = NULL, theme = "classic", legend = "auto") {
+                              palette = NULL, theme = "classic", legend = "auto", shape = "circle", point_size = 1) {
+  pch <- .star_gg_shape(shape)
   d <- x$data
   lv <- levels(d$Group)
   m <- do.call(rbind, lapply(lv, \(g) {
@@ -261,9 +262,9 @@ star_ggplot_ttest <- function(x, main = NULL, xlab = NULL, ylab = NULL, points =
   g <- ggplot2::ggplot(d, ggplot2::aes(x = .data$Group, y = .data$Value))
   if (x$type == "paired") {
     g <- g + ggplot2::geom_line(ggplot2::aes(group = .data$Pair), colour = "grey70", linewidth = 0.4)
-    if (points) g <- g + ggplot2::geom_point(ggplot2::aes(colour = .data$Group), size = 1.8, alpha = 0.7)
+    if (points) g <- g + ggplot2::geom_point(ggplot2::aes(fill = .data$Group), shape = pch, colour = "grey20", size = 1.8 * point_size, alpha = 0.7)
   } else if (points) {
-    g <- g + ggplot2::geom_point(ggplot2::aes(colour = .data$Group), size = 1.8, alpha = 0.6,
+    g <- g + ggplot2::geom_point(ggplot2::aes(fill = .data$Group), shape = pch, colour = "grey20", size = 1.8 * point_size, alpha = 0.6,
                                  position = ggplot2::position_jitter(width = 0.08, height = 0, seed = 1))
   }
   if (x$type == "one") g <- g + ggplot2::geom_hline(yintercept = x$mu, linetype = "dashed", colour = "grey40")

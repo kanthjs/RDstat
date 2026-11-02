@@ -39,7 +39,7 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(identical(tables()$means$Nitrogen$N, rep("3", 6)), "RCBD 1 factor: N as integers")
   aov_script_check("RCBD, one factor, LSD")
   html <- function(x) paste(as.character(x$html), collapse = "")
-  ui <- html(output$results_ui); check(grepl("Significant effects", ui) && grepl("1 of 1", ui) && grepl("9.4%", ui, fixed = TRUE) && grepl("Highest mean of Nitrogen", ui) && grepl("result-card", ui), "RCBD 1 factor: key numbers and result cards")
+  ui <- html(output$results_ui); check(!grepl("key-stats", ui) && grepl("9.4", ui, fixed = TRUE) && regexpr("APA-style report", ui) < regexpr("Analysis of variance", ui) && grepl("result-card", ui), "RCBD 1 factor: the APA-style report comes first, then the result cards")
   check(grepl("No results yet", html(output$corr_msg)), "Correlation: empty state before the first run")
 
   # ---- CRD, one factor (insecticides) ----
@@ -170,8 +170,7 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   aov_script_check("split plot (RCBD), significant interaction")
   check(round(c(r$cv_a, r$cv_b), 2)[2] == 10.79 && round(r$cv_a, 2) == 6.88, "Split plot: CV(a) = 6.88, CV(b) = 10.79")
   check(identical(tables()$simple[["Nitrogen within Variety"]][["Variety = IR8"]][1:2], c("4,252.67 d", "5,672.00 c")), "Split plot: Nitrogen within IR8 letters (original STAR)")
-  check(grepl("Error (a) / Error (b)", html(output$results_ui), fixed = TRUE), "Split plot: CV(a) and CV(b) in the key numbers")
-  check(grepl("Highest cell mean", html(output$results_ui)), "Significant interaction: highest cell mean instead of an overall mean")
+  check(!is.null(ok()$cv_a) && !is.null(ok()$cv_b) && grepl("CV", paste(unlist(tables()), collapse = " ")), "Split plot: CV(a) and CV(b) kept in the result and in the tables")
   check(length(output$report) > 0 && file.size(output$dl_xlsx) > 3000, "Split plot: report and Excel")
   check(is.null(r$report) && grepl("Split Plot in Randomized Complete Block", output$report), "Split plot: classic report built on demand")
   run(pw = "HSD"); run(pw = "auto")

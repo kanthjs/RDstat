@@ -53,7 +53,7 @@
       c(x, y)
     }
     apply_plot_customizations(do.call(star_ggplot_correlation, c(list(r, pair, main = input$corr_title, xlab = input$corr_xlab, ylab = input$corr_ylab,
-                                            type = if (v == "heat") "heatmap" else "matrix"), plot_style("corr"))), "corr")
+                                            type = if (v == "heat") "heatmap" else "matrix", heat = input$corr_heat), plot_style("corr"))), "corr")
   })
   output$corr_plot <- renderPlot(print(gg_corr()),
     width = function() {

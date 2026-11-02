@@ -63,7 +63,7 @@ star_nonparametric <- function(data, response, treatment, block = NULL, alpha = 
 
 ## box plot of the observations of each treatment, with the letters of the rank comparison above the boxes
 star_ggplot_rank <- function(x, main = NULL, xlab = NULL, ylab = NULL, points = TRUE, palette = NULL, base_size = 12,
-                             theme = "classic", legend = "auto") {
+                             theme = "classic", legend = "auto", shape = "circle", point_size = 1) {
   if (!inherits(x, c("star_nonparametric", "star_trimmed"))) stop("'x' must be a result of star_nonparametric() or star_trimmed().")
   th <- star_gg_theme(base_size, theme, .star_gg_legend(legend))
   d <- x$data
@@ -74,7 +74,7 @@ star_ggplot_rank <- function(x, main = NULL, xlab = NULL, ylab = NULL, points = 
   p <- ggplot2::ggplot(d, ggplot2::aes(x = .data$Treatment, y = .data$y)) +
     ggplot2::geom_boxplot(fill = .star_gg_palette(1, palette), alpha = 0.35, width = 0.6, outlier.shape = if (isTRUE(points)) NA else 19)
   if (isTRUE(points)) p <- p + ggplot2::geom_point(position = ggplot2::position_jitter(width = 0.12, height = 0, seed = 1),
-                                                   shape = 21, size = 1.8, fill = "white", colour = "grey20", alpha = 0.85)
+                                                   shape = .star_gg_shape(shape), size = 1.8 * point_size, fill = "white", colour = "grey20", alpha = 0.85)
   if (x$significant) p <- p + ggplot2::geom_text(data = m, ggplot2::aes(x = .data$Treatment, y = .data$top, label = .data$Group),
                                                  vjust = -0.6, fontface = "bold", inherit.aes = FALSE)
   note <- if (x$significant) sprintf("Letters: %s, alpha = %s.", x$posthoc_label, format(x$alpha))
