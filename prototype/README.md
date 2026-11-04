@@ -7,7 +7,7 @@ Build and test:
 ```
 Rscript scripts/build_app.R                 # copies the app's analysis code (engine/R/star_*.R) into prototype/app/star
 Rscript prototype/tests/test_server.R       # headless test of the server logic on native R
-Rscript -e 'shinylive::export("prototype/app", "prototype/site")'
+Rscript scripts/export_site.R prototype/site # Shinylive export, with the loading screen in prototype/loading_screen.html
 ```
 
 Serve `prototype/site` over http with a normal browser (it needs a service worker; the Claude desktop browser pane refuses to register one).

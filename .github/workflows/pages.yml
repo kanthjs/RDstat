@@ -3,7 +3,7 @@ name: Deploy prototype to GitHub Pages
 on:
   push:
     branches: [main]
-    paths: ["prototype/**", "engine/**", "scripts/build_app.R", ".github/workflows/pages.yml", "CHANGELOG.md"]
+    paths: ["prototype/**", "engine/**", "scripts/build_app.R", "scripts/export_site.R", ".github/workflows/pages.yml", "CHANGELOG.md"]
   workflow_dispatch:
 
 permissions:
@@ -32,7 +32,7 @@ jobs:
       - name: Test the app (deploy stops if a test fails)
         run: Rscript prototype/tests/test_server.R
       - name: Export Shinylive site
-        run: Rscript -e 'shinylive::export("prototype/app", "_site")'
+        run: Rscript scripts/export_site.R _site
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
