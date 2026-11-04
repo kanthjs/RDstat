@@ -36,15 +36,6 @@
         "shiny::runApp('prototype/app', port=as.integer(Sys.getenv('PORT', '4325')), launch.browser=FALSE)"
       ],
       "port": 4325
-    },
-    {
-      "name": "star-app-pr6-preview",
-      "runtimeExecutable": "C:/Program Files/R/R-4.6.1/bin/Rscript.exe",
-      "runtimeArgs": [
-        "-e",
-        "shiny::runApp('F:/Github/RDstat-rank/prototype/app', port=4326, launch.browser=FALSE)"
-      ],
-      "port": 4326
     }
   ]
 }

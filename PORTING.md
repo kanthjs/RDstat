@@ -9,11 +9,8 @@ Restructured: `reference/` is read-only material from the reverse engineering; `
 
 | Path | What |
 |---|---|
-| `reference/java-gui/` | Decompiled Java GUI (297 classes, `org.irri.breedingtool.*`) |
-| `reference/java-rbridge/` | Decompiled `RJavaManager1.0.jar`: the Java-to-R bridge |
 | `reference/r-original/` | All 257 functions of the original R package STAR 2.0.2, one `.R` per function, pristine (from `deparse`, comments lost) |
 | `reference/original-outputs/` | Printed output of the original STAR on R 2.15.1 for the shared test cases |
-| `reference/tools/cfr-0.152.jar` | CFR decompiler (runs on the bundled Java 6) |
 | `engine/` | Installable R package for R 4.5.2: the port, edited as listed below. Tests in `engine/tests/` |
 | `prototype/` | Shiny/Shinylive web app. `prototype/app/star/` is generated from `engine/R` by `scripts/build_app.R` (git-ignored) |
 | `scripts/` | `extract_star.R` (recover R sources), `gen_namespace.R`, `install_deps.R`, `build_app.R`, `compare_cases.R` (run the shared cases on any R), `smoke.R` |
