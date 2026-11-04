@@ -451,6 +451,9 @@
     dg <- ok()$diagnostics; req(dg)
     if (identical(input$diag_style, "gg")) print(gg_diag(dg, "aov")) else star_plot_diagnostics(dg)
   })
+  # STAR's own printout of the same analysis, built only when the tab is viewed, copied or downloaded
+  report_text <- reactive(star_report(ok())) |> bindCache(ok(), cache = star_cache)
+  output$report <- renderText(paste(report_text(), collapse = "\n"))
 
   xlsx_sheets <- reactive({
     r <- ok()
@@ -504,6 +507,7 @@
     sheets
   })
   output$dl_xlsx <- downloadHandler(function() switch(aov_mode(), rank = "rdstat_rank_test.xlsx", welch = "rdstat_welch_anova.xlsx", trimmed = "rdstat_trimmed_means.xlsx", "rdstat_anova.xlsx"), function(file) writexl::write_xlsx(xlsx_sheets(), file))
+  output$dl_txt <- downloadHandler("rdstat_anova_report.txt", function(file) writeLines(c(paste(app_name, "web app", version_label()), "", report_text()), file))
   output$dl_aov_plot <- downloadHandler(function() paste0("rdstat_means_plot.", input$aov_fmt), function(file) {
     fmt <- input$aov_fmt %||% "png"; dpi <- as.numeric(input$aov_dpi %||% 300); wh <- export_dims("aov")
     if (use_gg() || aov_rank() || aov_trimmed()) { star_ggsave(gg_current(), file, width = wh[1], height = wh[2], dpi = dpi); return(invisible()) }
@@ -603,6 +607,7 @@
       if (!is.null(tables()$cells)) c("Cell means", tsv(tables()$cells), ""),
       unlist(lapply(names(tables()$simple), function(nm) c(nm, tsv(tables()$simple[[nm]]), "")))), collapse = "\n"))))
   observeEvent(input$cp_apa, session$sendCustomMessage("copy_text", list(what = "APA text", text = paste(ok()$apa, collapse = " "))))
+  observeEvent(input$cp_report, session$sendCustomMessage("copy_text", list(what = "Report", text = paste(report_text(), collapse = "\n"))))
   observeEvent(input$copy_status, {
     st <- input$copy_status
     showNotification(if (isTRUE(st$ok)) paste(st$what, "copied to clipboard") else "Copy failed: select the text and copy manually",

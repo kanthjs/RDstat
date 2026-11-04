@@ -1,6 +1,6 @@
 # RDstat web app (Shinylive)
 
-Three screens: analysis of variance (CRD, RCBD, split plot; mean comparison, plots, assumption checks), correlation (Pearson / Spearman / Kendall, heatmap and scatter plots) and linear regression (multiple, quadratic, cubic; diagnostics, prediction). Each has copy and Excel/plot download. It runs in the browser via webR; the analyses follow IRRI STAR (Gomez & Gomez, 1984) but use base R, agricolae, lmtest and mctest, not STAR's code.
+Three screens: analysis of variance (CRD, RCBD, split plot; mean comparison, plots, assumption checks), correlation (Pearson / Spearman / Kendall, heatmap and scatter plots) and linear regression (multiple, quadratic, cubic; diagnostics, prediction). Each has copy and Excel/plot download. It runs in the browser via webR; the analyses follow IRRI STAR (Gomez & Gomez, 1984) and use base R, agricolae, lmtest and mctest; STAR's own code runs only for the optional Classic STAR report tab.
 
 Build and test:
 
