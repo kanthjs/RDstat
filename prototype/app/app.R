@@ -533,8 +533,8 @@ ui <- bslib::page_navbar(
               "Randomized complete block (RCBD)" = "RCBD",
               "Split plot in CRD" = "SplitCRD",
               "Split plot in RCBD" = "SplitRCBD",
-              "Combined over sites / seasons: RCBD" = "CombRCBD",
-              "Combined over sites / seasons: CRD" = "CombCRD"
+              "Combined over sites / seasons: CRD" = "CombCRD",
+              "Combined over sites / seasons: RCBD" = "CombRCBD"
             )
           ),
           help_box(
