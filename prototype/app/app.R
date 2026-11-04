@@ -17,6 +17,13 @@ if (FALSE) {
 for (f in sort(list.files("star", pattern = "[.]R$", full.names = TRUE))) {
   source(f, local = FALSE)
 }
+# ggplot text uses Roboto (www/fonts, Apache 2.0). Registering the files with systemfonts lets ragg (on-screen plots
+# and PNG export) find the font without it being installed; if registration fails, plots keep the device default font.
+if (tryCatch({
+  if (!"Roboto" %in% systemfonts::registry_fonts()$family)
+    systemfonts::register_font("Roboto", plain = "www/fonts/Roboto-Regular.ttf", bold = "www/fonts/Roboto-Bold.ttf")
+  TRUE
+}, error = function(e) FALSE)) options(star.plot_family = "Roboto")
 
 # Code is split by role into ./src; each file is sourced in the same order as before, so definitions keep their dependencies.
 source("src/helpers.R", local = TRUE) # formatting, display tables, data reading, UI building blocks
@@ -240,6 +247,8 @@ css_fill <- function(x, ...) {
 app_css <- css_fill(
   "@font-face { font-family: 'Chulabhorn Likit'; src: url('fonts/ChulabhornLikitText-Regular.ttf') format('truetype'); font-weight: normal; }
     @font-face { font-family: 'Chulabhorn Likit'; src: url('fonts/ChulabhornLikitText-Bold.ttf') format('truetype'); font-weight: bold; }
+    @font-face { font-family: 'Roboto'; src: url('fonts/Roboto-Regular.ttf') format('truetype'); font-weight: normal; }
+    @font-face { font-family: 'Roboto'; src: url('fonts/Roboto-Bold.ttf') format('truetype'); font-weight: bold; }
     :root { --bs-body-font-family: 'Chulabhorn Likit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             --bs-body-font-size: 15px;
             --bs-primary: %1$s; --bs-primary-rgb: 46, 125, 50;
