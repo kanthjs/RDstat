@@ -4,7 +4,7 @@ The app is a **static website**: a folder of files. No R, no database and no ser
 
 ## Build the folder
 
-On a computer with R 4.5 and the packages `shiny`, `shinylive`, `ggplot2`, `writexl`, `readxl`, `agricolae`, `nortest`, `lmtest`:
+On a computer with R 4.5 and the packages `shiny`, `shinylive`, `ggplot2`, `writexl`, `readxl`, `agricolae`, `lmtest`:
 
 ```
 Rscript scripts/build_app.R

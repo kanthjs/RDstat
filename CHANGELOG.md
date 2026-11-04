@@ -3,6 +3,8 @@
 Changes to the RDstat web app that can affect results are marked **(results)**. The version is shown in the app's About tab and in every downloaded file.
 
 ## 0.1.0 (unreleased)
+- **(results)** Missing plots of an RCBD are estimated by least squares with `lm()` and `predict()` (Yates's missing-plot method) instead of STAR's iterative `estMissData()`. STAR stopped iterating at a 0.1% change, so the estimates, sums of squares and F values move slightly (F by up to about 0.03 in the tests); degrees of freedom, the error sum of squares and the rules (one plot per block x treatment, at most 10% missing) are unchanged.
+- The Lilliefors (Kolmogorov-Smirnov) test of the residuals and the nortest package are removed; normality of the residuals is checked with the Shapiro-Wilk test. The Methods page lists the software in a table (package, version, what it is used for, functions).
 - "R code to repeat this analysis" card at the end of each results screen (t-test, correlation, regression, analysis of variance including the split plot and the analysis combined over sites) with a Copy button. The script uses base R and agricolae only, carries the example data (or reads your file with its separator and the same number parsing as the app) and gives the same numbers as the screen. Not available for an RCBD with missing responses.
 - The app code is split into `prototype/app/src/` (helpers, screens, one server file per screen); behaviour is unchanged. Notes on the problems met are in `docs/DEV_NOTES.md`.
 - First public build: ANOVA (CRD, RCBD, split plot), correlation and linear regression.

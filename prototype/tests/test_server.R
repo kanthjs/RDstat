@@ -391,10 +391,12 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   cat("ok   regression copy buttons ran\n")
 
   # ---- Home, Methods, About ----
-  session$setInputs(home_aov = 1, home_corr = 1, home_reg = 1, cp_methods = 1)
+  session$setInputs(home_aov = 1, home_corr = 1, home_reg = 1)
   check(grepl("R [0-9]+[.][0-9]+", methods_sentence("3.5.0")) && grepl("ggplot2 3.5.0", methods_sentence("3.5.0")), "Methods sentence names R and ggplot2 versions")
   check(nzchar(version_label()) && nzchar(app_name), "App name and version label exist")
   check(grepl("เอกสารอ้างอิงของซอฟต์แวร์", paste(as.character(output$methods_text$html), collapse = "")), "Methods page renders")
+  mt <- paste(as.character(output$methods_text$html), collapse = "")
+  check(grepl("<table", mt) && grepl("agricolae", mt) && !grepl("nortest|RDstat|cp_methods", mt), "Methods page: software table without nortest, the RDstat row or the English sentence")
   # Methods page by topic: each topic's references resolve, and hold only what that topic uses
   topic_of <- function(id) Filter(function(t) t$id == id, method_topics)[[1]]
   check(all(vapply(method_topics, function(t) all(nzchar(topic_refs(t))), NA)) && !anyDuplicated(vapply(method_topics, `[[`, "", "id")) &&
@@ -406,7 +408,20 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(grepl("^t-test
 Software: R [0-9.]+
 Functions: stats::t.test", tt_txt) && grepl("Student (1908)", tt_txt, fixed = TRUE) && !grepl("agricolae", tt_txt), "Methods topics: copy text of the t-test topic")
-  check(any(startsWith(topic_refs(topic_of("rcbd")), "International Rice Research Institute")) && !length(topic_refs(topic_of("advice"))), "Methods topics: STAR cited where its code is used; no references where none apply")
+  check(any(startsWith(topic_refs(topic_of("combined")), "International Rice Research Institute")) && !any(startsWith(topic_refs(topic_of("rcbd")), "International Rice Research Institute")) && any(startsWith(topic_refs(topic_of("rcbd")), "Yates F (1933)")) && !length(topic_refs(topic_of("advice"))), "Methods topics: STAR cited where its code is used (combined, not RCBD); no references where none apply")
+  # RCBD with missing plots: least-squares estimates (lm + predict), error df reduced by the number of estimates
+  local({
+    set.seed(1); dm <- expand.grid(Trt = factor(paste0("T", 1:6)), Block = factor(1:4))
+    dm$y <- round(50 + as.integer(dm$Trt) * 3 + as.integer(dm$Block) * 2 + rnorm(24, 0, 3), 1); dm$y[c(3, 17)] <- NA
+    r <- star_aov(dm, "y", "Trt", "Block", design = "RCBD", report = FALSE)
+    full <- dm; obs <- !is.na(dm$y); full$y[!obs] <- predict(lm(y ~ Block + Trt, dm[obs, ]), dm[!obs, ])
+    a <- anova(lm(y ~ Block + Trt, full)); e <- r$anova[r$anova$Source == "Error", ]
+    check(e$DF == 13 && isTRUE(all.equal(e$SS, a["Residuals", "Sum Sq"])) && isTRUE(all.equal(r$anova$SS[2], a["Trt", "Sum Sq"])) &&
+            abs(r$anova$F[2] - 12.83) < 0.02 && any(grepl("least squares", r$data_notes)),
+          "RCBD missing plots: estimated by lm() + predict(), error df 13, F close to STAR's 12.83")
+    too_many <- dm; too_many$y[1:4] <- NA
+    check(inherits(tryCatch(star_aov(too_many, "y", "Trt", "Block", design = "RCBD"), error = identity), "error"), "RCBD missing plots: more than 10% missing is refused, as in STAR")
+  })
   mt <- paste(as.character(output$methods_topics$html), collapse = "")
   check(grepl("accordion", mt) && grepl("cp_topic_posthoc", mt) && grepl(method_groups[["alt"]], mt, fixed = TRUE), "Methods topics: the page shows the topics in groups with copy buttons")
   session$setInputs(cp_topic_posthoc = 1, cp_topic_ttest = 1)

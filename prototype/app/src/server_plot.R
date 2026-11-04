@@ -72,9 +72,13 @@
   }
   gg_version <- function() tryCatch(as.character(utils::packageVersion("ggplot2")), error = function(e) "")
   output$methods_text <- renderUI({
-    sentence <- methods_sentence(gg_version())
+    rows <- lapply(software_uses, function(s) tags$tr(
+      tags$td(strong(s$pkg)), tags$td(software_version(s$pkg)), tags$td(s$use),
+      tags$td(lapply(seq_along(s$fun), function(i) tagList(if (i > 1) ", ", code(s$fun[i]))))))
     tagList(
-      div(class = "well well-sm", sentence), actionButton("cp_methods", "คัดลอกประโยค"),
+      tags$table(class = "table table-sm table-striped small",
+        tags$thead(tags$tr(tags$th("Package"), tags$th("รุ่น"), tags$th("ใช้ทำอะไร"), tags$th("ฟังก์ชัน"))),
+        tags$tbody(rows)),
       h4("เอกสารอ้างอิงของซอฟต์แวร์"), tags$ul(lapply(package_refs(), tags$li)), actionButton("cp_refs", "คัดลอกเอกสารอ้างอิง"),
       p(class = "text-muted", sprintf("รุ่นที่ใช้ในการใช้งานครั้งนี้: %s, ggplot2 %s",R.version.string, gg_version())))
   })
@@ -85,4 +89,3 @@
 observeEvent(input$cp_mrefs, session$sendCustomMessage("copy_text", list(what = "Method references", text = paste(method_refs, collapse = "
 
 "))))
-  observeEvent(input$cp_methods, session$sendCustomMessage("copy_text", list(what = "Methods sentence", text = methods_sentence(gg_version()))))

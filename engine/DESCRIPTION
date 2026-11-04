@@ -4,6 +4,6 @@ Title: Statistical Tools for Agricultural Research
 Version: 2.0.2.9000
 Description: Recovered from the compiled IRRI STAR 2.0.2 package (R 2.15) for porting to modern R. Work in progress.
 Depends: R (>= 4.1.0)
-Imports: ggplot2, agricolae, nortest, lmtest, readxl, writexl, cluster, lme4, multcomp, fitdistrplus, leaps, vegan, lattice, permute, ade4, R.methodsS3, R.oo, MASS
+Imports: ggplot2, agricolae, lmtest, readxl, writexl, cluster, lme4, multcomp, fitdistrplus, leaps, vegan, lattice, permute, ade4, R.methodsS3, R.oo, MASS
 License: GPL (>= 2)
 Suggests: testthat (>= 3.0.0)

@@ -13,9 +13,30 @@ app_version <- local({
   c(version = get("version"), commit = get("commit"), built = get("built"))
 })
 version_label <- function() { v <- app_version; if (anyNA(v)) "development build" else sprintf("v%s (%s, built %s)", v[["version"]], v[["commit"]], v[["built"]]) }
-methods_sentence <- function(gg) sprintf("Data were analysed with %s (web app %s) running R %s.%s in the browser, using routines recovered from IRRI STAR 2.0.2. Analysis of variance used aov(), with environments combined as in STAR and their error variances compared with Bartlett's test; means were compared with the agricolae package (LSD, Tukey HSD, Duncan), and SE(m), SED and LSD were computed from the error mean square of each factor; Welch's ANOVA used oneway.test() with Games-Howell comparisons; trimmed means (20%%) used Yuen's test and Wilcox's heteroscedastic ANOVA with percentile bootstrap intervals; rank-based tests used kruskal() and friedman() (agricolae), with Dunn's test as an option after Kruskal-Wallis; t tests used t.test() and var.test(), with wilcox.test() as the rank-based alternative; correlations used cor.test(); regression used lm(); residual normality used the Shapiro-Wilk test and the Lilliefors test (nortest); constant variance used the Breusch-Pagan test (lmtest); graphics used ggplot2 %s. See the references below.", app_name, version_label(), R.version$major, R.version$minor, gg)
+methods_sentence <- function(gg) sprintf("Data were analysed with %s (web app %s) running R %s.%s in the browser, using routines recovered from IRRI STAR 2.0.2. Analysis of variance used aov(), with missing plots of an RCBD estimated by least squares (Yates's method, using lm() and predict()) and environments combined as in STAR and their error variances compared with Bartlett's test; means were compared with the agricolae package (LSD, Tukey HSD, Duncan), and SE(m), SED and LSD were computed from the error mean square of each factor; Welch's ANOVA used oneway.test() with Games-Howell comparisons; trimmed means (20%%) used Yuen's test and Wilcox's heteroscedastic ANOVA with percentile bootstrap intervals; rank-based tests used kruskal() and friedman() (agricolae), with Dunn's test as an option after Kruskal-Wallis; t tests used t.test() and var.test(), with wilcox.test() as the rank-based alternative; correlations used cor.test(); regression used lm(); residual normality used the Shapiro-Wilk test; constant variance used the Breusch-Pagan test (lmtest); graphics used ggplot2 %s. See the references below.", app_name, version_label(), R.version$major, R.version$minor, gg)
 # packages whose results or tools appear in the output; their references are built from each package's own citation()
-cited_packages <- c("agricolae", "nortest", "lmtest", "ggplot2", "readxl", "writexl")
+cited_packages <- c("agricolae", "lmtest", "ggplot2", "readxl", "writexl")
+# what each piece of software does in the app, for the table on the Methods page: the package ("R" for base R and
+# stats, "STAR" for the routines recovered from STAR), what it is used for (Thai) and the functions. Tests written in
+# this app (Games-Howell, Dunn, trimmed means) are listed under the R functions they call. Keep this in step with methods_sentence() and method_topics.
+software_uses <- list(
+  list(pkg = "R", use = "ANOVA, ประมาณค่าที่หายไปใน RCBD, t-test, Welch's ANOVA และ Games-Howell, Dunn's test, ค่าเฉลี่ยตัดปลาย (Yuen) และ bootstrap, สหสัมพันธ์, การถดถอย, Wilcoxon, Shapiro-Wilk, ปรับค่า p, SE(m) SED LSD",
+       fun = c("aov()", "lm()", "predict()", "t.test()", "var.test()", "oneway.test()", "ptukey()", "pnorm()", "pt()", "pf()", "quantile()", "qt()",
+               "cor.test()", "wilcox.test()", "shapiro.test()", "p.adjust()")),
+  list(pkg = "STAR", use = "การวิเคราะห์ร่วมหลายสภาพแวดล้อม (Bartlett's test), VIF, รายงานแบบ STAR",
+       fun = c("combAOVTest()", "vif()", "AOVTest()")),
+  list(pkg = "agricolae", use = "เปรียบเทียบค่าเฉลี่ยหลัง ANOVA (LSD, Tukey HSD, Duncan), Kruskal-Wallis, Friedman",
+       fun = c("LSD.test()", "HSD.test()", "duncan.test()", "kruskal()", "friedman()")),
+  list(pkg = "lmtest", use = "ทดสอบความแปรปรวนคงที่ในการถดถอย (Breusch-Pagan)", fun = "bptest()"),
+  list(pkg = "ggplot2", use = "กราฟทั้งหมด", fun = "ggplot()"),
+  list(pkg = "readxl", use = "อ่านไฟล์ Excel ที่อัปโหลด", fun = "read_excel()"),
+  list(pkg = "writexl", use = "เขียนผลเป็นไฟล์ Excel", fun = "write_xlsx()")
+)
+# the version shown beside each entry of software_uses
+software_version <- function(pkg) switch(pkg,
+  R = paste(R.version$major, R.version$minor, sep = "."),
+  STAR = "2.0.2 (IRRI)",
+  { v <- pkg_version(pkg); if (nzchar(v)) v else "ไม่ได้ติดตั้ง" })
 star_ref <- "International Rice Research Institute (IRRI). STAR: Statistical Tools for Agricultural Research, version 2.0.2."
 # the reference of one package ("base" for R itself), from its citation(); markup and line breaks removed
 package_ref <- function(pkg) {

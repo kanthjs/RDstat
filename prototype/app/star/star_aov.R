@@ -29,11 +29,16 @@ star_aov <- function(data, response, treatment, block = NULL, design = c("CRD", 
   y <- d[[response]]
   # STAR fits `response ~ block + factors` with aov() for a CRD (any layout; rows with a missing response are left
   # out) and for an RCBD in which every block x treatment cell has the same count and no response is missing, so
-  # that model is fitted directly here. Otherwise STAR's own procedure is run: it estimates missing values,
-  # adjusts degrees of freedom and refuses layouts it cannot analyse.
+  # that model is fitted directly here. An RCBD with missing plots has them estimated by least squares
+  # (.star_estimate_missing) and its error df reduced, as STAR does; STAR's own code is only used for its report.
   if (design == "CRD" || (!anyNA(y) && .star_is_balanced(d[c(block, factors)]))) {
     raw <- ConstructAOVTable(summary(stats::aov(.star_aov_formula(response, factors, block), data = d)))
     if (anyNA(y)) data_notes <- c(data_notes, sprintf("The %d row(s) with a missing response were left out of the analysis.", sum(is.na(y))))
+    report <- if (report) .star_aov_report(d, response, factors, block, design, test, alpha)
+  } else if (design == "RCBD") {
+    est <- .star_estimate_missing(d, response, factors, block)
+    raw <- .star_adjust_error_df(ConstructAOVTable(summary(stats::aov(.star_aov_formula(response, factors, block), data = est$data))), est$df_error)
+    data_notes <- c(data_notes, sprintf("%d missing response value(s) were estimated by least squares (Yates' missing-plot method: the values predicted by lm() fitted to the observed data); the error degrees of freedom are reduced by %d.", est$n_missing, est$n_missing))
     report <- if (report) .star_aov_report(d, response, factors, block, design, test, alpha)
   } else {
     legacy <- .star_aov_legacy(d, response, factors, block, design, test, alpha)
@@ -122,6 +127,49 @@ star_aov <- function(data, response, treatment, block = NULL, design = c("CRD", 
   bt <- \(x) if (length(x)) paste0("`", x, "`")
   rhs <- paste(c(bt(block), paste(bt(factors), collapse = " * ")), collapse = " + ")
   stats::as.formula(paste(bt(response), "~", rhs))
+}
+
+# Missing responses of an RCBD, estimated by least squares (Yates 1933): the values that minimise the error sum of
+# squares are the predictions of the model fitted to the observed rows, so lm() + predict() gives them directly (STAR
+# reached the same values by iterating aov()). Same rules as STAR: at most one row per block x treatment cell (absent
+# cells are added as missing), and no more than 10% of the cells missing. Returns the completed data, the number of
+# estimates and the error df of the model fitted to the observed data, which the ANOVA of the completed data uses.
+.star_estimate_missing <- function(d, response, factors, block) {
+  keys <- c(block, factors)
+  n_cell <- table(d[keys])
+  if (any(n_cell > 1)) {
+    stop("The data are unbalanced: some ", paste(keys, collapse = " x "), " combinations have more than one row. An RCBD needs one plot per treatment in each block.", call. = FALSE)
+  }
+  if (any(n_cell == 0)) { # add the absent plots as missing values
+    absent <- as.data.frame(n_cell, stringsAsFactors = FALSE)
+    absent <- absent[absent$Freq == 0, keys, drop = FALSE]
+    for (k in keys) absent[[k]] <- factor(absent[[k]], levels = levels(d[[k]]))
+    absent[[response]] <- NA_real_
+    d <- rbind(d[c(keys, response)], absent[c(keys, response)])
+  }
+  miss <- is.na(d[[response]])
+  if (mean(miss) > 0.1) {
+    stop(sprintf("Too many missing values: %d of %d plots (more than 10%%) have no response. Missing values can be estimated for up to 10%% of the plots.", sum(miss), length(miss)), call. = FALSE)
+  }
+  fit <- stats::lm(.star_aov_formula(response, factors, block), data = d[!miss, , drop = FALSE])
+  pred <- suppressWarnings(stats::predict(fit, newdata = d[miss, , drop = FALSE]))
+  if (anyNA(coef(fit)) || anyNA(pred)) {
+    stop("The missing values cannot be estimated: a treatment or block has too few observed plots.", call. = FALSE)
+  }
+  d[[response]][miss] <- unname(pred)
+  list(data = d, n_missing = sum(miss), df_error = stats::df.residual(fit))
+}
+
+# The ANOVA table of the completed data with the error df of the observed data: error MS, F and P recomputed, and the
+# total df the sum of the others (as STAR does for estimated values)
+.star_adjust_error_df <- function(raw, df_error) {
+  e <- trimws(rownames(raw)) == "Error"; tot <- trimws(rownames(raw)) == "Total"; eff <- !e & !tot
+  raw[e, 1] <- df_error
+  raw[e, 3] <- raw[e, 2] / df_error
+  raw[eff, 4] <- raw[eff, 3] / raw[e, 3]
+  raw[eff, 5] <- stats::pf(raw[eff, 4], raw[eff, 1], df_error, lower.tail = FALSE)
+  raw[tot, 1] <- sum(raw[!tot, 1])
+  raw
 }
 
 # TRUE when every combination of the columns of `cols` occurs equally often

@@ -347,7 +347,7 @@ test_that("diagnostics: work for two factors with blocks and report variance het
   expect_s3_class(star_diagnostics(het, "Yield", "Nitrogen", "Rep"), "star_diagnostics")
 })
 
-test_that("Bonferroni letters, partial eta squared, APA text and the Lilliefors test", {
+test_that("Bonferroni letters, partial eta squared, and APA text", {
   r <- star_aov(Insecticides, "GrainYield", "Insecticide", design = "CRD", test = "bonferroni")
   lsd <- star_aov(Insecticides, "GrainYield", "Insecticide", design = "CRD", test = "LSD")
   expect_equal(r$anova, lsd$anova)
@@ -356,7 +356,6 @@ test_that("Bonferroni letters, partial eta squared, APA text and the Lilliefors 
   ss <- r$anova$SS
   expect_equal(r$effects$PartialEta2[1], ss[1] / (ss[1] + ss[2]))
   expect_match(r$apa[1], "^The main effect of Insecticide on GrainYield was significant, F\\(6, 21\\) = 9\\.83, p < \\.001, partial eta squared = \\.74\\.$")
-  expect_true(is.finite(r$diagnostics$ks$p))
 })
 
 # ---- ggplot2 versions of the plots ------------------------------------------------------------------------------

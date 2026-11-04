@@ -43,15 +43,9 @@
   } else {
     list(test = "Shapiro-Wilk", statistic = NA_real_, p = NA_real_, ok = NA)
   }
-  ks <- if (n >= 5 && diff(range(res)) > 0) { # Kolmogorov-Smirnov with Lilliefors correction (mean and SD estimated)
-    p <- tryCatch(nortest::lillie.test(res)$p.value, error = \(e) NA_real_)
-    list(test = "Kolmogorov-Smirnov (Lilliefors)", statistic = tryCatch(unname(nortest::lillie.test(res)$statistic), error = \(e) NA_real_), p = p, ok = p >= alpha)
-  } else {
-    list(test = "Kolmogorov-Smirnov (Lilliefors)", statistic = NA_real_, p = NA_real_, ok = NA)
-  }
 
   list(n = n, res = res, fitted = fitted, sres = sres, cook = cook, flag = flag, rn = rn, outliers = outliers,
-       n_out = n_out, n_sus = n_sus, normality = normality, ks = ks)
+       n_out = n_out, n_sus = n_sus, normality = normality)
 }
 
 star_diagnostics <- function(data, response, treatment, block = NULL, alpha = 0.05,
@@ -62,7 +56,7 @@ star_diagnostics <- function(data, response, treatment, block = NULL, alpha = 0.
   fit <- stats::lm(stats::as.formula(paste0("`", response, "` ~ ", rhs)), data = d)
   ck <- .star_resid_checks(fit, d, response, treatment, alpha, outlier_cut, suspect_cut)
   n <- ck$n; res <- ck$res; sres <- ck$sres; cook <- ck$cook; flag <- ck$flag; rn <- ck$rn; fitted <- ck$fitted
-  outliers <- ck$outliers; n_out <- ck$n_out; n_sus <- ck$n_sus; normality <- ck$normality; ks <- ck$ks
+  outliers <- ck$outliers; n_out <- ck$n_out; n_sus <- ck$n_sus; normality <- ck$normality
 
   # ---- homogeneity of variances (Levene, median-centred) ----
   cell <- interaction(d[, treatment, drop = FALSE], drop = TRUE)
@@ -99,7 +93,6 @@ star_diagnostics <- function(data, response, treatment, block = NULL, alpha = 0.
   if (length(hi_cook) && n_out == 0 && n_sus == 0) {
     msg <- c(msg, sprintf("%d observation(s) have a large Cook's distance (> 4/n) but are not outliers; they influence the fit more than most.", length(hi_cook)))
   }
-  if (!is.na(ks$p)) msg <- c(msg, sprintf("Kolmogorov-Smirnov (Lilliefors) on residuals: D = %.3f, p %s.", ks$statistic, .star_fmt_p(ks$p)))
   if (isTRUE(normality$ok)) {
     msg <- c(msg, sprintf("Residuals are consistent with a normal distribution (Shapiro-Wilk p %s).", .star_fmt_p(normality$p)))
   } else if (isFALSE(normality$ok)) {
@@ -121,8 +114,8 @@ star_diagnostics <- function(data, response, treatment, block = NULL, alpha = 0.
 
   structure(
     list(
-      outliers = outliers, n_outliers = n_out, n_suspect = n_sus, normality = normality, ks = ks,
-      homogeneity = homogeneity, messages = msg, ok = n_out == 0 && !isFALSE(normality$ok) && !isFALSE(ks$ok) && !isFALSE(homogeneity$ok),
+      outliers = outliers, n_outliers = n_out, n_suspect = n_sus, normality = normality,
+      homogeneity = homogeneity, messages = msg, ok = n_out == 0 && !isFALSE(normality$ok) && !isFALSE(homogeneity$ok),
       residuals = data.frame(Row = rn, Fitted = fitted, Residual = res, Studentized = sres, Flag = flag, stringsAsFactors = FALSE),
       response = response, alpha = alpha, outlier_cut = outlier_cut, suspect_cut = suspect_cut
     ),

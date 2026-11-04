@@ -1,5 +1,5 @@
 # Plain R scripts that repeat an analysis outside the app. They use only base R (stats) and, where the app does,
-# agricolae / nortest / lmtest, never the star_* functions, so they run on any computer with R.
+# agricolae / lmtest, never the star_* functions, so they run on any computer with R.
 
 r_str <- function(x) encodeString(as.character(x), quote = "\"")
 r_vec <- function(x) if (length(x) == 1) r_str(x) else paste0("c(", paste(r_str(x), collapse = ", "), ")")
