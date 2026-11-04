@@ -425,8 +425,8 @@
   # the figure shown and downloaded: the box plot for a rank-based analysis, else the means
   gg_current <- reactive(if (aov_rank() || aov_trimmed()) gg_rank() else gg_means())
   draw_means <- function() {
-    if (aov_rank() || aov_trimmed()) print(gg_rank())
-    else if (use_gg()) print(gg_means())
+    if (aov_rank() || aov_trimmed()) gg_rank()
+    else if (use_gg()) gg_means()
     else star_plot_means(plot_obj(), sub("_line$", "", plot_effect()), main = input$gg_title, xlab = input$gg_xlab, ylab = input$gg_ylab)
   }
   output$means_plot <- render_live_plot("aov", draw_means)

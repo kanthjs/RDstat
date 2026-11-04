@@ -36,7 +36,8 @@ test_that("t test results carry the Wilcoxon alternative", {
   expect_equal(r$nonparametric$Estimate, unname(w$estimate))
   one <- star_ttest(d, "one", response = "y", mu = 5)
   w1 <- stats::wilcox.test(d$y, mu = 5, conf.int = TRUE, exact = FALSE)
-  expect_equal(one$nonparametric$Estimate, unname(w1$estimate) - 5)
+  # the Hodges-Lehmann estimate is a uniroot() solution, so the two calls agree to its tolerance only
+  expect_equal(one$nonparametric$Estimate, unname(w1$estimate) - 5, tolerance = 1e-4)
   pd <- data.frame(x = d$y[1:6], z = d$y[7:12])
   pr <- star_ttest(pd, "paired", x = "x", y = "z")
   expect_match(pr$nonparametric$Method, "signed-rank")

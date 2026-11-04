@@ -55,7 +55,7 @@
     apply_plot_customizations(do.call(star_ggplot_correlation, c(list(r, pair, main = input$corr_title, xlab = input$corr_xlab, ylab = input$corr_ylab,
                                             type = if (v == "heat") "heatmap" else "matrix", heat = input$corr_heat), plot_style("corr"))), "corr")
   })
-  output$corr_plot <- render_live_plot("corr", function() print(gg_corr()))
+  output$corr_plot <- render_live_plot("corr", gg_corr)
   output$dl_corr_plot <- plot_download("corr", gg_corr)
   output$dl_corr_xlsx <- downloadHandler("rdstat_correlation.xlsx", function(file) {
     r <- corr_ok(); tb <- corr_tables()

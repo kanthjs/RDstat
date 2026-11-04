@@ -32,7 +32,8 @@
     d <- live_plot_dims(p)
     pr <- session$clientData$pixelratio %||% 1
     f <- tempfile(fileext = ".png")
-    shiny::plotPNG(draw, f, width = d$width * pr, height = d$height * pr, res = d$width * pr / d$inches[1])
+    # `draw` returns a ggplot (printed here, with its subtitle wrapped to the figure) or draws a base-graphics plot
+    shiny::plotPNG(function() { g <- draw(); if (inherits(g, "ggplot")) print(star_gg_fit_width(g, d$inches[1])) }, f, width = d$width * pr, height = d$height * pr, res = d$width * pr / d$inches[1])
     list(src = f, width = d$width, height = d$height, contentType = "image/png", alt = "Plot")
   }, deleteFile = TRUE)
   live_badge_render <- function(p) {

@@ -105,7 +105,9 @@ test_that("CRD ignores a block argument and needs no block", {
 
 test_that("the direct aov() fit gives the same table as STAR's own AOVTest", {
   legacy_table <- function(d, response, factors, block, design) {
-    res <- .star_aov_legacy(star_prepare_data(d, response, factors, block), response, factors, block, design, "auto", 0.05)$res
+    args <- list(data = star_prepare_data(d, response, factors, block), design = design, respvar = response, factor1 = factors, sig = 0.05)
+    if (design == "RCBD") args$rep1 <- block
+    utils::capture.output(res <- do.call(AOVTest, args))
     unname(as.matrix(ConstructAOVTable(res$aovTable[[1]][[1]])))
   }
   native_table <- function(r) unname(as.matrix(r$anova[-1]))

@@ -6,6 +6,7 @@
 ## All take base_size, theme and legend (see star_gg_theme()); the means plot also takes a palette (see .star_gg_palette()).
 ##   star_ggsave(plot, file, width, height, dpi)              PNG / SVG / PDF export
 ##   star_gg_font(plot)                                       Thai-capable font when the plot has Thai text
+##   star_gg_fit_width(plot, width)                           subtitle wrapped to a figure `width` inches wide
 
 ## Colours for n groups. `palette` is NULL or the name of a built-in palette (see star_gg_palettes), or a vector
 ## of colours (recycled). The default, Okabe-Ito, is colour-blind safe; beyond 8 levels it falls back to a generated palette.
@@ -147,7 +148,7 @@ star_ggplot_means <- function(x, effect = NULL, data = NULL, error = c("se", "sd
             else "Effect not significant"
     return(p + ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = c(0, 0.12))) +
              ggplot2::labs(x = .star_gg_or(xlab, f), y = y_lab, title = .star_gg_or(main, paste("Mean", x$response, "by", f)),
-                           subtitle = paste(strwrap(sprintf("Bars: %s%s. %s", .star_gg_err_label[[error]], if (!is.null(raw)) "; circles: observations" else "", note), 70), collapse = "\n")) +
+                           subtitle = sprintf("Bars: %s%s. %s", .star_gg_err_label[[error]], if (!is.null(raw)) "; circles: observations" else "", note)) +
              th + .star_gg_xlab_theme(levels(m$Treatment)))
   }
 
@@ -196,7 +197,7 @@ star_ggplot_means <- function(x, effect = NULL, data = NULL, error = c("se", "sd
       ggplot2::scale_colour_manual(values = cols, name = f1) + ggplot2::scale_fill_manual(values = cols, name = f1)
   }
   p + ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = c(0, 0.12))) +
-    ggplot2::labs(x = .star_gg_or(xlab, f2), y = y_lab, title = ttl, subtitle = paste(strwrap(sub, 70), collapse = "\n")) +
+    ggplot2::labs(x = .star_gg_or(xlab, f2), y = y_lab, title = ttl, subtitle = sub) +
     th + .star_gg_xlab_theme(levels(cd$x))
 }
 
@@ -257,6 +258,19 @@ star_gg_font <- function(p, thai = getOption("star.plot_family_thai", "")) {
   if (!inherits(p, "ggplot") || is.null(thai) || !nzchar(thai) || !.star_gg_has_thai(p)) return(p)
   p + ggplot2::theme(text = ggplot2::element_text(family = thai), geom = ggplot2::element_geom(family = thai))
 }
+## Subtitles (the notes under the title) wrapped to the width of the figure, so that they fit an 8.5 cm journal
+## figure as well as a slide. Each line of the subtitle ("\n" in it) is wrapped on its own. The plots leave their
+## subtitles unwrapped; star_ggsave() and the app's Live View call this with the figure width in inches.
+star_gg_fit_width <- function(p, width) {
+  sub <- tryCatch(p$labels$subtitle, error = function(e) NULL)
+  if (!inherits(p, "ggplot") || !is.character(sub) || length(sub) != 1 || !nzchar(sub)) return(p)
+  pt <- tryCatch(p$theme$plot.subtitle$size, error = function(e) NULL)
+  if (!is.numeric(pt) || length(pt) != 1) pt <- 9.6
+  # an average character is about half the font size wide; about 0.45 in goes to the plot margins
+  chars <- max(20, floor((width - 0.45) * 72 / (0.52 * pt)))
+  lines <- unlist(lapply(strsplit(sub, "\n", fixed = TRUE)[[1]], function(l) if (nzchar(l)) strwrap(l, chars) else ""))
+  p + ggplot2::labs(subtitle = paste(lines, collapse = "\n"))
+}
 ## The font family a plot is drawn in: its own theme's, else the app default
 .star_gg_family <- function(p) {
   f <- tryCatch(p$theme$text$family, error = function(e) NULL)
@@ -280,7 +294,7 @@ star_ggsave <- function(plot, file, width = 8, height = 5.5, dpi = 300) {
   if (!ext %in% c("png", "svg", "pdf")) stop("Use a .png, .svg or .pdf file name.")
   # PNG goes through ragg, which finds fonts registered with systemfonts. The PDF / SVG devices do not, so a custom
   # family (star.plot_family) is drawn there with showtext; the base pdf() device fails outright on an unknown family.
-  plot <- star_gg_font(plot)
+  plot <- star_gg_fit_width(star_gg_font(plot), width)
   fam <- .star_gg_family(plot)
   if (ext != "png" && nzchar(fam) && .star_gg_showtext(fam)) {
     dev <- if (ext == "pdf") grDevices::cairo_pdf else grDevices::svg

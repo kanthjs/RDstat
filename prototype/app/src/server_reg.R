@@ -47,7 +47,7 @@
       code_card(reg_script(), "cp_reg_script"))
   })
   gg_reg <- reactive(apply_plot_customizations(do.call(star_ggplot_regression, c(list(reg_ok(), main = input$reg_title, xlab = input$reg_xlab, ylab = input$reg_ylab), plot_style("reg"))), "reg"))
-  output$reg_plot <- render_live_plot("reg", function() print(gg_reg()))
+  output$reg_plot <- render_live_plot("reg", gg_reg)
   output$dl_reg_plot <- plot_download("reg", gg_reg)
   output$reg_diag_ui <- renderUI({
     dg <- reg_ok()$diagnostics
