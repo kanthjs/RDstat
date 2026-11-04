@@ -30,7 +30,7 @@
     },
     {
       "name": "star-app-r46",
-      "runtimeExecutable": "C:/Program Files/R/R-4.6.1/bin/Rscript.exe",
+      "runtimeExecutable": "C:/Program Files/R/R-4.6.2/bin/Rscript.exe",
       "runtimeArgs": [
         "-e",
         "shiny::runApp('prototype/app', port=as.integer(Sys.getenv('PORT', '4325')), launch.browser=FALSE)"

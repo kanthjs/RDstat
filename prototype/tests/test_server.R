@@ -488,6 +488,14 @@ Functions: stats::t.test", tt_txt) && grepl("Student (1908)", tt_txt, fixed = TR
   session$setInputs(file = list(datapath = f2, name = "titled.csv", size = file.size(f2), type = "text/csv"))
   check(nrow(dat()) == 3 && identical(names(dat())[1], "Variety") && grepl("Rice yield trial 2025", html(output$read_note)) && grepl("Mean", html(output$read_note)),
         "Read note: title line and summary row are skipped and shown")
+  # an old Excel 97-2003 .xls file (first sheet: mtcars); numbers read as typed, not with 17 digits
+  fx <- readxl::readxl_example("datasets.xls")
+  session$setInputs(file = list(datapath = fx, name = "datasets.xls", size = file.size(fx), type = "application/vnd.ms-excel"))
+  check(nrow(dat()) == 32 && identical(dat()$drat[1], "3.9") && identical(dat()$wt[1], "2.62"), "Upload: .xls file is read, numbers as typed")
+  # the same in .xlsx, where the file stores 2.3199999999999998 for 2.32
+  fx <- readxl::readxl_example("datasets.xlsx")
+  session$setInputs(file = list(datapath = fx, name = "datasets.xlsx", size = file.size(fx), type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+  check(nrow(dat()) == 32 && identical(dat()$wt[3], "2.32") && identical(dat()$drat[3], "3.85"), "Upload: .xlsx file is read, numbers as typed")
   # first choices of the variables for an upload come from the column names, not their order
   g <- guess_roles(setNames(data.frame(c("A", "A", "B", "B"), c(1, 2, 1, 2), c(5, 6, 4, 5)), c("พันธุ์", "ซ้ำ", "ผลผลิต")), "ผลผลิต")
   check(identical(g$blk, "ซ้ำ") && identical(g$trt[1], "พันธุ์"), "Roles: Thai variety first, ซ้ำ second gives ซ้ำ as the block")

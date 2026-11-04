@@ -1,4 +1,4 @@
-## New API (not part of the original STAR): read an uploaded data file (.csv, .tsv, .txt, .xlsx) into a data frame
+## New API (not part of the original STAR): read an uploaded data file (.csv, .tsv, .txt, .xlsx, .xls) into a data frame
 ## whose columns are all text, so that star_prepare_data() decides what is numeric. Delimiter (, ; tab |) and
 ## encoding are detected: UTF-8 (with or without BOM), UTF-16 (Excel's "Unicode Text"), Thai Windows-874 / TIS-620
 ## (what Excel on a Thai Windows writes as "CSV (Comma delimited)"), else Latin-1. Excel files are read with readxl.
@@ -15,18 +15,17 @@
 star_read_table <- function(path, name = path) {
   ext <- tolower(sub(".*[.]", "", name))
   notes <- character()
-  raw <- if (ext %in% c("xlsx", "xlsm")) {
-    if (!requireNamespace("readxl", quietly = TRUE)) stop("Reading Excel files needs the 'readxl' package.")
-    # from cell A1, blank rows and columns included, so that row and column numbers match the merged ranges
-    cells <- as.data.frame(readxl::read_excel(path, sheet = 1, col_names = FALSE, col_types = "text", .name_repair = "minimal",
-                                              range = readxl::cell_limits(c(1, 1), c(NA, NA))))
-    filled <- star_fill_merged(cells, star_xlsx_merges(path))
-    if (filled$n) notes <- sprintf("Repeated the label of %d merged cell%s on every row %s cover%s (%d cell%s filled in).",
-                                   filled$ranges, if (filled$ranges > 1) "s" else "", if (filled$ranges > 1) "they" else "it",
-                                   if (filled$ranges > 1) "" else "s", filled$n, if (filled$n > 1) "s" else "")
-    filled$cells
-  } else if (ext == "xls") {
-    stop("Old .xls files are not supported; save the sheet as .xlsx or .csv.")
+  raw <- if (ext %in% c("xlsx", "xlsm", "xls")) {
+    cells <- star_excel_cells(path)
+    # .xls (Excel 97-2003): readxl gives no merged ranges, so labels typed once over several rows are repeated by
+    # star_fill_down() instead
+    if (ext == "xls") cells else {
+      filled <- star_fill_merged(cells, star_xlsx_merges(path))
+      if (filled$n) notes <- sprintf("Repeated the label of %d merged cell%s on every row %s cover%s (%d cell%s filled in).",
+                                     filled$ranges, if (filled$ranges > 1) "s" else "", if (filled$ranges > 1) "they" else "it",
+                                     if (filled$ranges > 1) "" else "s", filled$n, if (filled$n > 1) "s" else "")
+      filled$cells
+    }
   } else {
     lines <- strsplit(star_decode_text(readBin(path, "raw", file.info(path)$size)), "\r\n|\r|\n")[[1]]
     lines <- lines[nzchar(trimws(lines))]
@@ -41,6 +40,20 @@ star_read_table <- function(path, name = path) {
     )
   }
   star_table_from_cells(raw, notes)
+}
+
+## the cells of the first sheet of an Excel file (.xlsx or .xls) as text, from cell A1 with blank rows and columns
+## included, so that row and column numbers match the merged ranges. Read cell by cell and not with col_types = "text",
+## which writes numbers with 17 digits (4.0999999999999996 for 4.1); 15 significant digits give them as typed.
+star_excel_cells <- function(path) {
+  if (!requireNamespace("readxl", quietly = TRUE)) stop("Reading Excel files needs the 'readxl' package.")
+  cells <- readxl::read_excel(path, sheet = 1, col_names = FALSE, col_types = "list", .name_repair = "minimal",
+                              range = readxl::cell_limits(c(1, 1), c(NA, NA)))
+  as.data.frame(lapply(cells, \(col) vapply(col, \(v) {
+    if (is.null(v) || length(v) != 1 || is.na(v)) NA_character_
+    else if (is.numeric(v)) format(v, digits = 15, scientific = FALSE, trim = TRUE)
+    else as.character(v)
+  }, character(1))), stringsAsFactors = FALSE, col.names = paste0("V", seq_along(cells)))
 }
 
 ## merged ranges of the first sheet of an .xlsx file, as a matrix with columns r1, c1, r2, c2 (none if the file
