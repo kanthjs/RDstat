@@ -64,10 +64,13 @@ star_gg_shapes <- c(circle = 21, square = 22, diamond = 23, triangle = 24, trian
 ## theme  : "classic" (axes only), "bw" (white with grid lines and a frame), "minimal" (grid lines, no frame) or
 ##          "grey" (the ggplot2 default)
 ## legend : "top", "right", "bottom" or "none"
-star_gg_theme <- function(base_size = 12, theme = c("classic", "bw", "minimal", "grey"), legend = "top") {
+## family : font family for all text, including geom_text labels; defaults to getOption("star.plot_family", "")
+##          ("" = the device default). The app sets it to "Roboto" after registering the font files.
+star_gg_theme <- function(base_size = 12, theme = c("classic", "bw", "minimal", "grey"), legend = "top",
+                          family = getOption("star.plot_family", "")) {
   theme <- match.arg(theme)
   base <- switch(theme, classic = ggplot2::theme_classic, bw = ggplot2::theme_bw, minimal = ggplot2::theme_minimal, grey = ggplot2::theme_grey)
-  base(base_size = base_size) +
+  base(base_size = base_size, base_family = family) +
     ggplot2::theme(plot.title = ggplot2::element_text(face = "bold"),
                    plot.subtitle = ggplot2::element_text(colour = "grey35", size = base_size * 0.8),
                    axis.text = ggplot2::element_text(colour = "grey15"),
@@ -236,10 +239,33 @@ star_ggplot_diagnostics <- function(x, base_size = 11, theme = "classic", legend
   p + ggplot2::scale_colour_manual(values = c(cut = "#D55E00", zero = "grey60"), guide = "none")
 }
 
+## TRUE when showtext can draw `family`: adds it to sysfonts from the files systemfonts knows for it
+.star_gg_showtext <- function(family) {
+  if (!requireNamespace("showtext", quietly = TRUE) || !requireNamespace("systemfonts", quietly = TRUE)) return(FALSE)
+  if (family %in% sysfonts::font_families()) return(TRUE)
+  tryCatch({
+    path <- function(w) systemfonts::match_fonts(family, weight = w)$path
+    sysfonts::font_add(family, regular = path("normal"), bold = path("bold"))
+    TRUE
+  }, error = function(e) FALSE)
+}
+
 ## Save a ggplot to PNG / SVG / PDF (chosen by the file extension). dpi matters for PNG only.
 star_ggsave <- function(plot, file, width = 8, height = 5.5, dpi = 300) {
   ext <- tolower(tools::file_ext(file))
   if (!ext %in% c("png", "svg", "pdf")) stop("Use a .png, .svg or .pdf file name.")
+  # PNG goes through ragg, which finds fonts registered with systemfonts. The PDF / SVG devices do not, so a custom
+  # family (star.plot_family) is drawn there with showtext; the base pdf() device fails outright on an unknown family.
+  fam <- getOption("star.plot_family", "")
+  if (ext != "png" && nzchar(fam) && .star_gg_showtext(fam)) {
+    dev <- if (ext == "pdf") grDevices::cairo_pdf else grDevices::svg
+    dev(file, width = width, height = height, bg = "white")
+    on.exit(grDevices::dev.off())
+    showtext::showtext_begin()
+    print(plot)
+    showtext::showtext_end()
+    return(invisible(file))
+  }
   dev <- if (ext == "svg" && !requireNamespace("svglite", quietly = TRUE))      # base svg() device when svglite is absent
     function(filename, width, height, ...) grDevices::svg(filename, width = width, height = height) else ext
   ggplot2::ggsave(file, plot, device = dev, width = width, height = height, dpi = dpi, units = "in", bg = "white")

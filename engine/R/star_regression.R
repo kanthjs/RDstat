@@ -63,7 +63,7 @@ star_regression <- function(data, response, predictors, degree = 1, alpha = 0.05
   ci <- stats::confint(fit, level = 1 - alpha)
   vif <- rep(NA_real_, nrow(cf))
   if (degree == 1 && length(predictors) > 1) {
-    vif[-1] <- diag(solve(stats::cor(mf[predictors])))
+    vif[-1] <- unname(mctest::imcdiag(fit, method = "VIF")$idiags[, "VIF"]) # variance inflation factors (mctest)
   }
   beta <- rep(NA_real_, nrow(cf))
   if (degree == 1) beta[-1] <- cf[-1, 1] * vapply(predictors, \(v) stats::sd(mf[[v]]), 0) / stats::sd(y)
@@ -149,9 +149,9 @@ star_regression <- function(data, response, predictors, degree = 1, alpha = 0.05
     msg <- c(msg, sprintf("The spread of the residuals changes with the fitted value (Breusch-Pagan p %s); standard errors and p values may be unreliable. Consider a transformation of the response.", .star_fmt_p(homogeneity$p)))
   }
   structure(
-    list(outliers = ck$outliers, n_outliers = ck$n_out, n_suspect = ck$n_sus, normality = ck$normality, ks = ck$ks,
+    list(outliers = ck$outliers, n_outliers = ck$n_out, n_suspect = ck$n_sus, normality = ck$normality,
          homogeneity = homogeneity, messages = msg,
-         ok = ck$n_out == 0 && !isFALSE(ck$normality$ok) && !isFALSE(ck$ks$ok) && !isFALSE(homogeneity$ok),
+         ok = ck$n_out == 0 && !isFALSE(ck$normality$ok) && !isFALSE(homogeneity$ok),
          residuals = data.frame(Row = ck$rn, Fitted = ck$fitted, Residual = ck$res, Studentized = ck$sres, Flag = ck$flag, stringsAsFactors = FALSE),
          response = response, alpha = alpha, outlier_cut = outlier_cut, suspect_cut = suspect_cut),
     class = "star_diagnostics"

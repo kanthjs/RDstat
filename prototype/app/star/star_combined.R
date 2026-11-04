@@ -11,8 +11,7 @@
 ## The layout must be complete; an RCBD must also be balanced (each environment x block x treatment exactly once).
 
 star_combined <- function(data, response, treatment, env, block = NULL, design = c("RCBD", "CRD"),
-                          test = c("auto", "LSD", "HSD", "duncan", "SNK", "scheffe", "bonferroni"), alpha = 0.05,
-                          report = TRUE) {
+                          test = c("auto", "LSD", "HSD", "duncan", "SNK", "scheffe", "bonferroni"), alpha = 0.05) {
   design <- match.arg(design)
   test <- match.arg(test)
   if (!is.data.frame(data)) stop("'data' must be a data frame.")
@@ -50,7 +49,7 @@ star_combined <- function(data, response, treatment, env, block = NULL, design =
     # aov names an interaction after the order of the factors in the data; try the other order
     src_fit <- c(env, if (design == "RCBD") paste(block, env, sep = ":"), treatment, paste(env, treatment, sep = ":"), "Residuals")
     if (design == "RCBD" && is.na(match(src_fit[2], nm))) src_fit[2] <- paste(env, block, sep = ":")
-    if (anyNA(match(src_fit, nm))) stop("STAR could not fit the combined model.", call. = FALSE)
+    if (anyNA(match(src_fit, nm))) stop("Could not fit the combined model.", call. = FALSE)
   }
   tab <- get(src_fit)
   anova <- data.frame(
@@ -91,7 +90,7 @@ star_combined <- function(data, response, treatment, env, block = NULL, design =
   simple <- if (interaction_sig) .star_simple_effects(y, d, factors, test, setNames(rep(err$DF, 2), factors), setNames(rep(err$MS, 2), factors), alpha)
 
   by_env <- .star_combined_by_env(d, response, treatment, env, block, design, alpha)
-  bartlett <- .star_bartlett(by_env$ErrorMS, by_env$ErrorDF)
+  bartlett <- .star_bartlett(d, response, treatment, env, block, by_env$ErrorMS)
 
   diagnostics <- tryCatch({
     dd <- d
@@ -105,7 +104,6 @@ star_combined <- function(data, response, treatment, env, block = NULL, design =
   )
   apa <- .star_apa(effects, err, response)
   d <- d[, c(response, treatment, env, block)]
-  report <- if (report) .star_combined_report(d, response, treatment, env, block, design, test, alpha)
 
   structure(
     list(
@@ -115,7 +113,7 @@ star_combined <- function(data, response, treatment, env, block = NULL, design =
       env = env, block = block, p_treatment = effects$P[1], significant = effects$Significant[1],
       interaction_significant = interaction_sig, by_env = by_env, bartlett = bartlett,
       error_terms = setNames(c("Error", if (design == "RCBD") rep_lab else "Error"), factors),
-      summary = summary_text, apa = apa, report = report, data_notes = data_notes, diagnostics = diagnostics, data = d
+      summary = summary_text, apa = apa, data_notes = data_notes, diagnostics = diagnostics, data = d
     ),
     class = "star_aov"
   )
@@ -142,20 +140,21 @@ star_combined <- function(data, response, treatment, env, block = NULL, design =
   out
 }
 
-# Bartlett's test of homogeneity of the error variances of the environments (from their mean squares and df)
-.star_bartlett <- function(ms, df) {
-  ok <- is.finite(ms) & ms > 0 & df > 0
-  ms <- ms[ok]
-  df <- df[ok]
-  k <- length(ms)
-  if (k < 2) {
-    return(list(statistic = NA_real_, df = NA_real_, p = NA_real_, ratio = NA_real_))
+# Bartlett's test of homogeneity of the error variances of the environments: stats::bartlett.test() on the model
+# fitted to each environment uses each one's error mean square and error df (Gomez & Gomez, 1984, chapter 8)
+.star_bartlett <- function(d, response, treatment, env, block, ms) {
+  ok <- is.finite(ms) & ms > 0
+  none <- list(statistic = NA_real_, df = NA_real_, p = NA_real_, ratio = NA_real_)
+  if (sum(ok) < 2) {
+    return(none)
   }
-  pooled <- sum(df * ms) / sum(df)
-  m <- sum(df) * log(pooled) - sum(df * log(ms))
-  cc <- 1 + (sum(1 / df) - 1 / sum(df)) / (3 * (k - 1))
-  chi <- m / cc
-  list(statistic = chi, df = k - 1, p = stats::pchisq(chi, k - 1, lower.tail = FALSE), ratio = max(ms) / min(ms))
+  envs <- levels(d[[env]])[ok]
+  fits <- lapply(envs, \(lv) stats::lm(.star_aov_formula(response, treatment, block), data = droplevels(d[d[[env]] == lv, , drop = FALSE])))
+  bt <- tryCatch(stats::bartlett.test(fits), error = \(e) NULL)
+  if (is.null(bt)) {
+    return(none)
+  }
+  list(statistic = unname(bt$statistic), df = unname(bt$parameter), p = bt$p.value, ratio = max(ms[ok]) / min(ms[ok]))
 }
 
 .star_bartlett_text <- function(b, alpha) {
@@ -170,13 +169,3 @@ star_combined <- function(data, response, treatment, env, block = NULL, design =
   }
 }
 
-.star_combined_report <- function(d, response, treatment, env, block, design, test, alpha) {
-  args <- list(data = d, design = design, respvar = response, factor1 = treatment, set = env, sig = alpha)
-  if (design == "RCBD") args$rep1 <- block
-  if (!test %in% c("auto", "bonferroni")) {
-    args$pwTest <- test
-    args$pwVar <- response
-  }
-  tryCatch(utils::capture.output(do.call(combAOVTest, args)),
-           error = \(e) "The classic STAR report could not be produced for this data.")
-}
