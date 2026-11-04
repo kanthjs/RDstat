@@ -30,8 +30,9 @@ testServer(app, {
 
   # ---- RCBD, one factor (rice yield vs nitrogen) ----
   session$setInputs(design = "RCBD", example = "rcbd1", resp = "Yield", trt = "Nitrogen", blk = "Rep")
-tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = "Duncan")
-  for (pw in names(tests)) { run(pw = pw); check(any(grepl(tests[[pw]], report_text())), paste("RCBD 1 factor: mean comparison", pw, "is used")) }
+tests <- c(auto = "HSD", LSD = "LSD", HSD = "HSD", duncan = "duncan")
+  for (pw in names(tests)) { run(pw = pw); check(identical(unname(ok()$tests_used[["Nitrogen"]]), tests[[pw]]), paste("RCBD 1 factor: mean comparison", pw, "is used")) }
+  check(!any(grepl("Classic STAR report", readLines("app.R"), fixed = TRUE)) && !exists("AOVTest") && !exists("estMissData"), "No classic STAR report tab: the app does not use STAR's code")
   run(pw = "LSD")
   check(round(ok()$anova$F[2], 2) == 8.54, "RCBD 1 factor: F = 8.54")
   check(identical(tables()$anova$`Pr(>F)`[2], "0.0022"), "RCBD 1 factor: p formatted 0.0022")
@@ -81,10 +82,10 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   # the standard ANOVA is the default; Welch's ANOVA is suggested only when the variances differ or the group sizes are unequal
   xs <- c(-1.2, -0.6, -0.3, 0, 0.3, 0.6, 1.2, -0.9, 0.9, 0)
   eq <- data.frame(T = rep(c("a", "b", "c"), each = 10), y = c(10 + xs, 12 + xs, 14 + xs), stringsAsFactors = FALSE)
-  rc <- star_recommend_aov(star_aov(eq, "y", "T", design = "CRD", report = FALSE))
+  rc <- star_recommend_aov(star_aov(eq, "y", "T", design = "CRD"))
   check(is.null(rc$switch_to) && rc$light %in% c("green", "yellow") && grepl("look similar", rc$observed) && grepl("standard ANOVA suits", rc$advice),
         "Standard ANOVA default: no switch offered when the variances look similar")
-  rc <- star_recommend_aov(star_aov(eq[-(1:4), ], "y", "T", design = "CRD", report = FALSE))
+  rc <- star_recommend_aov(star_aov(eq[-(1:4), ], "y", "T", design = "CRD"))
   check(is.null(rc$switch_to), "Standard ANOVA default: unequal group sizes alone (similar variances) do not trigger a switch")
   # Welch's ANOVA with Games-Howell letters; switching method needs no new run
   session$setInputs(aov_method = "welch")
@@ -114,15 +115,15 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   # the advice follows the data: skewed values suggest the rank test, unequal variances Welch (CRD) or a transformation (RCBD)
   set.seed(1)
   skew <- data.frame(T = rep(c("a", "b", "c"), each = 10), y = round(c(rexp(10, 1), rexp(10, 0.5), rexp(10, 0.3)), 2), stringsAsFactors = FALSE)
-  rc <- star_recommend_aov(star_aov(skew, "y", "T", design = "CRD", report = FALSE))
+  rc <- star_recommend_aov(star_aov(skew, "y", "T", design = "CRD"))
   check(rc$light == "red" && identical(rc$switch_to, "rank") && grepl("Kruskal-Wallis", rc$switch_label), "Guidance: skewed residuals are red and suggest Kruskal-Wallis or trimmed means")
   x <- c(-1.2, -0.6, -0.3, 0, 0.3, 0.6, 1.2, -0.9, 0.9, 0)
   het <- data.frame(T = rep(c("a", "b", "c"), each = 10), y = c(10 + x, 12 + 4 * x, 14 + 10 * x), B = rep(1:10, 3), stringsAsFactors = FALSE)
-  rc <- star_recommend_aov(star_aov(het, "y", "T", design = "CRD", report = FALSE))
+  rc <- star_recommend_aov(star_aov(het, "y", "T", design = "CRD"))
   check(identical(rc$switch_to, "welch") && grepl("Levene", rc$observed) && grepl("Switch to Welch", rc$switch_label), "Guidance: unequal variances in CRD suggest Welch's ANOVA")
-  rc <- star_recommend_aov(star_aov(het[-(1:4), ], "y", "T", design = "CRD", report = FALSE))
+  rc <- star_recommend_aov(star_aov(het[-(1:4), ], "y", "T", design = "CRD"))
   check(identical(rc$switch_to, "welch") && grepl("numbers of observations differ", rc$observed), "Guidance: unequal variances and unequal group sizes also suggest Welch's ANOVA")
-  rc <- star_recommend_aov(star_aov(het, "y", "T", "B", design = "RCBD", report = FALSE))
+  rc <- star_recommend_aov(star_aov(het, "y", "T", "B", design = "RCBD"))
   check(identical(rc$switch_to, "rank") && grepl("no Welch version for blocks", rc$advice), "Guidance: unequal variances in RCBD suggest a transformation or Friedman")
   ui <- as.character(advice_ui(rc, "anova", "rec", FALSE, "ANOVA"))
   check(grepl("Use Friedman", ui) && grepl("rec_rank", ui) && grepl("Continue with ANOVA", ui) && grepl("Advice only", ui) && !grepl("trimmed", ui), "Guidance: switch and keep buttons, marked as advice (no trimmed option for RCBD)")
@@ -171,8 +172,7 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(round(c(r$cv_a, r$cv_b), 2)[2] == 10.79 && round(r$cv_a, 2) == 6.88, "Split plot: CV(a) = 6.88, CV(b) = 10.79")
   check(identical(tables()$simple[["Nitrogen within Variety"]][["Variety = IR8"]][1:2], c("4,252.67 d", "5,672.00 c")), "Split plot: Nitrogen within IR8 letters (original STAR)")
   check(!is.null(ok()$cv_a) && !is.null(ok()$cv_b) && grepl("CV", paste(unlist(tables()), collapse = " ")), "Split plot: CV(a) and CV(b) kept in the result and in the tables")
-  check(length(output$report) > 0 && file.size(output$dl_xlsx) > 3000, "Split plot: report and Excel")
-  check(is.null(r$report) && grepl("Split Plot in Randomized Complete Block", output$report), "Split plot: classic report built on demand")
+  check(file.size(output$dl_xlsx) > 3000, "Split plot: Excel")
   run(pw = "HSD"); run(pw = "auto")
   check(identical(ok(), r), "Split plot: same settings give the same (cached) result")
   session$setInputs(plot_effect = "interaction"); p0 <- output$dl_aov_plot; check(file.size(p0) > 5000, "Split plot: interaction png")
@@ -186,7 +186,6 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(round(r$anova$F[1], 2) == 29.80 && round(r$cv_a, 2) == 7.56 && round(r$cv_b, 2) == 5.15, "Split plot CRD: F = 29.80, CV(a) = 7.56, CV(b) = 5.15 (original STAR)")
   check(identical(tables()$means$Irrigation$Group, c("b", "a", "c")) && identical(tables()$means$Variety$Group, c("d", "c", "b", "a")), "Split plot CRD: letters match the original STAR")
   aov_script_check("split plot (CRD)")
-  check(grepl("Split Plot in Completely Randomized Design", output$report), "Split plot CRD: classic STAR report")
   check(grepl("not available for split-plot", html(output$diag_ui)), "Split plot CRD: no assumption checks yet")
   check(identical(tables()$agronomy$Irrigation[[1]][4:9], c("F test (Irrigation)", "Grand mean", "CV (%)", "SE(m)", "SED", "LSD (0.05)")),
         "Split plot CRD: publication footer rows")
@@ -214,7 +213,6 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(identical(round(r$anova$F[1:4], 2), c(14.25, 0.71, 10.62, 5.47)) && round(r$cv, 2) == 12.05, "Combined RCBD: F and CV match STAR")
   ui <- html(output$results_ui)
   check(grepl("Analysis of each Season", ui) && grepl("Bartlett", ui), "Combined RCBD: each environment and Bartlett's test")
-  check(grepl("Combined Analysis of Variance", output$report), "Combined RCBD: classic STAR report")
   check("Each environment" %in% readxl::excel_sheets(output$dl_xlsx), "Combined RCBD: Excel sheet for each environment")
   check(!is.null(r$diagnostics), "Combined RCBD: assumption checks")
   session$setInputs(design = "CombCRD", example = "comb_crd1", resp = "Tillers", trt = "Variety", env = "Site")
@@ -238,8 +236,7 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   sh <- readxl::excel_sheets(x); check(identical(sh, c("ANOVA", "Publication table", "Means", "Cell means", "Simple effects", "Info")), "xlsx sheets for a two-factor result")
   session$setInputs(plot_effect = "interaction"); p1 <- output$dl_aov_plot; check(file.exists(p1) && file.size(p1) > 5000, "png (interaction plot)")
   session$setInputs(plot_effect = "Nitrogen"); p2 <- output$dl_aov_plot; check(file.exists(p2) && file.size(p2) > 5000, "png (main effect plot)")
-  t <- output$dl_txt; check(length(readLines(t)) > 40, "txt report download")
-  session$setInputs(cp_anova = 1, cp_means = 1, cp_report = 1)
+  session$setInputs(cp_anova = 1, cp_means = 1)
   cat("ok   copy buttons ran\n")
 
   session$setInputs(design = "CRD", example = "crd1", resp = "GrainYield", trt = "Insecticide"); run(pw = "LSD")
@@ -382,7 +379,7 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(all(abs(png_size(output$dl_reg_plot) - round(c(10, 5) / 2.54 * 300)) <= 1), "Download size: custom 10 x 5 cm")
   session$setInputs(reg_w = NA); check(all(abs(png_size(output$dl_reg_plot) - round(c(20, 14) / 2.54 * 300)) <= 1), "Download size: empty custom size falls back to standard")
   session$setInputs(reg_dim = "std", reg_pal = "okabe", reg_theme = "classic", reg_size = "12", reg_legend = "auto")
-  two <- star_aov(read.csv("example_rcbd2.csv"), "Yield", c("Nitrogen", "Variety"), "Rep", design = "RCBD", report = FALSE)
+  two <- star_aov(read.csv("example_rcbd2.csv"), "Yield", c("Nitrogen", "Variety"), "Rep", design = "RCBD")
   for (pal in style_choices$pal) for (eff in c("Nitrogen", "interaction", "interaction_line"))
     ggplot2::ggplot_build(star_ggplot_means(two, eff, palette = pal, theme = "minimal", legend = "bottom"))
   cat("ok   means plot builds with every palette\n")
@@ -408,12 +405,15 @@ tests <- c(auto = "Tukeys", LSD = "Least Significant", HSD = "Tukeys", duncan = 
   check(grepl("^t-test
 Software: R [0-9.]+
 Functions: stats::t.test", tt_txt) && grepl("Student (1908)", tt_txt, fixed = TRUE) && !grepl("agricolae", tt_txt), "Methods topics: copy text of the t-test topic")
-  check(any(startsWith(topic_refs(topic_of("combined")), "International Rice Research Institute")) && !any(startsWith(topic_refs(topic_of("rcbd")), "International Rice Research Institute")) && any(startsWith(topic_refs(topic_of("rcbd")), "Yates F (1933)")) && !length(topic_refs(topic_of("advice"))), "Methods topics: STAR cited where its code is used (combined, not RCBD); no references where none apply")
+  all_refs <- unlist(lapply(method_topics, topic_refs))
+  check(!any(grepl("International Rice Research Institute", c(all_refs, package_refs()))) && !any(grepl("^STAR:", unlist(lapply(method_topics, `[[`, "software")))) &&
+          any(startsWith(topic_refs(topic_of("rcbd")), "Yates F (1933)")) && any(grepl("mctest", topic_refs(topic_of("regression")))) && !length(topic_refs(topic_of("advice"))),
+        "Methods topics: no STAR code cited; RCBD cites Yates, regression cites mctest; no references where none apply")
   # RCBD with missing plots: least-squares estimates (lm + predict), error df reduced by the number of estimates
   local({
     set.seed(1); dm <- expand.grid(Trt = factor(paste0("T", 1:6)), Block = factor(1:4))
     dm$y <- round(50 + as.integer(dm$Trt) * 3 + as.integer(dm$Block) * 2 + rnorm(24, 0, 3), 1); dm$y[c(3, 17)] <- NA
-    r <- star_aov(dm, "y", "Trt", "Block", design = "RCBD", report = FALSE)
+    r <- star_aov(dm, "y", "Trt", "Block", design = "RCBD")
     full <- dm; obs <- !is.na(dm$y); full$y[!obs] <- predict(lm(y ~ Block + Trt, dm[obs, ]), dm[!obs, ])
     a <- anova(lm(y ~ Block + Trt, full)); e <- r$anova[r$anova$Source == "Error", ]
     check(e$DF == 13 && isTRUE(all.equal(e$SS, a["Residuals", "Sum Sq"])) && isTRUE(all.equal(r$anova$SS[2], a["Trt", "Sum Sq"])) &&
@@ -438,10 +438,6 @@ Functions: stats::t.test", tt_txt) && grepl("Student (1908)", tt_txt, fixed = TR
   du <- d[-c(3, 7), ]; du$Insecticide <- droplevels(du$Insecticide)
   check(identical(.star_compare_means(du$GrainYield, du$Insecticide, "LSD", dfe, mse, 0.05)$N, c(4L, 4L, 4L, 4L, 4L, 3L, 3L)), "Group sizes are the real counts when the data are unbalanced")
   check(length(package_refs()) >= 7 && all(nzchar(package_refs())), "References are built for the packages used")
-  # the classic STAR report and the tables agree on the Scheffe letters
-  rep_sc <- star_aov(d, "GrainYield", "Insecticide", NULL, design = "CRD", test = "scheffe", alpha = 0.05, report = TRUE)
-  rl <- grep("^(Azodin|Control|DDT|Dimercon|Dol-Mix)", rep_sc$report, value = TRUE)
-  check(identical(trimws(sub("^.*[0-9] +", "", rl)), rep_sc$means$Insecticide$Group), "Classic report and tables give the same Scheffe letters")
   session$setInputs(cp_mrefs = 1)
   check(length(method_refs) >= 20 && all(grepl("[0-9]{4}", method_refs)), "Method references are listed")
   check(any(grepl("Error(Block:A)", paste(as.character(lapply(method_topics, `[[`, "body")), collapse = ""), fixed = TRUE)), "Methods page describes the split-plot model")

@@ -22,16 +22,6 @@ test_that("split plot: ANOVA table, CVs and letters match the original STAR", {
   pe <- sn[sn$Variety == "Peta", ]
   expect_equal(pe$Group[match(levels(GomezSplitRCBD$Nitrogen), pe$Nitrogen)], c("a", "a", "a", "a", "b", "b"))
   expect_equal(r$apa[1], "The main effect of Nitrogen on Yield was significant, F(5, 10) = 42.87, p < .001, partial eta squared = .96.")
-  expect_match(r$report, "Split Plot in Randomized Complete Block", all = FALSE)
-})
-
-test_that("split plot: the classic report can be deferred to star_report()", {
-  full <- star_splitplot(GomezSplitRCBD, "Yield", "Nitrogen", "Variety", "Rep", test = "HSD")
-  lazy <- star_splitplot(GomezSplitRCBD, "Yield", "Nitrogen", "Variety", "Rep", test = "HSD", report = FALSE)
-  expect_null(lazy$report)
-  expect_identical(star_report(lazy), full$report)
-  expect_identical(star_report(full), full$report)
-  expect_identical(lazy$anova, full$anova)
 })
 
 test_that("split plot: an unbalanced layout is refused", {

@@ -1,11 +1,11 @@
 # RDstat web app (Shinylive)
 
-Three screens: analysis of variance (CRD, RCBD, split plot; mean comparison, plots, assumption checks), correlation (Pearson / Spearman / Kendall, heatmap and scatter plots) and linear regression (multiple, quadratic, cubic; diagnostics, prediction). Each has copy and Excel/plot download. It runs the recovered STAR engine inside the browser via webR.
+Three screens: analysis of variance (CRD, RCBD, split plot; mean comparison, plots, assumption checks), correlation (Pearson / Spearman / Kendall, heatmap and scatter plots) and linear regression (multiple, quadratic, cubic; diagnostics, prediction). Each has copy and Excel/plot download. It runs in the browser via webR; the analyses follow IRRI STAR (Gomez & Gomez, 1984) but use base R, agricolae, lmtest and mctest, not STAR's code.
 
 Build and test:
 
 ```
-Rscript scripts/build_app.R                 # copies engine/R into prototype/app/star (git-ignored)
+Rscript scripts/build_app.R                 # copies the app's analysis code (engine/R/star_*.R) into prototype/app/star
 Rscript prototype/tests/test_server.R       # headless test of the server logic on native R
 Rscript -e 'shinylive::export("prototype/app", "prototype/site")'
 ```

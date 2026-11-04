@@ -10,7 +10,7 @@
 ## block (replication) x main x sub combination).
 
 star_splitplot <- function(data, response, main, sub, block,
-                           test = c("auto", "LSD", "HSD", "duncan", "SNK", "scheffe", "bonferroni"), alpha = 0.05, report = TRUE,
+                           test = c("auto", "LSD", "HSD", "duncan", "SNK", "scheffe", "bonferroni"), alpha = 0.05,
                            design = c("SplitRCBD", "SplitCRD")) {
   test <- match.arg(test)
   design <- match.arg(design)
@@ -42,7 +42,7 @@ star_splitplot <- function(data, response, main, sub, block,
   st <- summary(fit)
   sa <- st[[1]][[1]]
   sb <- st[[2]][[1]]
-  if (nrow(sa) != (if (crd) 2 else 3) || nrow(sb) != 3) stop("STAR could not fit this split-plot model.", call. = FALSE)
+  if (nrow(sa) != (if (crd) 2 else 3) || nrow(sb) != 3) stop("Could not fit this split-plot model.", call. = FALSE)
   inter_name <- paste(main, sub, sep = ":")
   rows <- function(s, nm) {
     data.frame(
@@ -99,9 +99,7 @@ star_splitplot <- function(data, response, main, sub, block,
     )
   }
 
-  # classic STAR printout of the same analysis; with `report = FALSE` it is left to star_report()
   d <- d[, c(response, main, sub, block)]
-  report <- if (report) .star_split_report(d, response, main, sub, block, test, alpha, design)
 
   summary_text <- .star_split_summary(anova, effects, means, factors, response, interaction_sig, tests_used, alpha, cv_a, cv_b)
   apa <- .star_apa(effects, err_b, response)
@@ -112,25 +110,10 @@ star_splitplot <- function(data, response, main, sub, block,
       grand_mean = grand_mean, cv = cv_b, cv_a = cv_a, cv_b = cv_b, test = test, tests_used = tests_used,
       alpha = alpha, design = design, response = response, treatment = main, factors = factors,
       main = main, sub = sub, block = block, p_treatment = effects$P[1], significant = effects$Significant[1],
-      interaction_significant = interaction_sig, summary = summary_text, apa = apa, report = report,
+      interaction_significant = interaction_sig, summary = summary_text, apa = apa,
       data_notes = data_notes, diagnostics = NULL, data = d
     ),
     class = "star_aov"
-  )
-}
-
-.star_split_report <- function(d, response, main, sub, block, test, alpha, design = "SplitRCBD") {
-  args <- list(
-    data = d, design = design, respvar = response,
-    factor1 = main, factor2 = sub, rep1 = block, sig = alpha
-  )
-  if (!test %in% c("auto", "bonferroni")) {
-    args$pwTest <- test
-    args$pwVar <- response
-  }
-  tryCatch(
-    capture.output(do.call(AOVTest, args)),
-    error = \(e) "The classic STAR report could not be produced for this data."
   )
 }
 

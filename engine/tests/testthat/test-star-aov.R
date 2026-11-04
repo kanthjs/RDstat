@@ -5,7 +5,7 @@ data(Insecticides, package = "STAR", envir = environment())
 rcbd <- subset(GomezSplitRCBD, Variety == "IR5")[, c("Rep", "Nitrogen", "Yield")]
 tg <- ToothGrowth; tg$dose <- factor(tg$dose)
 
-test_that("RCBD one factor: tables match the original STAR report (F = 8.54, p = 0.0022, CV = 9.42)", {
+test_that("RCBD one factor: tables match the numbers of the original STAR program (F = 8.54, p = 0.0022, CV = 9.42)", {
   r <- star_aov(rcbd, "Yield", "Nitrogen", "Rep", design = "RCBD", test = "LSD")
   expect_s3_class(r, "star_aov")
   expect_equal(r$anova$Source, c("Rep", "Nitrogen", "Error", "Total"))
@@ -18,7 +18,6 @@ test_that("RCBD one factor: tables match the original STAR report (F = 8.54, p =
   expect_equal(r$means$Nitrogen$Group, c("b", "a", "a", "a", "a", "a"))
   expect_identical(r$significant, TRUE)
   expect_match(r$summary, "significant effect")
-  expect_match(r$report, "ANOVA TABLE", all = FALSE)
   expect_equal(star_aov_rcbd(rcbd, "Yield", "Nitrogen", "Rep", test = "LSD")$anova, r$anova)
 })
 
@@ -117,18 +116,9 @@ test_that("the direct aov() fit gives the same table as STAR's own AOVTest", {
     list(warpbreaks, "breaks", c("wool", "tension"), NULL, "CRD")
   )
   for (a in layouts) {
-    r <- star_aov(a[[1]], a[[2]], a[[3]], a[[4]], design = a[[5]], report = FALSE)
+    r <- star_aov(a[[1]], a[[2]], a[[3]], a[[4]], design = a[[5]])
     expect_equal(native_table(r), legacy_table(a[[1]], a[[2]], a[[3]], a[[4]], a[[5]]), tolerance = 1e-10)
   }
-})
-
-test_that("report = FALSE leaves the classic printout to star_report()", {
-  full <- star_aov(GomezSplitRCBD, "Yield", c("Nitrogen", "Variety"), "Rep", design = "RCBD", test = "duncan")
-  lazy <- star_aov(GomezSplitRCBD, "Yield", c("Nitrogen", "Variety"), "Rep", design = "RCBD", test = "duncan", report = FALSE)
-  expect_null(lazy$report)
-  expect_identical(star_report(lazy), full$report)
-  lazy$report <- full$report
-  expect_identical(lazy, full)
 })
 
 test_that("CRD: rows with a missing response are left out; column names may contain spaces", {
@@ -150,7 +140,6 @@ test_that("every mean-comparison choice works and 'auto' follows STAR's rule", {
     r <- star_aov(rcbd, "Yield", "Nitrogen", "Rep", design = "RCBD", test = tst)
     expect_equal(r$tests_used[["Nitrogen"]], tst)
     expect_equal(nrow(r$means$Nitrogen), 6)
-    expect_true(any(grepl(c(LSD = "Least Significant", HSD = "Tukey", duncan = "Duncan", SNK = "Newman", scheffe = "Scheffe")[[tst]], r$report)))
   }
   expect_equal(star_aov(rcbd, "Yield", "Nitrogen", "Rep", design = "RCBD")$tests_used[["Nitrogen"]], "HSD")   # 6 levels > 5
   expect_equal(star_aov(PlantGrowth, "weight", "group")$tests_used[["group"]], "LSD")                          # 3 levels <= 5

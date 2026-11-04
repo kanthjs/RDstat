@@ -23,7 +23,7 @@ test_that("combined RCBD: ANOVA table, CV and letters match STAR's combAOVTest",
 })
 
 test_that("combined RCBD: each environment and Bartlett's test", {
-  r <- star_combined(GomezTwoCropSeasonRCB, "GrainYield", "NitrogenRate", "Season", "Rep", report = FALSE)
+  r <- star_combined(GomezTwoCropSeasonRCB, "GrainYield", "NitrogenRate", "Season", "Rep")
   expect_equal(r$by_env$Season, c("Dry", "Wet"))
   expect_equal(r$by_env$ErrorDF, c(8, 8))
   expect_equal(round(r$by_env$F, 2), c(6.43, 10.91))
@@ -31,12 +31,10 @@ test_that("combined RCBD: each environment and Bartlett's test", {
   expect_equal(mean(r$by_env$ErrorMS), r$anova$MS[5])
   expect_equal(round(r$bartlett$p, 4), 0.4323)
   expect_match(r$summary, "homogeneous")
-  expect_null(r$report)
-  expect_match(star_report(r), "Combined Analysis of Variance", all = FALSE)
 })
 
 test_that("combined CRD and refused layouts", {
-  r <- star_combined(GomezTwoCropSeasonRCB, "GrainYield", "NitrogenRate", "Season", design = "CRD", report = FALSE)
+  r <- star_combined(GomezTwoCropSeasonRCB, "GrainYield", "NitrogenRate", "Season", design = "CRD")
   expect_equal(r$anova$Source, c("Season", "NitrogenRate", "NitrogenRate:Season", "Error", "Total"))
   expect_equal(r$anova$DF, c(1, 4, 4, 20, 29))
   expect_error(star_combined(GomezTwoCropSeasonRCB[-1, ], "GrainYield", "NitrogenRate", "Season", "Rep"), "complete and balanced")

@@ -144,8 +144,7 @@
   })
 
   # Runs on "Run ANOVA" only. Results are cached by data and settings, so going back to an earlier choice
-  # (e.g. LSD -> Tukey -> LSD) reuses the earlier result instead of analysing again. The classic STAR report is
-  # built later, only when it is viewed, copied or downloaded (see report_text).
+  # (e.g. LSD -> Tukey -> LSD) reuses the earlier result instead of analysing again.
   res <- reactive({
     req(input$resp)
     blk <- if (needs_block(input$design)) { req(input$blk); input$blk } else NULL
@@ -155,11 +154,11 @@
     tryCatch({
       td <- transform_response(dat(), input$resp, tr)
       r <- if (is_split(input$design)) star_splitplot(td$data, td$resp, input$trt_main, input$trt_sub, blk, test = input$pw,
-                                                      alpha = as.numeric(input$alpha), report = FALSE, design = input$design)
+                                                      alpha = as.numeric(input$alpha), design = input$design)
            else if (is_comb(input$design)) star_combined(td$data, td$resp, input$trt, input$env, blk, design = sub("^Comb", "", input$design),
-                                                         test = input$pw, alpha = as.numeric(input$alpha), report = FALSE)
+                                                         test = input$pw, alpha = as.numeric(input$alpha))
            else star_aov(td$data, td$resp, input$trt, blk, design = input$design, test = input$pw,
-                         alpha = as.numeric(input$alpha), report = FALSE)
+                         alpha = as.numeric(input$alpha))
       if (tr != "none") { r$transform <- tr; r$original_response <- input$resp }
       r
     }, error = function(e) structure(list(message = conditionMessage(e)), class = "star_error"))
@@ -452,8 +451,6 @@
     dg <- ok()$diagnostics; req(dg)
     if (identical(input$diag_style, "gg")) print(gg_diag(dg, "aov")) else star_plot_diagnostics(dg)
   })
-  report_text <- reactive(star_report(ok())) |> bindCache(ok(), cache = star_cache)
-  output$report <- renderText(paste(report_text(), collapse = "\n"))
 
   xlsx_sheets <- reactive({
     r <- ok()
@@ -514,7 +511,6 @@
     else if (fmt == "svg") svg(file, width = wh[1], height = wh[2]) else pdf(file, width = wh[1], height = wh[2])
     on.exit(dev.off()); draw_means()
   })
-  output$dl_txt <- downloadHandler("rdstat_anova_report.txt", function(file) writeLines(c(paste(app_name, "web app", version_label()), "", report_text()), file))
 
   # ---- Thai summary and Word report ----
   aov_file_name <- reactive(script_file(input$src == "up", if (input$src == "up") input$file$name else setup()$file))
@@ -607,7 +603,6 @@
       if (!is.null(tables()$cells)) c("Cell means", tsv(tables()$cells), ""),
       unlist(lapply(names(tables()$simple), function(nm) c(nm, tsv(tables()$simple[[nm]]), "")))), collapse = "\n"))))
   observeEvent(input$cp_apa, session$sendCustomMessage("copy_text", list(what = "APA text", text = paste(ok()$apa, collapse = " "))))
-  observeEvent(input$cp_report, session$sendCustomMessage("copy_text", list(what = "Report", text = paste(report_text(), collapse = "\n"))))
   observeEvent(input$copy_status, {
     st <- input$copy_status
     showNotification(if (isTRUE(st$ok)) paste(st$what, "copied to clipboard") else "Copy failed: select the text and copy manually",

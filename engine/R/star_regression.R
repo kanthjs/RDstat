@@ -63,7 +63,7 @@ star_regression <- function(data, response, predictors, degree = 1, alpha = 0.05
   ci <- stats::confint(fit, level = 1 - alpha)
   vif <- rep(NA_real_, nrow(cf))
   if (degree == 1 && length(predictors) > 1) {
-    vif[-1] <- diag(solve(stats::cor(mf[predictors])))
+    vif[-1] <- unname(mctest::imcdiag(fit, method = "VIF")$idiags[, "VIF"]) # variance inflation factors (mctest)
   }
   beta <- rep(NA_real_, nrow(cf))
   if (degree == 1) beta[-1] <- cf[-1, 1] * vapply(predictors, \(v) stats::sd(mf[[v]]), 0) / stats::sd(y)

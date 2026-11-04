@@ -1,16 +1,13 @@
 ## New API (not part of the original STAR): structured results for a one- or two-factor analysis of variance.
-## The original functions print text; these wrap them and return data frames so that an app can
-## render tables, draw plots and export to Excel.
+## Fitted with aov() and lm(); returns data frames so that an app can render tables, draw plots and export to Excel.
 ##   design = "CRD"  : completely randomized design (no blocks)
 ##   design = "RCBD" : randomized complete block design (`block` required)
 ##   treatment       : one factor, or two factors (factorial layout with interaction)
 ## Mean separation follows STAR: with a significant interaction the simple effects are compared (each factor at
 ## each level of the other); otherwise the significant main effects are compared.
-## `report = FALSE` skips the classic STAR printout (the slowest step); star_report() builds it later on demand.
 
 star_aov <- function(data, response, treatment, block = NULL, design = c("CRD", "RCBD"),
-                     test = c("auto", "LSD", "HSD", "duncan", "SNK", "scheffe", "bonferroni"), alpha = 0.05,
-                     report = TRUE) {
+                     test = c("auto", "LSD", "HSD", "duncan", "SNK", "scheffe", "bonferroni"), alpha = 0.05) {
   design <- match.arg(design)
   test <- match.arg(test)
   factors <- treatment
@@ -30,29 +27,14 @@ star_aov <- function(data, response, treatment, block = NULL, design = c("CRD", 
   # STAR fits `response ~ block + factors` with aov() for a CRD (any layout; rows with a missing response are left
   # out) and for an RCBD in which every block x treatment cell has the same count and no response is missing, so
   # that model is fitted directly here. An RCBD with missing plots has them estimated by least squares
-  # (.star_estimate_missing) and its error df reduced, as STAR does; STAR's own code is only used for its report.
+  # (.star_estimate_missing) and its error df reduced, as STAR does.
   if (design == "CRD" || (!anyNA(y) && .star_is_balanced(d[c(block, factors)]))) {
-    raw <- ConstructAOVTable(summary(stats::aov(.star_aov_formula(response, factors, block), data = d)))
+    raw <- .star_anova_table(summary(stats::aov(.star_aov_formula(response, factors, block), data = d)))
     if (anyNA(y)) data_notes <- c(data_notes, sprintf("The %d row(s) with a missing response were left out of the analysis.", sum(is.na(y))))
-    report <- if (report) .star_aov_report(d, response, factors, block, design, test, alpha)
-  } else if (design == "RCBD") {
-    est <- .star_estimate_missing(d, response, factors, block)
-    raw <- .star_adjust_error_df(ConstructAOVTable(summary(stats::aov(.star_aov_formula(response, factors, block), data = est$data))), est$df_error)
-    data_notes <- c(data_notes, sprintf("%d missing response value(s) were estimated by least squares (Yates' missing-plot method: the values predicted by lm() fitted to the observed data); the error degrees of freedom are reduced by %d.", est$n_missing, est$n_missing))
-    report <- if (report) .star_aov_report(d, response, factors, block, design, test, alpha)
   } else {
-    legacy <- .star_aov_legacy(d, response, factors, block, design, test, alpha)
-    res <- legacy$res
-    report <- legacy$report
-    err_line <- grep("^ERROR:", report, value = TRUE)
-    if (length(err_line) || is.null(res$aovTable) || length(res$aovTable) == 0) {
-      stop(if (length(err_line)) sub("^ERROR:[[:space:]]*", "", err_line[1]) else "STAR could not fit this model",
-        if (anyNA(y)) paste0(" The response has ", sum(is.na(y)), " missing value(s); remove or fill them in and try again.") else "",
-        call. = FALSE
-      )
-    }
-    if (any(grepl("estimates of the missing values", report))) data_notes <- c(data_notes, "Missing response values were estimated by STAR's missing-data procedure (RCBD); degrees of freedom are adjusted.")
-    raw <- ConstructAOVTable(res$aovTable[[1]][[1]])
+    est <- .star_estimate_missing(d, response, factors, block)
+    raw <- .star_adjust_error_df(.star_anova_table(summary(stats::aov(.star_aov_formula(response, factors, block), data = est$data))), est$df_error)
+    data_notes <- c(data_notes, sprintf("%d missing response value(s) were estimated by least squares (Yates' missing-plot method: the values predicted by lm() fitted to the observed data); the error degrees of freedom are reduced by %d.", est$n_missing, est$n_missing))
   }
   anova <- data.frame(
     Source = gsub("`", "", trimws(rownames(raw)), fixed = TRUE), DF = raw[[1]], SS = raw[[2]], MS = raw[[3]],
@@ -96,31 +78,21 @@ star_aov <- function(data, response, treatment, block = NULL, design = c("CRD", 
       grand_mean = grand_mean, cv = cv, test = test, tests_used = tests_used,
       alpha = alpha, design = design, response = response, treatment = factors[1], factors = factors,
       block = block, p_treatment = effects$P[1], significant = effects$Significant[1],
-      interaction_significant = interaction_sig, summary = summary_text, apa = apa, report = report,
+      interaction_significant = interaction_sig, summary = summary_text, apa = apa,
       data_notes = data_notes, diagnostics = diagnostics, data = d
     ),
     class = "star_aov"
   )
 }
 
-# STAR's own analysis (AOVTest): the fitted tables and the classic printout
-.star_aov_legacy <- function(d, response, factors, block, design, test, alpha) {
-  # Let STAR choose the test per effect (LSD if <= 5 levels, else Tukey) unless the user picked one
-  args <- list(data = d, design = design, respvar = response, factor1 = factors, sig = alpha)
-  if (design == "RCBD") args$rep1 <- block
-  if (!test %in% c("auto", "bonferroni")) {
-    args$pwTest <- test
-    args$pwVar <- response
-  }
-  report <- capture.output(res <- do.call(AOVTest, args))
-  list(res = res, report = report)
-}
-
-.star_aov_report <- function(d, response, factors, block, design, test, alpha) {
-  tryCatch(
-    .star_aov_legacy(d, response, factors, block, design, test, alpha)$report,
-    error = \(e) "The classic STAR report could not be produced for this data."
-  )
+# The ANOVA table of summary(aov()): the residual row named Error, and a Total row (df and sum of squares)
+.star_anova_table <- function(s) {
+  t <- as.data.frame(if (inherits(s, "summary.aov")) s[[1]] else s)
+  rownames(t) <- trimws(rownames(t))
+  rownames(t)[nrow(t)] <- "Error"
+  t[nrow(t) + 1, 1:2] <- c(sum(t[[1]]), sum(t[[2]]))
+  rownames(t)[nrow(t)] <- "Total"
+  t
 }
 
 .star_aov_formula <- function(response, factors, block = NULL) {
@@ -256,22 +228,6 @@ print.star_aov <- function(x, ...) {
   invisible(x)
 }
 
-## Classic STAR printout of a result; built on demand for a result made with `report = FALSE`.
-star_report <- function(x) {
-  if (!is.null(x$report)) {
-    return(x$report)
-  }
-  if (is.null(x$data)) {
-    return(character())
-  }
-  if (x$design %in% c("CombRCBD", "CombCRD")) {
-    return(.star_combined_report(x$data, x$response, x$treatment, x$env, x$block, sub("^Comb", "", x$design), x$test, x$alpha))
-  }
-  if (x$design %in% c("SplitRCBD", "SplitCRD")) {
-    return(.star_split_report(x$data, x$response, x$main, x$sub, x$block, x$test, x$alpha, x$design))
-  }
-  .star_aov_report(x$data, x$response, x$factors, x$block, x$design, x$test, x$alpha)
-}
 
 ## Bar plots with +/- 1 SE bars and mean-separation letters.
 ##   effect = NULL / a factor name : bars for the means of that factor
