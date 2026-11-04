@@ -762,7 +762,8 @@ ui <- bslib::page_navbar(
                 inline = TRUE
               ),
               stale_dim(uiOutput("diag_ui")),
-              stale_dim(plotOutput("diag_plot", height = "440px"))
+              stale_dim(plotOutput("diag_plot", height = "440px")),
+              stale_dim(uiOutput("diag_main_ui"))
             ),
             tabPanel(
               "Classic STAR report",

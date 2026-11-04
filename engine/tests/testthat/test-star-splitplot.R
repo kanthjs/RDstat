@@ -28,3 +28,34 @@ test_that("split plot: an unbalanced layout is refused", {
   expect_error(star_splitplot(GomezSplitRCBD[-1, ], "Yield", "Nitrogen", "Variety", "Rep"), "complete and balanced")
   expect_error(star_splitplot(GomezSplitRCBD, "Yield", c("Nitrogen", "Variety"), "Variety", "Rep"), "exactly one")
 })
+
+test_that("split plot: residuals are checked on Error(b) and on Error(a)", {
+  r <- star_splitplot(GomezSplitRCBD, "Yield", main = "Nitrogen", sub = "Variety", block = "Rep")
+  dg <- r$diagnostics
+  expect_s3_class(dg, "star_diagnostics")
+  # sub-plot residuals are those of the Within stratum: SS = Error(b) SS
+  expect_equal(sum(dg$residuals$Residual^2), r$anova$SS[r$anova$Source == "Error(b)"])
+  expect_equal(nrow(dg$residuals), 72)
+  # main-plot residuals come from the whole-plot means: SS x (sub-plot levels) = Error(a) SS, df = Error(a) df
+  mp <- dg$main_plot
+  expect_equal(nrow(mp$residuals), 18)
+  expect_equal(mp$df, 10)
+  expect_equal(4 * sum(mp$residuals$Residual^2), r$anova$SS[r$anova$Source == "Error(a)"])
+  expect_true(any(grepl("^Main plots \\(Error\\(a\\)\\)", dg$messages)))
+})
+
+test_that("split plot: a wrong single value is flagged in the sub plots, a wrong main plot in the main plots", {
+  d <- GomezSplitRCBD
+  d$Yield[5] <- d$Yield[5] * 2
+  dg <- star_splitplot(d, "Yield", "Nitrogen", "Variety", "Rep")$diagnostics
+  expect_equal(dg$outliers$Row[1], "5")
+  expect_equal(dg$outliers$Flag[1], "outlier")
+
+  d <- GomezSplitRCBD
+  i <- d$Rep == d$Rep[1] & d$Nitrogen == d$Nitrogen[1]
+  d$Yield[i] <- d$Yield[i] + 2500
+  dg <- star_splitplot(d, "Yield", "Nitrogen", "Variety", "Rep")$diagnostics
+  expect_equal(dg$main_plot$n_outliers, 1)
+  expect_match(dg$main_plot$outliers$Row[1], paste0("Rep ", d$Rep[1], " / Nitrogen ", d$Nitrogen[1]), fixed = TRUE)
+  expect_false(dg$ok)
+})

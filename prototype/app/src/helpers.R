@@ -184,8 +184,9 @@ data_preview_ui <- function(d, n = 10) {
 }
 
 # cards of the residual checks, each with its traffic light: green met, yellow a mild departure the analysis is
-# robust to, red a clear violation (see star_assumption_lights); without lights, passed is green and failed red
-diag_summary_cards <- function(dg, lights = NULL) {
+# robust to, red a clear violation (see star_assumption_lights); without lights, passed is green and failed red.
+# advice = FALSE for designs that have no recommendation on the Results tab (split plots)
+diag_summary_cards <- function(dg, lights = NULL, advice = TRUE) {
   if (is.null(dg)) return(NULL)
   light_of <- function(check, ok) {
     l <- if (!is.null(lights)) lights$Light[lights$Check == check] else character()
@@ -197,7 +198,8 @@ diag_summary_cards <- function(dg, lights = NULL) {
   norm_desc <- if (is.na(nl)) "Too few observations to test" else c(
     green = "No evidence that the residuals depart from a normal distribution",
     yellow = "The residuals depart from normal, but with 30 or more per group and a moderate shape the analysis is robust",
-    red = "The residuals clearly depart from normality: see the recommendation on the Results tab")[[nl]]
+    red = if (advice) "The residuals clearly depart from normality: see the recommendation on the Results tab"
+          else "The residuals clearly depart from normality: check the flagged values, or try a transformation (Advanced options)")[[nl]]
   has_homo <- !is.null(dg$homogeneity)
   vl <- if (has_homo) light_of("variance", dg$homogeneity$ok) else NA_character_
   homo_badge <- if (is.na(vl)) badge(NA, if (has_homo) "Not tested" else "Not applicable")
@@ -205,7 +207,8 @@ diag_summary_cards <- function(dg, lights = NULL) {
   homo_desc <- if (is.na(vl)) "Too few observations per treatment to test" else c(
     green = "Variances are similar across treatment groups",
     yellow = "Variances differ moderately (largest/smallest at most 4) with equal group sizes, which the F test tolerates",
-    red = "Variances clearly differ across groups: Welch's ANOVA (CRD) or a transformation")[[vl]]
+    red = if (advice) "Variances clearly differ across groups: Welch's ANOVA (CRD) or a transformation"
+          else "Variances clearly differ across groups: try a transformation (Advanced options)")[[vl]]
   n_out <- dg$n_outliers %||% 0; n_sus <- dg$n_suspect %||% 0
   ol <- light_of("outliers", n_out == 0)
   out_badge <- badge(ol, if (n_out > 0) sprintf("%d outlier(s)", n_out) else if (n_sus > 0) sprintf("%d suspect", n_sus) else "None detected")

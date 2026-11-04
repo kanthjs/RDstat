@@ -433,17 +433,44 @@
     width = function() live_plot_dims("aov")$width,
     height = function() live_plot_dims("aov")$height
   )
+  # cards, messages and flagged table of one set of residuals; `passed` and `messages` describe that set only. Split
+  # plots get no recommendation on the Results tab, so their cards do not point to one.
+  diag_block <- function(dg, passed, messages, lights = NULL, row_note = "Row = row number in your data.") tagList(
+    diag_summary_cards(dg, lights, advice = !is_split(ok()$design)),
+    div(class = if (passed) "alert alert-success" else "alert alert-warning", tags$ul(lapply(messages, tags$li))),
+    if (nrow(dg$outliers)) {
+      o <- dg$outliers
+      o[] <- lapply(o, function(v) if (is.numeric(v)) fmt_n(v, 3) else as.character(v))
+      tagList(h4("Flagged observations"), p(class = "text-muted", row_note, " |Studentized residual| > 3 = outlier, 2 to 3 = suspect."), html_table(o))
+    })
   output$diag_ui <- renderUI({
     dg <- ok()$diagnostics
-    if (is.null(dg)) return(div(class = "alert alert-warning", if (is_split(ok()$design)) "Assumption checks are not available for split-plot designs yet." else "Assumption checks could not be computed for this data."))
+    if (is.null(dg)) return(div(class = "alert alert-warning", "Assumption checks could not be computed for this data."))
+    lights <- tryCatch(star_assumption_lights(ok()), error = function(e) NULL)
+    if (!is_split(ok()$design)) return(diag_block(dg, dg$ok, dg$messages, lights))
+    sub_ok <- dg$n_outliers == 0 && !isFALSE(dg$normality$ok) && !isFALSE(dg$homogeneity$ok)
     tagList(
-      diag_summary_cards(dg, tryCatch(star_assumption_lights(ok()), error = function(e) NULL)),
-      div(class = if (dg$ok) "alert alert-success" else "alert alert-warning", tags$ul(lapply(dg$messages, tags$li))),
-      if (nrow(dg$outliers)) {
-        o <- dg$outliers
-        o[] <- lapply(o, function(v) if (is.numeric(v)) fmt_n(v, 3) else as.character(v))
-        tagList(h4("Flagged observations"), p(class = "text-muted", "Row = row number in your data. |Studentized residual| > 3 = outlier, 2 to 3 = suspect."), html_table(o))
-      })
+      p(class = "text-muted", icon("circle-info"), " A split plot has two error terms, so the residuals are checked at each level: ",
+        strong("sub plots"), " (Error(b), single values) and ", strong("main plots"), " (Error(a), the mean of each main plot; below the first plot)."),
+      h4(sprintf("Sub plots: %s within main plots (Error(b))", ok()$sub)),
+      diag_block(dg, sub_ok, dg$messages_sub, lights))
+  })
+  output$diag_main_ui <- renderUI({
+    r <- ok(); dg <- r$diagnostics
+    req(is_split(r$design), dg)
+    mp <- dg$main_plot
+    tagList(
+      hr(),
+      h4(sprintf("Main plots: %s (Error(a))", r$main)),
+      p(class = "text-muted", sprintf("Each point is the mean of one main plot (%s x %s) over the levels of %s.", r$block, r$main, r$sub)),
+      if (is.null(mp)) div(class = "alert alert-info", tags$ul(lapply(dg$messages_main, tags$li)))
+      else tagList(
+        diag_block(mp, mp$ok, dg$messages_main, row_note = sprintf("Row = main plot (%s / %s).", r$block, r$main)),
+        plotOutput("diag_plot_main", height = "440px")))
+  })
+  output$diag_plot_main <- renderPlot({
+    mp <- ok()$diagnostics$main_plot; req(mp)
+    if (identical(input$diag_style, "gg")) print(gg_diag(mp, "aov")) else star_plot_diagnostics(mp)
   })
   observeEvent(input$cp_np, session$sendCustomMessage("copy_text", list(what = "Rank-based test", text = paste(np_res()$summary, tsv(np_display(np_res())), sep = "\n"))))
   gg_diag <- function(dg, p) { st <- plot_style(p); star_ggplot_diagnostics(dg, st$base_size - 1, st$theme, st$legend) }

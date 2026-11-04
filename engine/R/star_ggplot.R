@@ -233,7 +233,7 @@ star_ggplot_diagnostics <- function(x, base_size = 11, theme = "classic", legend
     ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = 0.15)) +
     ggplot2::facet_wrap(~panel, scales = "free", ncol = 2) +
     ggplot2::labs(x = NULL, y = NULL, title = "Residual diagnostics",
-                  subtitle = sprintf("Studentized residuals. Dashed lines: +/-%s (outlier cut-off); numbers: row in your data", cut)) +
+                  subtitle = sprintf("Studentized residuals. Dashed lines: +/-%s (outlier cut-off); labels: %s", cut, dg$row_label %||% "row in your data")) +
     star_gg_theme(base_size, theme, .star_gg_legend(legend))
   if (nrow(lab)) p <- p + ggplot2::geom_text(data = lab, ggplot2::aes(label = Row), vjust = -0.8, size = 3, colour = "#D55E00")
   p + ggplot2::scale_colour_manual(values = c(cut = "#D55E00", zero = "grey60"), guide = "none")

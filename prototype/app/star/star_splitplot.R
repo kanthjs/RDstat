@@ -100,6 +100,7 @@ star_splitplot <- function(data, response, main, sub, block,
   }
 
   d <- d[, c(response, main, sub, block)]
+  diagnostics <- tryCatch(star_splitplot_diagnostics(d, response, main, sub, block, design, alpha), error = \(e) NULL)
 
   summary_text <- .star_split_summary(anova, effects, means, factors, response, interaction_sig, tests_used, alpha, cv_a, cv_b)
   apa <- .star_apa(effects, err_b, response)
@@ -111,7 +112,7 @@ star_splitplot <- function(data, response, main, sub, block,
       alpha = alpha, design = design, response = response, treatment = main, factors = factors,
       main = main, sub = sub, block = block, p_treatment = effects$P[1], significant = effects$Significant[1],
       interaction_significant = interaction_sig, summary = summary_text, apa = apa,
-      data_notes = data_notes, diagnostics = NULL, data = d
+      data_notes = data_notes, diagnostics = diagnostics, data = d
     ),
     class = "star_aov"
   )

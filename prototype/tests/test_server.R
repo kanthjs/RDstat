@@ -191,7 +191,12 @@ tests <- c(auto = "HSD", LSD = "LSD", HSD = "HSD", duncan = "duncan")
   check(identical(tables()$means$Irrigation$Group, c("b", "a", "c")) && identical(tables()$means$Variety$Group, c("d", "c", "b", "a")), "Split plot CRD: letters match the original STAR")
   check(grepl("Split Plot in Completely Randomized Design", output$report), "Split plot CRD: Classic STAR report")
   aov_script_check("split plot (CRD)")
-  check(grepl("not available for split-plot", html(output$diag_ui)), "Split plot CRD: no assumption checks yet")
+  dh <- html(output$diag_ui); mh <- html(output$diag_main_ui); mp <- r$diagnostics$main_plot
+  check(grepl("Sub plots", dh) && grepl("Error(b)", dh, fixed = TRUE) && nrow(r$diagnostics$residuals) == 48,
+        "Split plot CRD: assumption checks of the sub plots (48 residuals)")
+  check(!is.null(mp) && mp$df == 9 && nrow(mp$residuals) == 12 && grepl("Main plots", mh) && grepl("little power", mh),
+        "Split plot CRD: main plots checked on Error(a) (12 main plots, 9 df), with the low-power note")
+  check(!is.null(output$diag_plot_main$src), "Split plot CRD: main-plot residual plot")
   check(identical(tables()$agronomy$Irrigation[[1]][4:9], c("F test (Irrigation)", "Grand mean", "CV (%)", "SE(m)", "SED", "LSD (0.05)")),
         "Split plot CRD: publication footer rows")
   pr <- precision_of(r, "Irrigation"); ea <- r$anova[r$anova$Source == "Error(a)", ]
