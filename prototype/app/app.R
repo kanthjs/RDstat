@@ -21,8 +21,16 @@ for (f in sort(list.files("star", pattern = "[.]R$", full.names = TRUE))) {
 # their own so that STAR's LSD.test(), cv(), data.frame() shim and the like do not mask the ones the analyses use.
 # It is made in the global environment, where star_report() looks for it: shiny::runApp() runs this file in a child
 # environment of it.
-star_legacy <- assign("star_legacy", new.env(parent = globalenv()), envir = globalenv())
-for (f in sort(list.files(file.path("star", "legacy"), pattern = "[.]R$", full.names = TRUE))) {
+star_legacy <- assign(
+  "star_legacy",
+  new.env(parent = globalenv()),
+  envir = globalenv()
+)
+for (f in sort(list.files(
+  file.path("star", "legacy"),
+  pattern = "[.]R$",
+  full.names = TRUE
+))) {
   sys.source(f, envir = star_legacy)
 }
 # UseMethod() finds methods in the caller's environment or in the S3 table of the top environment of the generic.
@@ -35,18 +43,32 @@ local({
   for (g in fns) {
     f <- star_legacy[[g]]
     if (is.function(f) && "UseMethod" %in% all.names(body(f))) {
-      for (m in fns[startsWith(fns, paste0(g, "."))]) tbl[[m]] <- star_legacy[[m]]
+      for (m in fns[startsWith(fns, paste0(g, "."))]) {
+        tbl[[m]] <- star_legacy[[m]]
+      }
     }
   }
   star_legacy[[".__S3MethodsTable__."]] <- tbl
 })
 # ggplot text uses Roboto (www/fonts, Apache 2.0). Registering the files with systemfonts lets ragg (on-screen plots
 # and PNG export) find the font without it being installed; if registration fails, plots keep the device default font.
-if (tryCatch({
-  if (!"Roboto" %in% systemfonts::registry_fonts()$family)
-    systemfonts::register_font("Roboto", plain = "www/fonts/Roboto-Regular.ttf", bold = "www/fonts/Roboto-Bold.ttf")
-  TRUE
-}, error = function(e) FALSE)) options(star.plot_family = "Roboto")
+if (
+  tryCatch(
+    {
+      if (!"Roboto" %in% systemfonts::registry_fonts()$family) {
+        systemfonts::register_font(
+          "Roboto",
+          plain = "www/fonts/Roboto-Regular.ttf",
+          bold = "www/fonts/Roboto-Bold.ttf"
+        )
+      }
+      TRUE
+    },
+    error = function(e) FALSE
+  )
+) {
+  options(star.plot_family = "Roboto")
+}
 
 # Code is split by role into ./src; each file is sourced in the same order as before, so definitions keep their dependencies.
 source("src/helpers.R", local = TRUE) # formatting, display tables, data reading, UI building blocks
@@ -174,7 +196,7 @@ methods_ui <- div(
   style = "max-width: 800px;",
   h3("Methods"),
   p(
-    "ใช้หน้านี้อธิบายวิธีวิเคราะห์เมื่อรายงานผล ประโยคบรรยายซอฟต์แวร์และเอกสารอ้างอิงด้านล่างเป็นภาษาอังกฤษ คัดลอกไปใส่ในต้นฉบับบทความได้ทันที"
+    "วิธีวิเคราะห์จากโปรแกรมนี้ ด้วยภาษา R และ packages ต่าง ๆ ที่เกี่ยวข้อง โดยได้แสดง ชื่อ package version และ function พร้อม เอกสารอ้างอิงของ package นั้น ๆ รวมทั้ง เอกสารอ้างอิงที่เกี่ยวข้องกับวิธีการทางสถิติที่เกี่ยวข้อง"
   ),
   h3("R package"),
   uiOutput("methods_text"),
@@ -183,7 +205,7 @@ methods_ui <- div(
     "เลือกหัวข้อที่ตรงกับการวิเคราะห์ที่ใช้ แต่ละหัวข้ออธิบายว่าวิเคราะห์อย่างไร ใช้ฟังก์ชันและ package ใด และมีเอกสารอ้างอิงใดบ้าง ใช้เป็นข้อมูลประกอบการเขียนวิธีการวิเคราะห์ของคุณเอง"
   ),
   uiOutput("methods_topics"),
-  h3("เอกสารอ้างอิงของวิธีการ"),
+  h3("เอกสารอ้างอิงของวิธีการทางสถิติ"),
   tags$ul(lapply(method_refs, tags$li)),
   actionButton("cp_mrefs", "คัดลอกเอกสารอ้างอิงของวิธีการ")
 )
@@ -193,16 +215,16 @@ about_ui <- div(
   style = "max-width: 800px;",
   h3("About"),
   p(sprintf(
-    "%s เป็น โปรแกรมวิเคราะห์ข้อมูลทางสถิติ ที่มีฐานการพัฒนาต่อยอดจาก โปรแกรม STAR (Statistical Tools for Agricultural Research) ของสถาบันวิจัยข้าวนานาชาติ (IRRI) ฉบับเว็บ แอปนี้รันโค้ด R ของ STAR 2.0.2 ภายในเบราว์เซอร์",
+    "%s เป็น โปรแกรมวิเคราะห์ข้อมูลสถิติ ที่มีฐานการพัฒนาต่อยอดจาก โปรแกรม STAR (Statistical Tools for Agricultural Research) ของสถาบันวิจัยข้าวนานาชาติ (IRRI)",
     app_name
   )),
   div(
     class = "alert alert-warning",
-    strong("รุ่นทดลอง (beta) "),
-    "ผลลัพธ์ได้ตรวจเทียบกับโปรแกรม STAR ด้วยข้อมูลตัวอย่างในแอปแล้ว แต่อยู่ระหว่างการพัฒนา ผลวิเคราะห์ควรตรวจสอบด้วยโปรแกรมอื่นหรือปรึกษานักสถิติ และสามารถแจ้งเมื่อพบผลที่ดูผิดปกติ"
+    strong("beta version) "),
+    "ผลลัพธ์ได้ตรวจเทียบกับโปรแกรม STAR ด้วยข้อมูลตัวอย่างในแอปแล้ว แต่อยู่ระหว่างการพัฒนา ดังนั้นผลวิเคราะห์ที่ได้ควรตรวจสอบด้วยโปรแกรมอื่นหรือปรึกษานักสถิติ และสามารถแจ้งเมื่อพบผลที่ดูผิดปกติ"
   ),
   h4("ข้อมูลของคุณ"),
-  p("ไฟล์ของคุณถูกอ่านและวิเคราะห์ภายในเบราว์เซอร์ ไม่ได้ถูกอัปโหลดไปยังเซิร์ฟเวอร์ใด"),
+  p("ไฟล์ของคุณถูกอ่านและวิเคราะห์ภายในเบราว์เซอร์เท่านั้น ไม่ได้ถูกอัปโหลดไปยังเซิร์ฟเวอร์ใด"),
   h4("รุ่นของแอป"),
   p(code(version_label()), " โปรดระบุรุ่นนี้เมื่อแจ้งปัญหา"),
   h4("ผู้ดูแล"),
@@ -235,7 +257,7 @@ about_ui <- div(
     class = "text-muted small",
     "หรือแจ้งผ่าน ",
     tags$a(
-      href = "https://github.com/kanthjs/STAR-Rev/issues",
+      href = "https://github.com/kanthjs/RDstat/issues",
       target = "_blank",
       "GitHub Issues"
     ),
@@ -243,7 +265,7 @@ about_ui <- div(
   ),
   h4("ฟอนต์"),
   p(
-    "ข้อความในแอปนี้ใช้ฟอนต์ จุฬาภรณ์ลิขิต (Chulabhorn Likhit) ส่วน กราฟใช้ฟอนต์มาตรฐานของ R"
+    "ข้อความในแอปนี้ใช้ฟอนต์ จุฬาภรณ์ลิขิต (Chulabhorn Likhit) ส่วน กราฟใช้ฟอนต์ Roboto"
   ),
   h4("สัญญาอนุญาต"),
   p(
