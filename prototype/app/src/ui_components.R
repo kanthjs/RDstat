@@ -2,7 +2,7 @@
 data_source_ui <- function(p, examples, help = NULL) tagList(
   radioButtons(paste0(p, "_src"), NULL, c("Built-in example" = "ex", "Upload file" = "up"), inline = TRUE),
   conditionalPanel(sprintf("input.%s_src == 'ex'", p), selectInput(paste0(p, "_example"), "Example", examples)),
-  conditionalPanel(sprintf("input.%s_src == 'up'", p), fileInput(paste0(p, "_file"), "Data file (.csv, .txt, .xlsx)", accept = c(".csv", ".txt", ".tsv", ".xlsx")),
+  conditionalPanel(sprintf("input.%s_src == 'up'", p), fileInput(paste0(p, "_file"), "Data file (.csv, .txt, .xlsx, .xls)", accept = c(".csv", ".txt", ".tsv", ".xlsx", ".xls")),
                    uiOutput(paste0(p, "_read_note")), help, file_language_help()))
 # what the file reader skipped (title lines above the column names, summary rows below the data), so it is not a surprise
 read_note_ui <- function(d) {

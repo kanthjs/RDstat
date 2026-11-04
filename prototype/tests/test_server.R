@@ -496,6 +496,13 @@ Functions: stats::t.test", tt_txt) && grepl("Student (1908)", tt_txt, fixed = TR
   fx <- readxl::readxl_example("datasets.xlsx")
   session$setInputs(file = list(datapath = fx, name = "datasets.xlsx", size = file.size(fx), type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
   check(nrow(dat()) == 32 && identical(dat()$wt[3], "2.32") && identical(dat()$drat[3], "3.85"), "Upload: .xlsx file is read, numbers as typed")
+  # the t test, correlation and regression screens take .xls files too (the same reader)
+  fx <- readxl::readxl_example("datasets.xls")
+  xls <- list(datapath = fx, name = "datasets.xls", size = file.size(fx), type = "application/vnd.ms-excel")
+  session$setInputs(tt_src = "up", tt_file = xls, corr_src = "up", corr_file = xls, reg_src = "up", reg_file = xls)
+  check(all(vapply(list(tt_dat(), corr_dat(), reg_dat()), function(d) nrow(d) == 32 && identical(d$wt[1], "2.62"), NA)),
+        "Upload: .xls file is read on the t test, correlation and regression screens")
+  session$setInputs(tt_src = "ex", corr_src = "ex", reg_src = "ex")
   # first choices of the variables for an upload come from the column names, not their order
   g <- guess_roles(setNames(data.frame(c("A", "A", "B", "B"), c(1, 2, 1, 2), c(5, 6, 4, 5)), c("พันธุ์", "ซ้ำ", "ผลผลิต")), "ผลผลิต")
   check(identical(g$blk, "ซ้ำ") && identical(g$trt[1], "พันธุ์"), "Roles: Thai variety first, ซ้ำ second gives ซ้ำ as the block")
