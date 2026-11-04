@@ -5,6 +5,7 @@
 ##   star_ggplot_diagnostics(x)                               four residual panels
 ## All take base_size, theme and legend (see star_gg_theme()); the means plot also takes a palette (see .star_gg_palette()).
 ##   star_ggsave(plot, file, width, height, dpi)              PNG / SVG / PDF export
+##   star_gg_font(plot)                                       Thai-capable font when the plot has Thai text
 
 ## Colours for n groups. `palette` is NULL or the name of a built-in palette (see star_gg_palettes), or a vector
 ## of colours (recycled). The default, Okabe-Ito, is colour-blind safe; beyond 8 levels it falls back to a generated palette.
@@ -77,6 +78,9 @@ star_gg_theme <- function(base_size = 12, theme = c("classic", "bw", "minimal", 
                    legend.position = legend, legend.title = ggplot2::element_text(face = "bold"),
                    strip.background = ggplot2::element_blank(), strip.text = ggplot2::element_text(face = "bold"))
 }
+## Size (in mm, for geom_text) of text drawn inside a plot, as a share of base_size, so that letters and labels
+## follow the chosen font size instead of staying at ggplot2's fixed 11 pt
+.star_gg_text_size <- function(base_size, rel = 0.9) rel * base_size / ggplot2::.pt
 ## legend = "auto" keeps the position that suits the plot
 .star_gg_legend <- function(legend, auto = "top") if (is.null(legend) || identical(legend, "auto")) auto else legend
 
@@ -137,7 +141,7 @@ star_ggplot_means <- function(x, effect = NULL, data = NULL, error = c("se", "sd
       top <- pmax(top, tapply(pts$y, pts$Treatment, max)[as.character(m$Treatment)])
     }
     m$ytxt <- top
-    if (has_letters) p <- p + ggplot2::geom_text(data = m, ggplot2::aes(y = ytxt, label = lab), vjust = -0.5, fontface = "bold")
+    if (has_letters) p <- p + ggplot2::geom_text(data = m, ggplot2::aes(y = ytxt, label = lab), vjust = -0.5, fontface = "bold", size = .star_gg_text_size(base_size))
     note <- if (has_letters) paste("Letters:", x$tests_used[[f]], "test, alpha =", x$alpha)
             else if (isTRUE(x$interaction_significant)) "Interaction significant: compare means within levels (see interaction plot)"
             else "Effect not significant"
@@ -182,13 +186,13 @@ star_ggplot_means <- function(x, effect = NULL, data = NULL, error = c("se", "sd
       p <- p + ggplot2::geom_point(data = pts, ggplot2::aes(x = x, y = y, group = g), inherit.aes = FALSE,
                                    position = ggplot2::position_jitterdodge(jitter.width = 0.08, dodge.width = 0.8, seed = 1),
                                    shape = pch, size = 1.6 * point_size, fill = "white", colour = "grey20", alpha = 0.85)
-    p <- p + ggplot2::geom_text(ggplot2::aes(y = ytxt, label = lab, group = g), position = dodge, vjust = -0.5, fontface = "bold")
+    p <- p + ggplot2::geom_text(ggplot2::aes(y = ytxt, label = lab, group = g), position = dodge, vjust = -0.5, fontface = "bold", size = .star_gg_text_size(base_size))
   } else {
     p <- ggplot2::ggplot(cd, ggplot2::aes(x = x, y = Mean, colour = g, group = g)) +
       ggplot2::geom_line(linewidth = 0.8, position = ggplot2::position_dodge(width = 0.15)) +
       ggplot2::geom_errorbar(ggplot2::aes(ymin = lo, ymax = hi), width = 0.12, position = ggplot2::position_dodge(width = 0.15)) +
       ggplot2::geom_point(ggplot2::aes(fill = g), shape = pch, size = 3 * point_size, colour = "grey20", position = ggplot2::position_dodge(width = 0.15)) +
-      ggplot2::geom_text(ggplot2::aes(y = ytxt, label = lab), position = ggplot2::position_dodge(width = 0.15), vjust = -0.9, fontface = "bold", show.legend = FALSE) +
+      ggplot2::geom_text(ggplot2::aes(y = ytxt, label = lab), position = ggplot2::position_dodge(width = 0.15), vjust = -0.9, fontface = "bold", size = .star_gg_text_size(base_size), show.legend = FALSE) +
       ggplot2::scale_colour_manual(values = cols, name = f1) + ggplot2::scale_fill_manual(values = cols, name = f1)
   }
   p + ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = c(0, 0.12))) +
@@ -235,8 +239,28 @@ star_ggplot_diagnostics <- function(x, base_size = 11, theme = "classic", legend
     ggplot2::labs(x = NULL, y = NULL, title = "Residual diagnostics",
                   subtitle = sprintf("Studentized residuals. Dashed lines: +/-%s (outlier cut-off); labels: %s", cut, dg$row_label %||% "row in your data")) +
     star_gg_theme(base_size, theme, .star_gg_legend(legend))
-  if (nrow(lab)) p <- p + ggplot2::geom_text(data = lab, ggplot2::aes(label = Row), vjust = -0.8, size = 3, colour = "#D55E00")
+  if (nrow(lab)) p <- p + ggplot2::geom_text(data = lab, ggplot2::aes(label = Row), vjust = -0.8, size = .star_gg_text_size(base_size, 0.75), colour = "#D55E00")
   p + ggplot2::scale_colour_manual(values = c(cut = "#D55E00", zero = "grey60"), guide = "none")
+}
+
+## Thai text. The plot font (star.plot_family, Roboto in the app) has no Thai letters, and in the browser (webR)
+## there is no system font to fall back on, so Thai titles, axis labels or treatment names would come out as boxes.
+## star_gg_font() switches the whole plot to the font in getOption("star.plot_family_thai") when any of its text
+## (labels, legend titles, or the text in its data, such as factor levels) contains Thai; otherwise the plot is unchanged.
+.star_gg_has_thai <- function(p) {
+  txt <- function(d) if (is.data.frame(d)) unlist(lapply(d, function(v) if (is.factor(v)) levels(v) else if (is.character(v)) unique(v)), use.names = FALSE)
+  s <- c(unlist(p$labels, use.names = FALSE), txt(p$data), unlist(lapply(p$layers, function(l) txt(l$data)), use.names = FALSE),
+         unlist(lapply(p$scales$scales, function(sc) if (is.character(sc$name)) sc$name), use.names = FALSE))
+  any(grepl("[\u0E00-\u0E7F]", as.character(s)))
+}
+star_gg_font <- function(p, thai = getOption("star.plot_family_thai", "")) {
+  if (!inherits(p, "ggplot") || is.null(thai) || !nzchar(thai) || !.star_gg_has_thai(p)) return(p)
+  p + ggplot2::theme(text = ggplot2::element_text(family = thai), geom = ggplot2::element_geom(family = thai))
+}
+## The font family a plot is drawn in: its own theme's, else the app default
+.star_gg_family <- function(p) {
+  f <- tryCatch(p$theme$text$family, error = function(e) NULL)
+  if (is.character(f) && length(f) == 1 && nzchar(f)) f else getOption("star.plot_family", "")
 }
 
 ## TRUE when showtext can draw `family`: adds it to sysfonts from the files systemfonts knows for it
@@ -256,7 +280,8 @@ star_ggsave <- function(plot, file, width = 8, height = 5.5, dpi = 300) {
   if (!ext %in% c("png", "svg", "pdf")) stop("Use a .png, .svg or .pdf file name.")
   # PNG goes through ragg, which finds fonts registered with systemfonts. The PDF / SVG devices do not, so a custom
   # family (star.plot_family) is drawn there with showtext; the base pdf() device fails outright on an unknown family.
-  fam <- getOption("star.plot_family", "")
+  plot <- star_gg_font(plot)
+  fam <- .star_gg_family(plot)
   if (ext != "png" && nzchar(fam) && .star_gg_showtext(fam)) {
     dev <- if (ext == "pdf") grDevices::cairo_pdf else grDevices::svg
     dev(file, width = width, height = height, bg = "white")

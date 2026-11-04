@@ -17,15 +17,24 @@
     if (length(cm) != 2 || anyNA(cm)) cm <- export_sizes$std
     pmin(pmax(cm, 3), 60) / 2.54
   }
-  # Proportional width and height in pixels for the on-screen Live View (WYSIWYG)
+  # On-screen size in pixels of the Live View: the downloaded size scaled to fit the card, same proportions
   live_plot_dims <- function(p) {
     wh <- export_dims(p) # in inches
-    ratio <- wh[1] / wh[2]
     d <- input[[paste0(p, "_dim")]] %||% "std"
     base_w <- if (d == "j1") 480 else if (d == "slide") 700 else 640
-    h <- round(base_w / ratio)
-    list(width = base_w, height = max(h, 240))
+    k <- min(base_w / wh[1], 640 / wh[2])
+    list(width = round(wh[1] * k), height = round(wh[2] * k), inches = wh)
   }
+  # Live View (WYSIWYG): the plot is laid out at the downloaded size in inches, so text, points and margins take the
+  # same share of the figure as in the file, then drawn at the resolution that makes it fit the card on screen.
+  # renderPlot() cannot do this, because its `res` is fixed, so a 9 pt label on an 8.5 cm figure would look half size.
+  render_live_plot <- function(p, draw) renderImage({
+    d <- live_plot_dims(p)
+    pr <- session$clientData$pixelratio %||% 1
+    f <- tempfile(fileext = ".png")
+    shiny::plotPNG(draw, f, width = d$width * pr, height = d$height * pr, res = d$width * pr / d$inches[1])
+    list(src = f, width = d$width, height = d$height, contentType = "image/png", alt = "Plot")
+  }, deleteFile = TRUE)
   live_badge_render <- function(p) {
     renderUI({
       d <- input[[paste0(p, "_dim")]] %||% "std"
@@ -68,7 +77,7 @@
         vjust = if (deg == 90) 0.5 else 1
       ))
     }
-    p_obj
+    star_gg_font(p_obj)
   }
   gg_version <- function() tryCatch(as.character(utils::packageVersion("ggplot2")), error = function(e) "")
   output$methods_text <- renderUI({

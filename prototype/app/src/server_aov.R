@@ -429,10 +429,7 @@
     else if (use_gg()) print(gg_means())
     else star_plot_means(plot_obj(), sub("_line$", "", plot_effect()), main = input$gg_title, xlab = input$gg_xlab, ylab = input$gg_ylab)
   }
-  output$means_plot <- renderPlot(draw_means(),
-    width = function() live_plot_dims("aov")$width,
-    height = function() live_plot_dims("aov")$height
-  )
+  output$means_plot <- render_live_plot("aov", draw_means)
   # cards, messages and flagged table of one set of residuals; `passed` and `messages` describe that set only. Split
   # plots get no recommendation on the Results tab, so their cards do not point to one.
   diag_block <- function(dg, passed, messages, lights = NULL, row_note = "Row = row number in your data.") tagList(

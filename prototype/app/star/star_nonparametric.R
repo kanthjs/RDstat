@@ -76,7 +76,7 @@ star_ggplot_rank <- function(x, main = NULL, xlab = NULL, ylab = NULL, points = 
   if (isTRUE(points)) p <- p + ggplot2::geom_point(position = ggplot2::position_jitter(width = 0.12, height = 0, seed = 1),
                                                    shape = .star_gg_shape(shape), size = 1.8 * point_size, fill = "white", colour = "grey20", alpha = 0.85)
   if (x$significant) p <- p + ggplot2::geom_text(data = m, ggplot2::aes(x = .data$Treatment, y = .data$top, label = .data$Group),
-                                                 vjust = -0.6, fontface = "bold", inherit.aes = FALSE)
+                                                 vjust = -0.6, fontface = "bold", size = .star_gg_text_size(base_size), inherit.aes = FALSE)
   note <- if (x$significant) sprintf("Letters: %s, alpha = %s.", x$posthoc_label, format(x$alpha))
           else "No significant difference."
   p + ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = c(0.02, 0.12))) +

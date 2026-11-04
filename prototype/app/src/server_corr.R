@@ -55,16 +55,7 @@
     apply_plot_customizations(do.call(star_ggplot_correlation, c(list(r, pair, main = input$corr_title, xlab = input$corr_xlab, ylab = input$corr_ylab,
                                             type = if (v == "heat") "heatmap" else "matrix", heat = input$corr_heat), plot_style("corr"))), "corr")
   })
-  output$corr_plot <- renderPlot(print(gg_corr()),
-    width = function() {
-      v <- input$corr_view %||% "matrix"
-      if (v %in% c("matrix", "heat")) 580 else live_plot_dims("corr")$width
-    },
-    height = function() {
-      v <- input$corr_view %||% "matrix"
-      if (v %in% c("matrix", "heat")) 560 else live_plot_dims("corr")$height
-    }
-  )
+  output$corr_plot <- render_live_plot("corr", function() print(gg_corr()))
   output$dl_corr_plot <- plot_download("corr", gg_corr)
   output$dl_corr_xlsx <- downloadHandler("rdstat_correlation.xlsx", function(file) {
     r <- corr_ok(); tb <- corr_tables()

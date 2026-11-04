@@ -67,7 +67,7 @@ plot_live_ui <- function(id, p) {
         )
       ),
       tags$div(class = "plot-live-viewport",
-        stale_dim(plotOutput(id, height = "auto"))
+        stale_dim(imageOutput(id, height = "auto"))
       )
     )
   )

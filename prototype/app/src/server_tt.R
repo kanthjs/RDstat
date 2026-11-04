@@ -172,10 +172,7 @@
       code_card(tt_script(), "cp_tt_script"))
   })
   gg_tt <- reactive(apply_plot_customizations(do.call(star_ggplot_ttest, c(list(tt_ok(), main = input$tt_title, xlab = input$tt_xlab, ylab = input$tt_ylab), plot_style("tt"))), "tt"))
-  output$tt_plot <- renderPlot(print(gg_tt()),
-    width = function() live_plot_dims("tt")$width,
-    height = function() live_plot_dims("tt")$height
-  )
+  output$tt_plot <- render_live_plot("tt", function() print(gg_tt()))
   output$dl_tt_plot <- plot_download("tt", gg_tt)
   tt_script <- reactive(script_tt(tt_ok(), tt_file_name()))
   tt_trim_script <- reactive(script_tt_trimmed(tt_ok(), tt_trim_ok(), tt_file_name()))

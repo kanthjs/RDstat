@@ -69,6 +69,25 @@ if (
 ) {
   options(star.plot_family = "Roboto")
 }
+# Roboto has no Thai letters: a plot with Thai text (titles, labels, treatment names) is drawn in Chulabhorn Likit
+# instead, the app's own Thai font, which also has Latin letters and digits (see star_gg_font()).
+if (
+  tryCatch(
+    {
+      if (!"Chulabhorn Likit" %in% systemfonts::registry_fonts()$family) {
+        systemfonts::register_font(
+          "Chulabhorn Likit",
+          plain = "www/fonts/ChulabhornLikitText-Regular.ttf",
+          bold = "www/fonts/ChulabhornLikitText-Bold.ttf"
+        )
+      }
+      TRUE
+    },
+    error = function(e) FALSE
+  )
+) {
+  options(star.plot_family_thai = "Chulabhorn Likit")
+}
 
 # Code is split by role into ./src; each file is sourced in the same order as before, so definitions keep their dependencies.
 source("src/helpers.R", local = TRUE) # formatting, display tables, data reading, UI building blocks

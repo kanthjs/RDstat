@@ -38,8 +38,8 @@ star_ggplot_correlation <- function(x, pair = NULL, main = NULL, xlab = NULL, yl
     return(p +
       ggplot2::geom_blank(data = cells[cells$kind != "lower", ]) +
       ggplot2::geom_text(data = lab, ggplot2::aes(label = lab, size = r), fontface = "bold", show.legend = FALSE) +
-      ggplot2::scale_size(range = c(3.5, 8)) +
-      ggplot2::geom_text(data = dg, ggplot2::aes(label = lab), fontface = "bold", size = 5, colour = "grey25") +
+      ggplot2::scale_size(range = c(3.5, 8) * base_size / 12) +
+      ggplot2::geom_text(data = dg, ggplot2::aes(label = lab), fontface = "bold", size = .star_gg_text_size(base_size, 1.2), colour = "grey25") +
       ggplot2::facet_grid(yv ~ xv, scales = "free") +
       ggplot2::labs(x = .star_gg_or(xlab, NULL), y = .star_gg_or(ylab, NULL), title = .star_gg_or(main, paste(x$method_name, "correlation: scatter plot matrix")),
                     subtitle = sprintf("Above the diagonal: %s (* p < %s, ** p < 0.01, *** p < 0.001)", x$symbol, format(x$alpha))) +
@@ -58,7 +58,7 @@ star_ggplot_correlation <- function(x, pair = NULL, main = NULL, xlab = NULL, yl
     g$y <- factor(v[g$i], levels = rev(v))
     return(ggplot2::ggplot(g, ggplot2::aes(x = x, y = y, fill = r)) +
       ggplot2::geom_tile(colour = "white", linewidth = 1) +
-      ggplot2::geom_text(ggplot2::aes(label = lab), fontface = "bold", size = 4) +
+      ggplot2::geom_text(ggplot2::aes(label = lab), fontface = "bold", size = .star_gg_text_size(base_size)) +
       ggplot2::scale_fill_gradient2(low = hc[1], mid = hc[2], high = hc[3], midpoint = 0, limits = c(-1, 1),
                                     name = x$symbol) +
       ggplot2::scale_x_discrete(drop = FALSE, limits = v[-k]) +
@@ -101,7 +101,7 @@ star_ggplot_regression <- function(x, level = 0.95, main = NULL, xlab = NULL, yl
     if (!is.null(x$optimum) && x$optimum$inside) {
       o <- data.frame(x = x$optimum$x, y = x$optimum$y, lab = sprintf("%s at %s", x$optimum$type, .star_fmt_num(x$optimum$x)))
       p <- p + ggplot2::geom_point(data = o, shape = 23, size = 4, fill = "#F0E442", colour = "grey20") +
-        ggplot2::geom_text(data = o, ggplot2::aes(label = lab), vjust = -1.2, fontface = "bold")
+        ggplot2::geom_text(data = o, ggplot2::aes(label = lab), vjust = -1.2, fontface = "bold", size = .star_gg_text_size(base_size))
     }
     return(p + ggplot2::labs(x = .star_gg_or(xlab, v), y = .star_gg_or(ylab, x$response), title = .star_gg_or(main, paste(x$response, "against", v)),
                              subtitle = paste0(sub, sprintf("\nBand: %g%% confidence interval of the mean", 100 * level))) +
