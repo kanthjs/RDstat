@@ -230,6 +230,12 @@ long_format_help <- function() help_box("How should the file be laid out?",
   p("Not one column per replication (", strong("wide format", .noWS = "outside"), "), as often typed in Excel:"),
   html_table(data.frame(Variety = c("RD41", "RD47"), `Rep 1` = c("5557", "4652"), `Rep 2` = c("5706", "4965"), `Rep 3` = c("...", "..."), check.names = FALSE)),
   p("A file in wide format with columns named like Rep 1, Rep 2 or ซ้ำที่ 1, ซ้ำที่ 2 is recognised, and the app offers to convert it."))
+# which language to type the file in: either works; the names in the file are what the plots show
+file_language_help <- function() help_box("ภาษาในไฟล์ข้อมูล",
+  p("ใช้ภาษาไทยหรืออังกฤษก็ได้ ทั้งชื่อคอลัมน์และชื่อทรีตเมนต์ แอปอ่านและแสดงผลได้ทั้งสองภาษา"),
+  p("ชื่อในไฟล์จะขึ้นบนแกนและในคำอธิบายของกราฟตามที่พิมพ์ไว้ ถ้าจะนำกราฟไปลงวารสารภาษาอังกฤษ ควรตั้งชื่อเป็นภาษาอังกฤษตั้งแต่ในไฟล์ ",
+    "(ในแอปเปลี่ยนได้เฉพาะชื่อแกนและชื่อกราฟ ไม่ได้เปลี่ยนชื่อทรีตเมนต์)"),
+  p("ชื่อสั้น ๆ จะอ่านง่ายกว่าในกราฟขนาดเล็ก เช่น RD41 แทน พันธุ์ข้าว กข41"))
 # columns of a wide-format file that each hold one replication: named Rep1, R 2, Block_3, ซ้ำที่ 1, ... and holding numbers
 wide_rep_cols <- function(d) {
   rx <- "^\\s*(rep(lication)?|r|block|blk|b|ซ้ำ(ที่)?|บล็อก(ที่)?|บล็อค(ที่)?)\\s*[._#-]?\\s*[0-9]+\\s*$"

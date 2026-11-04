@@ -653,6 +653,7 @@ ui <- bslib::page_navbar(
             ),
             uiOutput("read_note"),
             long_format_help(),
+            file_language_help(),
             uiOutput("wide_note")
           )
         ),
