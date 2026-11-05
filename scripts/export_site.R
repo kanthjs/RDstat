@@ -8,3 +8,8 @@ shinylive::export(
   "prototype/app", dest,
   template_params = list(title = "RDstat", include_before_body = loading)
 )
+# The loading screen is drawn in the app's font, Chulabhorn Likit, before the app (which bundles it in app.json) runs,
+# so the two font files are also copied to <destdir>/fonts
+dir.create(file.path(dest, "fonts"), showWarnings = FALSE)
+fonts <- file.path("prototype", "app", "www", "fonts", c("ChulabhornLikitText-Regular.ttf", "ChulabhornLikitText-Bold.ttf"))
+stopifnot(all(file.copy(fonts, file.path(dest, "fonts"), overwrite = TRUE)))
