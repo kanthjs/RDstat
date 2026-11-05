@@ -9,7 +9,7 @@ On a computer with R 4.5 and the packages `shiny`, `shinylive`, `ggplot2`, `writ
 ```
 Rscript scripts/build_app.R
 Rscript prototype/tests/test_server.R        # all lines must say "ok"
-Rscript -e 'shinylive::export("prototype/app", "site")'
+Rscript scripts/export_site.R site
 ```
 
 Copy the whole `site` folder to the web server (about 80 MB; browsers download only part of it, and cache it).

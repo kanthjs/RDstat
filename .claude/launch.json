@@ -2,6 +2,12 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "site-static",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8765", "--directory", "prototype/site"],
+      "port": 8765
+    },
+    {
       "name": "star-app",
       "runtimeExecutable": "C:/Program Files/R/R-4.5.2/bin/Rscript.exe",
       "runtimeArgs": [

@@ -1,0 +1,67 @@
+<!-- Loading screen for the Shinylive site, put into index.html by scripts/export_site.R.
+     Shinylive shows only an animated grid of hexagons while it downloads R (webR) and starts the app, which users did
+     not read as "loading". This covers it with a message until the app's navbar is drawn, or Shinylive shows an error. -->
+<style>
+  #rd-loading {
+    position: fixed; inset: 0; z-index: 10000; display: flex; align-items: center; justify-content: center;
+    background: #F4F7F4; font-family: "Segoe UI", Tahoma, "Noto Sans Thai", "Leelawadee UI", sans-serif; color: #333;
+    transition: opacity .3s;
+  }
+  #rd-loading.rd-done { opacity: 0; pointer-events: none; }
+  #rd-loading .rd-card {
+    background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,.08); padding: 32px 36px;
+    max-width: 440px; width: calc(100% - 40px); text-align: center; border-top: 6px solid #2E7D32;
+  }
+  #rd-loading .rd-name { font-size: 26px; font-weight: 700; color: #1B5E20; margin-bottom: 18px; }
+  #rd-loading .rd-spin {
+    width: 44px; height: 44px; margin: 0 auto 18px; border-radius: 50%;
+    border: 5px solid #dfe9df; border-top-color: #2E7D32; animation: rd-spin 1s linear infinite;
+  }
+  @keyframes rd-spin { to { transform: rotate(360deg); } }
+  #rd-loading .rd-title { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  #rd-loading .rd-sub { font-size: 15px; color: #555; margin-bottom: 14px; }
+  #rd-loading .rd-time { font-size: 14px; color: #2E7D32; font-variant-numeric: tabular-nums; margin-bottom: 14px; }
+  #rd-loading .rd-note { font-size: 13px; color: #666; line-height: 1.6; }
+  #rd-loading .rd-slow { display: none; margin-top: 12px; font-size: 13px; color: #8a6d00; line-height: 1.6; }
+</style>
+<div id="rd-loading" role="status" aria-live="polite">
+  <div class="rd-card">
+    <div class="rd-name">RDstat</div>
+    <div class="rd-spin" aria-hidden="true"></div>
+    <div class="rd-title">กำลังโหลดโปรแกรม กรุณารอสักครู่…</div>
+    <div class="rd-sub">Loading, please wait…</div>
+    <div class="rd-time">ผ่านไป <span id="rd-sec">0</span> วินาที</div>
+    <div class="rd-note">
+      โปรแกรมทำงานในเบราว์เซอร์ของคุณ จึงต้องดาวน์โหลด R และชุดคำสั่งวิเคราะห์ก่อนใช้งาน
+      ครั้งแรกอาจใช้เวลา 1–2 นาที ครั้งต่อไปจะเร็วขึ้น<br>ข้อมูลที่อัปโหลดจะไม่ถูกส่งออกจากเครื่องของคุณ
+    </div>
+    <div class="rd-slow" id="rd-slow">
+      ใช้เวลานานกว่าปกติ: ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต หรือลองรีเฟรชหน้าเว็บ (F5)
+      และใช้ Chrome หรือ Edge รุ่นล่าสุด
+    </div>
+  </div>
+</div>
+<script>
+  (function () {
+    var box = document.getElementById("rd-loading"), sec = document.getElementById("rd-sec"), start = Date.now();
+    function appDrawn() {
+      var frame = document.querySelector(".shinylive-viewer iframe");
+      try {
+        return !!(frame && frame.contentDocument && frame.contentDocument.querySelector(".navbar"));
+      } catch (e) {
+        return false;
+      }
+    }
+    var timer = setInterval(function () {
+      var s = Math.floor((Date.now() - start) / 1000);
+      sec.textContent = s;
+      if (s >= 180) document.getElementById("rd-slow").style.display = "block";
+      // Shinylive's own error message must stay visible, so the cover goes away on an error as well
+      if (appDrawn() || document.querySelector(".loading-wrapper-error")) {
+        clearInterval(timer);
+        box.classList.add("rd-done");
+        setTimeout(function () { box.remove(); }, 400);
+      }
+    }, 250);
+  })();
+</script>
