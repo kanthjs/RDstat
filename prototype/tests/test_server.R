@@ -37,6 +37,9 @@ tests <- c(auto = "HSD", LSD = "LSD", HSD = "HSD", duncan = "duncan")
   for (pw in names(rep_tests)) { run(pw = pw); check(any(grepl(rep_tests[[pw]], output$report)) && grepl("ANOVA TABLE", output$report), paste("Classic STAR report: RCBD 1 factor with", pw)) }
   run(pw = "LSD")
   check(round(ok()$anova$F[2], 2) == 8.54, "RCBD 1 factor: F = 8.54")
+  lv <- output$means_plot
+  check(file.exists(lv$src) || nzchar(lv$src), "Live View: means plot is drawn")
+  check(grepl("^Plot: .*Nitrogen", lv$alt), paste("Live View: alt text names the plot:", lv$alt))
   check(identical(tables()$anova$`Pr(>F)`[2], "0.0022"), "RCBD 1 factor: p formatted 0.0022")
   check(identical(tables()$means$Nitrogen$Group, c("b", "a", "a", "a", "a", "a")), "RCBD 1 factor: letters")
   check(identical(tables()$means$Nitrogen$N, rep("3", 6)), "RCBD 1 factor: N as integers")

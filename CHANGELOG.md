@@ -3,6 +3,9 @@
 Changes to the RDstat web app that can affect results are marked **(results)**. The version is shown in the app's About tab and in every downloaded file.
 
 ## 0.1.0 (unreleased)
+- Live View plots tell screen readers what they show (their title and the note under it) instead of only "Plot".
+- Large Excel files are read about three times faster (numbers are formatted a column at a time); the values are the same.
+- `star_gg_font()` also finds Thai in column names used in `aes()` without `labs()` (ggplot2 4.0 makes those axis titles only when drawing).
 - Plot Live View is now what the download will look like: the plot is laid out at the chosen size in cm (so a 9 pt font on an 8.5 cm journal figure is as crowded on screen as in the file) and drawn at the screen's pixel ratio. The correlation matrix and heatmap follow the chosen size too, instead of a fixed 580 x 560 px.
 - Text drawn inside plots (the letters a/b/c, correlation coefficients, the variable names of the scatter plot matrix, flagged-row labels, the optimum label) follows the chosen font size instead of staying at about 11 pt.
 - Plots with Thai text (title, axis labels, treatment or column names) are drawn in Chulabhorn Likit, which has Thai letters, instead of Roboto, which has none (Thai showed as boxes where no system font fills in, as in the browser build). Plots without Thai keep Roboto. `star_gg_font()` is exported for scripts.

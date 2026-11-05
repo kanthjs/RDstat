@@ -494,7 +494,7 @@ app_css <- css_fill(
       border-radius: 6px;
       overflow: hidden;
     }
-    .plot-live-viewport .shiny-plot-output {
+    .plot-live-viewport .shiny-image-output {
       display: flex;
       justify-content: center;
       align-items: center;

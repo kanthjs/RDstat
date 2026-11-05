@@ -250,7 +250,10 @@ star_ggplot_diagnostics <- function(x, base_size = 11, theme = "classic", legend
 ## (labels, legend titles, or the text in its data, such as factor levels) contains Thai; otherwise the plot is unchanged.
 .star_gg_has_thai <- function(p) {
   txt <- function(d) if (is.data.frame(d)) unlist(lapply(d, function(v) if (is.factor(v)) levels(v) else if (is.character(v)) unique(v)), use.names = FALSE)
-  s <- c(unlist(p$labels, use.names = FALSE), txt(p$data), unlist(lapply(p$layers, function(l) txt(l$data)), use.names = FALSE),
+  # column names in aes(): ggplot2 >= 4.0 makes the default axis and legend titles from them only when the plot is drawn
+  aes_vars <- function(m) unlist(lapply(m, function(q) tryCatch(all.vars(q), error = function(e) NULL)), use.names = FALSE)
+  s <- c(unlist(p$labels, use.names = FALSE), aes_vars(p$mapping), unlist(lapply(p$layers, function(l) aes_vars(l$mapping)), use.names = FALSE),
+         txt(p$data), unlist(lapply(p$layers, function(l) txt(l$data)), use.names = FALSE),
          unlist(lapply(p$scales$scales, function(sc) if (is.character(sc$name)) sc$name), use.names = FALSE))
   any(grepl("[\u0E00-\u0E7F]", as.character(s)))
 }
