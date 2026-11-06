@@ -187,7 +187,7 @@ script_reg <- function(r, file = NULL) {
 # CRD and RCBD with one or two factors, the split plot and the analysis combined over environments. RCBD data with a missing
 # response (the app estimates the missing values) return NULL, and the screen says the script is not available.
 script_aov_supported <- function(r) {
-  r$design %in% c("SplitCRD", "SplitRCBD", "CombCRD", "CombRCBD") || (r$design %in% c("CRD", "RCBD") && !(r$design == "RCBD" && anyNA(r$data[[r$response]])))
+  r$design %in% c("SplitCRD", "SplitRCBD", "CombCRD", "CombRCBD", "RepCRD", "RepRCBD") || (r$design %in% c("CRD", "RCBD") && !(r$design == "RCBD" && anyNA(r$data[[r$response]])))
 }
 
 script_compare <- function(test, y, tr, alpha, dfe = "dfe", mse = "mse") {
@@ -203,6 +203,7 @@ script_compare <- function(test, y, tr, alpha, dfe = "dfe", mse = "mse") {
 
 script_aov <- function(r, file = NULL) {
   if (!script_aov_supported(r)) return(NULL)
+  if (r$design %in% c("RepCRD", "RepRCBD")) return(script_repeated(r, file))
   if (r$design %in% c("SplitCRD", "SplitRCBD")) return(script_split(r, file))
   if (r$design %in% c("CombCRD", "CombRCBD")) return(script_combined(r, file))
   f <- r$factors; blk <- r$block
@@ -307,10 +308,10 @@ script_welch <- function(w, r, file = NULL) {
 # Split plot: whole plots are block x main-plot level; Error(a) tests the main-plot factor, Error(b) the sub-plot
 # factor and the interaction. Sub-plot means use Error(b), main-plot means Error(a); with a significant interaction the
 # main factor is compared within sub-plot levels with the pooled error and Satterthwaite df, as in the app.
-script_split <- function(r, file = NULL) {
-  main <- r$main; sub <- r$sub; blk <- r$block; crd <- r$design == "SplitCRD"
+script_split <- function(r, file = NULL, title = NULL) {
+  main <- r$main; sub <- r$sub; blk <- r$block; crd <- r$design %in% c("SplitCRD", "RepCRD")
   resp <- if (!is.null(r$transform)) r$original_response else r$response
-  head <- script_header(sprintf("Split plot (%s) of %s: main plot %s, sub plot %s", if (crd) "CRD" else "RCBD", resp, main, sub), file)
+  head <- script_header(title %||% sprintf("Split plot (%s) of %s: main plot %s, sub plot %s", if (crd) "CRD" else "RCBD", resp, main, sub), file)
   trans <- if (!is.null(r$transform)) sprintf("y <- switch(%s, log = log(y + 1), sqrt = sqrt(y + 0.5), arcsin = asin(sqrt(y / 100)) * 180 / pi)   # transformed response", r_str(r$transform))
   bt <- function(x) sprintf("`%s`", x)
   fml <- if (crd) sprintf("y ~ %s * %s + Error(.wp)", bt(main), bt(sub)) else sprintf("y ~ %s + %s * %s + Error(.wp)", bt(blk), bt(main), bt(sub))
@@ -489,4 +490,28 @@ script_tt_trimmed <- function(r, s, file = NULL) {
             "res <- c(difference = est, t = t, df = df, p = p_of(t, df), lower = ci[1], upper = ci[2], boot_lower = boot[1], boot_upper = boot[2])",
             "res")
   paste(c(head, "", body), collapse = "\n")
+}
+
+# Repeated measures over time: the split plot in time (treatment = main plot, time = sub plot, plot = block x treatment)
+# followed by Mauchly's test and the Greenhouse-Geisser / Huynh-Feldt corrected tests from the plots x times matrix
+# (stats::mauchly.test and anova.mlm), as in the app. The letters use the p values the app used (corrected when
+# sphericity was rejected).
+script_repeated <- function(r, file = NULL) {
+  trt <- r$main; tm <- r$sub; blk <- r$block; crd <- r$design == "RepCRD"
+  resp <- if (!is.null(r$transform)) r$original_response else r$response
+  split <- script_split(r, file, title = sprintf("Repeated measures over time (%s) of %s: treatment %s, time %s, %s %s",
+                                                 if (crd) "CRD" else "RCBD", resp, trt, tm, if (crd) "plot" else "block", blk))
+  s <- r$sphericity
+  body <- c(
+    "",
+    "# ---- sphericity: one row per plot, one column per time ----",
+    sprintf("d$.plot <- interaction(d[[%s]], d[[%s]], drop = TRUE)", r_str(blk), r_str(trt)),
+    sprintf("w <- tapply(d$y, list(d$.plot, d[[%s]]), function(v) v[1])", r_str(tm)),
+    sprintf("trt <- d[[%s]][match(rownames(w), as.character(d$.plot))]", r_str(trt)),
+    "mfit <- lm(w ~ trt)                  # blocks are pooled with the plots, as in Error(b)",
+    if (s$n_times > 2) "mauchly.test(mfit, X = ~1)           # Mauchly's test of sphericity",
+    "anova(mfit, X = ~1, test = \"Spherical\")   # (Intercept) = time, trt = treatment x time: F, G-G and H-F p values",
+    sprintf("# the app used: %s%s", .star_rep_correction_name[[s$correction]],
+            if (s$correction == "none") "" else sprintf(" (epsilon = %s); Huynh-Feldt is used when the Greenhouse-Geisser epsilon is above 0.75", formatC(s$epsilon, format = "f", digits = 4))))
+  paste(c(split, body), collapse = "\n")
 }

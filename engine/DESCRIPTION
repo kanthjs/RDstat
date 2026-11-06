@@ -7,4 +7,4 @@ Depends: R (>= 4.1.0)
 Imports: ggplot2, agricolae, lmtest, mctest, readxl, writexl, cluster, lme4, multcomp, fitdistrplus, leaps, vegan, lattice, permute, ade4, R.methodsS3, R.oo, MASS
 License: GPL (>= 2)
 Encoding: UTF-8
-Suggests: testthat (>= 3.0.0)
+Suggests: testthat (>= 3.0.0), withr, openxlsx
