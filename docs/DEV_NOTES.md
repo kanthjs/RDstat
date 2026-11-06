@@ -25,12 +25,18 @@ Problems met while splitting `app.R` and adding the "R code to repeat this analy
 
 Each results screen ends with a card that has a plain R script and a Copy button.
 
-- Covered: t-test (independent, paired, one sample), correlation, regression (line, quadratic, cubic), ANOVA for CRD and RCBD with one or two factors (also with a transformed response), split plot (RCBD and CRD), combined analysis over environments (RCBD and CRD).
+- Covered: t-test (independent, paired, one sample), correlation, regression (line, quadratic, cubic), ANOVA for CRD and RCBD with one or two factors (also with a transformed response), split plot (RCBD and CRD), combined analysis over environments (RCBD and CRD), repeated measures over time (RCBD and CRD; the split-plot script plus `mauchly.test()` and `anova.mlm(test = "Spherical")`).
 - Not covered: an RCBD with missing responses, where the app estimates the missing values with STAR's procedure; the card says so.
 - Scripts never call `star_*` functions. They use base R and `agricolae` (and `readxl` for Excel files).
 - Built-in examples carry their data inside the script; uploaded files are read with the separator found from the first line, all columns as text, and numbers go through an embedded `parse_number()` that mirrors `star_parse_number()`. Shapiro-Wilk goes through `shapiro_safe()`, which skips the same cases as the app. Title lines above the header are not handled (the script only says to add `skip =`).
 - Tests (`tests/test_server.R`) run each generated script in a temporary folder and compare statistics, p values, CV, means, letters and simple effects with the app's results. Add such a check for any new analysis.
 - Review findings fixed after the first version: number parsing, delimiter, example data, Shapiro-Wilk guard, readxl note.
+
+## Repeated measures
+
+- `star_repeated()` (engine) runs `star_splitplot()` with treatment = main plot and time = sub plot, and passes the sphericity-corrected p values of time and treatment x time through the internal `within_p` argument, so significance, letters and simple effects follow the corrected tests while `$anova` keeps the uncorrected ones.
+- In the app `is_split()` is also TRUE for `RepCRD` / `RepRCBD` (they share the split-plot pickers, error terms and two-level diagnostics); `is_rep()` marks where the wording or outputs differ.
+- The epsilons come from the residual SSCP of orthonormal time contrasts after removing the treatment means only (blocks pooled, as in Error(b)); its trace equals SS Error(b). Tests compare them with `anova.mlm()`.
 
 ## Open
 

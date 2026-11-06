@@ -3,6 +3,7 @@
 Changes to the RDstat web app that can affect results are marked **(results)**. The version is shown in the app's About tab and in every downloaded file.
 
 ## 0.1.0 (unreleased)
+- Repeated measures over time on the Compare treatments screen (designs "Repeated measures over time: CRD / RCBD"): plots, pots or plants measured several times (e.g. plant height at 30, 60, 90 and 120 days), one row per plot per time. Analysed as a split plot in time (treatment between plots, time within plots) with Mauchly's test of sphericity and the Greenhouse-Geisser and Huynh-Feldt corrected tests of time and treatment x time, which match `anova.mlm(test = "Spherical")`. When sphericity is rejected the Greenhouse-Geisser correction is used (Huynh-Feldt when the Greenhouse-Geisser epsilon is above 0.75); the corrected p values decide the letters, the summaries and the APA sentences, and the ANOVA table keeps the uncorrected ones. Comes with two examples, a layout check of the plot / block column, blank templates, the Excel, Word and R code outputs, a Methods topic and `star_repeated()` in the engine.
 - Live View plots tell screen readers what they show (their title and the note under it) instead of only "Plot".
 - Large Excel files are read about three times faster (numbers are formatted a column at a time); the values are the same.
 - `star_gg_font()` also finds Thai in column names used in `aes()` without `labs()` (ggplot2 4.0 makes those axis titles only when drawing).

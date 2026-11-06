@@ -172,7 +172,7 @@ home_ui <- div(
       "chart-column",
       "เปรียบเทียบสิ่งทดลอง",
       "กลุ่มต่าง ๆ ให้ผลผลิตหรือค่าที่วัดแตกต่างกันหรือไม่ วิเคราะห์ความแปรปรวน (ANOVA) พร้อมเปรียบเทียบค่าเฉลี่ย หรือ Kruskal-Wallis / Friedman (แบบ rank)",
-      "เช่น พันธุ์ข้าว อัตราปุ๋ย · CRD, RCBD, split plot, วิเคราะห์ร่วมหลายสถานที่"
+      "เช่น พันธุ์ข้าว อัตราปุ๋ย · CRD, RCBD, split plot, วิเคราะห์ร่วมหลายสถานที่, วัดซ้ำตามเวลา (repeated measures)"
     ),
     home_card(
       "home_corr",
@@ -553,7 +553,9 @@ ui <- bslib::page_navbar(
               "Split plot in CRD" = "SplitCRD",
               "Split plot in RCBD" = "SplitRCBD",
               "Combined over sites / seasons: CRD" = "CombCRD",
-              "Combined over sites / seasons: RCBD" = "CombRCBD"
+              "Combined over sites / seasons: RCBD" = "CombRCBD",
+              "Repeated measures over time: CRD" = "RepCRD",
+              "Repeated measures over time: RCBD" = "RepRCBD"
             )
           ),
           help_box(
@@ -577,6 +579,14 @@ ui <- bslib::page_navbar(
             p(
               strong("Combined:"),
               "the same trial (one treatment factor, CRD or RCBD) was repeated at several sites, seasons or years, and the data of all of them are in one file with a column naming the environment. Tests whether the treatments differ overall and whether their ranking changes between environments (treatment x environment interaction)."
+            ),
+            p(
+              strong("Repeated measures:"),
+              "the same plots (pots, plants, animals) were measured several times, e.g. plant height at 30, 60 and 90 days. One row per plot per time. Tests the treatments, the change over time and whether the treatments change differently over time (treatment x time), with Mauchly's test of sphericity and the Greenhouse-Geisser / Huynh-Feldt correction. ",
+              strong("In CRD"),
+              " the plots were assigned at random; ",
+              strong("in RCBD"),
+              " they were grouped into blocks."
             )
           ),
           # the analyses that do not exist for the chosen design are greyed out (see aov_support in the server): a rank-based

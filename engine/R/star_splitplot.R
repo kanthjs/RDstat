@@ -11,7 +11,9 @@
 
 star_splitplot <- function(data, response, main, sub, block,
                            test = c("auto", "LSD", "HSD", "duncan", "SNK", "scheffe", "bonferroni"), alpha = 0.05,
-                           design = c("SplitRCBD", "SplitCRD")) {
+                           design = c("SplitRCBD", "SplitCRD"), within_p = NULL) {
+  # within_p (internal, used by star_repeated()): p values that replace those of the sub-plot factor and the
+  # interaction when deciding significance (sphericity-corrected p values of a repeated-measures analysis)
   test <- match.arg(test)
   design <- match.arg(design)
   crd <- design == "SplitCRD"
@@ -63,6 +65,7 @@ star_splitplot <- function(data, response, main, sub, block,
 
   effects <- anova[match(c(main, sub, inter_name), anova$Source), c("Source", "DF", "F", "P")]
   names(effects)[1] <- "Effect"
+  if (!is.null(within_p)) effects$P[match(names(within_p), effects$Effect)] <- unname(within_p)
   effects$Significant <- !is.na(effects$P) & effects$P < alpha
   den <- list(err_a, err_b, err_b)
   effects$ErrDF <- vapply(den, \(e) as.numeric(e$DF), 0)
