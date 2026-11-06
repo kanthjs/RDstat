@@ -1,36 +1,87 @@
 <!-- Loading screen for the Shinylive site, put into index.html by scripts/export_site.R.
      Shinylive shows only an animated grid of hexagons while it downloads R (webR) and starts the app, which users did
-     not read as "loading". This covers it with a message until the app's navbar is drawn, or Shinylive shows an error. -->
+     not read as "loading". This covers it with a progress bar and a list of steps until the app's navbar is drawn, or
+     Shinylive shows an error.
+     Shinylive reports no download progress (webR downloads in a Web Worker the page cannot see), so the bar is an
+     estimate: within a step it moves at an even pace, then slows so it never reaches the step's end, and it jumps
+     forward when the page sees the step finish. The steps the page can see:
+       1. page:  Shinylive's viewer is on the page (its scripts have loaded)
+       2. R:     Shinylive sets the app frame's src, which it does only after R and the packages are loaded and the app
+                 has started; this is most of the wait
+       3. app:   the app's navbar is drawn in the frame (done)
+     Each step's expected time is how long it took on the last load in this browser (localStorage), or a first-visit
+     guess; the bar gives each step a share in proportion to it, so it moves at about one pace through the whole load.
+     The text is in the app's font, Chulabhorn Likit, which scripts/export_site.R copies to <site>/fonts. -->
 <style>
+  @font-face { font-family: "Chulabhorn Likit"; src: url("fonts/ChulabhornLikitText-Regular.ttf") format("truetype");
+               font-weight: normal; font-display: swap; }
+  @font-face { font-family: "Chulabhorn Likit"; src: url("fonts/ChulabhornLikitText-Bold.ttf") format("truetype");
+               font-weight: bold; font-display: swap; }
   #rd-loading {
     position: fixed; inset: 0; z-index: 10000; display: flex; align-items: center; justify-content: center;
-    background: #F4F7F4; font-family: "Segoe UI", Tahoma, "Noto Sans Thai", "Leelawadee UI", sans-serif; color: #333;
-    transition: opacity .3s;
+    background: #FAFBFA; color: #1D1F21; transition: opacity .3s;
+    font-family: "Chulabhorn Likit", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   }
   #rd-loading.rd-done { opacity: 0; pointer-events: none; }
   #rd-loading .rd-card {
-    background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,.08); padding: 32px 36px;
-    max-width: 440px; width: calc(100% - 40px); text-align: center; border-top: 6px solid #2E7D32;
+    background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,.08); padding: 30px 36px;
+    max-width: 460px; width: calc(100% - 40px); text-align: center; border-top: 6px solid #2E7D32;
   }
-  #rd-loading .rd-name { font-size: 26px; font-weight: 700; color: #1B5E20; margin-bottom: 18px; }
-  #rd-loading .rd-spin {
-    width: 44px; height: 44px; margin: 0 auto 18px; border-radius: 50%;
-    border: 5px solid #dfe9df; border-top-color: #2E7D32; animation: rd-spin 1s linear infinite;
+  #rd-loading .rd-name { font-size: 26px; font-weight: 700; color: #1B5E20; margin-bottom: 14px; }
+  #rd-loading .rd-title { font-size: 20px; font-weight: 600; margin-bottom: 2px; }
+  #rd-loading .rd-sub { font-size: 15px; color: #555; margin-bottom: 16px; }
+  #rd-loading .rd-bar {
+    height: 14px; border-radius: 7px; background: #e3ece3; overflow: hidden; margin-bottom: 6px;
   }
+  #rd-loading .rd-fill {
+    height: 100%; width: 0; border-radius: 7px; background-color: #2E7D32;
+    background-image: linear-gradient(45deg, rgba(255,255,255,.18) 25%, transparent 25%, transparent 50%,
+                                      rgba(255,255,255,.18) 50%, rgba(255,255,255,.18) 75%, transparent 75%);
+    background-size: 20px 20px; animation: rd-stripe 1s linear infinite;
+  }
+  @keyframes rd-stripe { to { background-position: 20px 0; } }
+  #rd-loading .rd-nums {
+    display: flex; justify-content: space-between; font-size: 13px; color: #2E7D32;
+    font-variant-numeric: tabular-nums; margin-bottom: 16px;
+  }
+  #rd-loading .rd-steps { list-style: none; padding: 0; margin: 0 0 16px; text-align: left; font-size: 14px; }
+  #rd-loading .rd-steps li { display: flex; align-items: center; gap: 10px; padding: 4px 0; color: #999; }
+  #rd-loading .rd-steps li .rd-ic {
+    flex: none; width: 18px; height: 18px; border-radius: 50%; border: 2px solid #ccc; box-sizing: border-box;
+    display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff;
+  }
+  #rd-loading .rd-steps li.rd-now { color: #333; font-weight: 600; }
+  #rd-loading .rd-steps li.rd-now .rd-ic {
+    border-color: #dfe9df; border-top-color: #2E7D32; animation: rd-spin 1s linear infinite;
+  }
+  #rd-loading .rd-steps li.rd-ok { color: #2E7D32; }
+  #rd-loading .rd-steps li.rd-ok .rd-ic { background: #2E7D32; border-color: #2E7D32; }
+  #rd-loading .rd-steps li.rd-ok .rd-ic::after { content: "\2713"; }
+  #rd-loading .rd-steps small { font-weight: 400; color: #888; }
   @keyframes rd-spin { to { transform: rotate(360deg); } }
-  #rd-loading .rd-title { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
-  #rd-loading .rd-sub { font-size: 15px; color: #555; margin-bottom: 14px; }
-  #rd-loading .rd-time { font-size: 14px; color: #2E7D32; font-variant-numeric: tabular-nums; margin-bottom: 14px; }
   #rd-loading .rd-note { font-size: 13px; color: #666; line-height: 1.6; }
   #rd-loading .rd-slow { display: none; margin-top: 12px; font-size: 13px; color: #8a6d00; line-height: 1.6; }
+  @media (prefers-reduced-motion: reduce) {
+    #rd-loading .rd-fill, #rd-loading .rd-steps li.rd-now .rd-ic { animation: none; }
+  }
 </style>
 <div id="rd-loading" role="status" aria-live="polite">
   <div class="rd-card">
     <div class="rd-name">RDstat</div>
-    <div class="rd-spin" aria-hidden="true"></div>
     <div class="rd-title">กำลังโหลดโปรแกรม กรุณารอสักครู่…</div>
     <div class="rd-sub">Loading, please wait…</div>
-    <div class="rd-time">ผ่านไป <span id="rd-sec">0</span> วินาที</div>
+    <div class="rd-bar" role="progressbar" aria-label="ความคืบหน้าโดยประมาณ" aria-valuemin="0" aria-valuemax="100"
+         aria-valuenow="0" id="rd-bar"><div class="rd-fill" id="rd-fill"></div></div>
+    <div class="rd-nums">
+      <span>ผ่านไป <span id="rd-sec">0</span> วินาที</span>
+      <span id="rd-left"></span>
+    </div>
+    <ul class="rd-steps">
+      <li id="rd-s1" class="rd-now"><span class="rd-ic"></span>เปิดหน้าเว็บ</li>
+      <li id="rd-s2"><span class="rd-ic"></span><span>ดาวน์โหลด R และชุดคำสั่งวิเคราะห์
+        <small id="rd-s2-note">(ขั้นนี้นานที่สุด)</small></span></li>
+      <li id="rd-s3"><span class="rd-ic"></span>เปิดโปรแกรม</li>
+    </ul>
     <div class="rd-note">
       โปรแกรมทำงานในเบราว์เซอร์ของคุณ จึงต้องดาวน์โหลด R และชุดคำสั่งวิเคราะห์ก่อนใช้งาน
       ครั้งแรกอาจใช้เวลา 1–2 นาที ครั้งต่อไปจะเร็วขึ้น<br>ข้อมูลที่อัปโหลดจะไม่ถูกส่งออกจากเครื่องของคุณ
@@ -43,25 +94,79 @@
 </div>
 <script>
   (function () {
-    var box = document.getElementById("rd-loading"), sec = document.getElementById("rd-sec"), start = Date.now();
-    function appDrawn() {
-      var frame = document.querySelector(".shinylive-viewer iframe");
-      try {
-        return !!(frame && frame.contentDocument && frame.contentDocument.querySelector(".navbar"));
-      } catch (e) {
-        return false;
+    // Each step's time on the last load in this browser, or a first-visit guess (page, R download, app start)
+    var KEY = "rdstat-load-steps", FIRST_VISIT_MS = [3000, 75000, 12000];
+    var $ = function (id) { return document.getElementById(id); };
+    var box = $("rd-loading"), start = Date.now(), expected = FIRST_VISIT_MS.slice(), took = [];
+    try {
+      var last = JSON.parse(localStorage.getItem(KEY));
+      if (last && last.length === 3) {
+        expected = last.map(function (ms) { return Math.min(Math.max(+ms || 0, 500), 300000); });
+        $("rd-s2-note").textContent = "(มีในเครื่องแล้ว จะเร็วกว่าครั้งแรก)";
       }
+    } catch (e) {}
+
+    // The bar from 0 to 99% is split among the steps in proportion to their expected times
+    var total = expected[0] + expected[1] + expected[2], edge = [0];
+    for (var i = 0; i < 3; i++) edge.push(edge[i] + 99 * expected[i] / total);
+    var step = 0, stepStart = start, shown = 0;
+
+    function reached() {
+      var f = document.querySelector(".shinylive-viewer iframe");
+      if (!f) return 0;
+      try {
+        if (f.contentDocument && f.contentDocument.querySelector(".navbar")) return 3;
+      } catch (e) {}
+      return f.getAttribute("src") ? 2 : 1;
     }
-    var timer = setInterval(function () {
-      var s = Math.floor((Date.now() - start) / 1000);
-      sec.textContent = s;
-      if (s >= 180) document.getElementById("rd-slow").style.display = "block";
-      // Shinylive's own error message must stay visible, so the cover goes away on an error as well
-      if (appDrawn() || document.querySelector(".loading-wrapper-error")) {
-        clearInterval(timer);
+    function mark() {
+      for (var i = 0; i < 3; i++) $("rd-s" + (i + 1)).className = i < step ? "rd-ok" : i === step ? "rd-now" : "";
+    }
+    function setBar(p) {
+      shown = Math.max(shown, p); // never move backwards
+      $("rd-fill").style.width = shown.toFixed(1) + "%";
+      $("rd-bar").setAttribute("aria-valuenow", Math.round(shown));
+    }
+    function goTo(r, now) {
+      // a step passed between two checks takes no time; the time goes to the step before it
+      took[step] = now - stepStart;
+      for (var i = step + 1; i < r; i++) took[i] = 0;
+      step = r; stepStart = now;
+    }
+    function finish(ok, now) {
+      clearInterval(timer);
+      if (ok) {
+        goTo(3, now);
+        try { localStorage.setItem(KEY, JSON.stringify(took.slice(0, 3))); } catch (e) {}
+        mark(); setBar(100);
+      }
+      setTimeout(function () {
         box.classList.add("rd-done");
         setTimeout(function () { box.remove(); }, 400);
-      }
+      }, ok ? 300 : 0);
+    }
+
+    var timer = setInterval(function () {
+      var now = Date.now(), s = Math.floor((now - start) / 1000);
+      $("rd-sec").textContent = s;
+      if (s >= 180) $("rd-slow").style.display = "block";
+      // Shinylive's own error message must stay visible, so the cover goes away on an error as well
+      if (document.querySelector(".loading-wrapper-error")) return finish(false, now);
+
+      var r = reached();
+      if (r === 3) return finish(true, now);
+      if (r > step) { goTo(r, now); mark(); }
+
+      // Within a step: even pace up to 80% of the step's share, then slowing so it never reaches the end before the
+      // page sees the step finish (93% at the expected time)
+      var inStep = now - stepStart, x = inStep / expected[step];
+      var frac = x <= 0.8 ? x : 1 - 0.2 * Math.exp(-(x - 0.8) / 0.2);
+      setBar(edge[step] + (edge[step + 1] - edge[step]) * frac);
+
+      var left = Math.round((Math.max(expected[step] - inStep, 0) +
+                             (step < 2 ? expected[2] : 0) + (step < 1 ? expected[1] : 0)) / 1000);
+      $("rd-left").textContent = inStep > expected[step] ? "นานกว่าที่คาดไว้ กรุณารอ…"
+        : left > 5 ? "เหลืออีกประมาณ " + left + " วินาที" : "อีกไม่กี่วินาที";
     }, 250);
   })();
 </script>
