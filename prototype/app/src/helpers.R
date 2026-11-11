@@ -6,6 +6,17 @@ app_maintainer <- "Kanthanawit Jaisong"
 feedback_form_url <- Sys.getenv("RDSTAT_FEEDBACK_URL", "https://docs.google.com/forms/d/e/1FAIpQLScjlgyby2p30Czp8L3MDcIyHSQ03c3ja07yieUgIeR79M7PQw/viewform")
 # short explanation folded away until wanted (for users who are not statisticians)
 help_box <- function(title, ...) tags$details(class = "help-box", tags$summary(title), div(class = "help-body", ...))
+# "what you get" box shown under the choice the user made (Thai): when to use it, what it gives, what it does not give,
+# and the question it answers. Used on the screens (under each choice) and at the top of the Methods topics.
+get_box <- function(use, gets, not = NULL, answers = NULL) div(class = "get-box", lang = "th",
+  p(strong("ใช้เมื่อ: "), use),
+  p(strong("จะได้:")),
+  tags$ul(lapply(gets, tags$li)),
+  if (!is.null(not)) p(strong("ไม่ได้ / ข้อควรระวัง: "), not),
+  if (!is.null(answers)) p(class = "get-q", icon("circle-question"), " ", answers))
+# one get_box per choice of a radio button, each shown only while that choice is selected
+get_boxes <- function(id, boxes) tagList(lapply(names(boxes), function(k)
+  conditionalPanel(sprintf("input.%s == '%s'", id, k), boxes[[k]])))
 # version of this build (written by scripts/build_app.R); shown in the About tab and written to every result file
 app_version <- local({
   v <- if (file.exists("VERSION")) readLines("VERSION") else character()
