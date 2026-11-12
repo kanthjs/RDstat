@@ -388,6 +388,27 @@ Shiny.addCustomMessageHandler('stale', function(msg) {
   el.classList.toggle('is-stale', msg.on);
   el.querySelectorAll('.stale-dim').forEach(function(x) { if (msg.on) x.setAttribute('inert', ''); else x.removeAttribute('inert'); });
 });"
+# Download buttons on a tab that was not open yet (the Plot tabs) can miss the download address in Shinylive, so they
+# stay disabled with no href, and a click saves the app page as .html. The address is in Shiny's received values:
+# put it on the button when its tab opens and when it is clicked; with no address yet, block the click.
+download_fix_js <- "
+(function() {
+  function fix(a) {
+    var app = window.Shiny && Shiny.shinyapp; if (!app || !a.id) return;
+    var url = app.$values && app.$values[a.id];
+    if (url && a.getAttribute('href') !== url) { a.setAttribute('href', url); a.classList.remove('disabled'); a.removeAttribute('aria-disabled'); a.removeAttribute('tabindex'); }
+  }
+  function fixAll(root) { (root || document).querySelectorAll('a.shiny-download-link').forEach(fix); }
+  document.addEventListener('shown.bs.tab', function() { fixAll(); });
+  document.addEventListener('shiny:value', function() { setTimeout(fixAll, 0); });
+  document.addEventListener('shiny:visualchange', function() { fixAll(); });
+  document.addEventListener('click', function(e) {
+    var a = e.target.closest && e.target.closest('a.shiny-download-link'); if (!a) return;
+    fix(a);
+    var h = a.getAttribute('href');
+    if (!h || h === '#' ) { e.preventDefault(); e.stopPropagation(); if (window.Shiny) Shiny.notifications && Shiny.notifications.show({ html: 'The file is not ready yet. Please wait a moment and click again.', type: 'warning', duration: 4000 }); }
+  }, true);
+})();"
 # the results below are greyed out and cannot be copied or downloaded until the analysis is run again (see stale_js)
 stale_note <- function(button) div(class = "alert alert-warning d-flex justify-content-between align-items-center gap-2",
   span(icon("triangle-exclamation"), " ", strong("The settings have changed since the last run."),

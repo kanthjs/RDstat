@@ -536,6 +536,7 @@ ui <- bslib::page_navbar(
   header = tags$head(
     tags$script(HTML(copy_js)),
     tags$script(HTML(stale_js)),
+    tags$script(HTML(download_fix_js)),
     tags$style(HTML(app_css)),
     useBusyIndicators()
   ),
