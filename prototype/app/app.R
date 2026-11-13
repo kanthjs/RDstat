@@ -13,6 +13,7 @@ if (FALSE) {
   nortest::lillie.test
   lmtest::bptest
   mctest::imcdiag
+  irid::renderIrid
 }
 for (f in sort(list.files("star", pattern = "[.]R$", full.names = TRUE))) {
   source(f, local = FALSE)
@@ -92,6 +93,7 @@ if (
 # Code is split by role into ./src; each file is sourced in the same order as before, so definitions keep their dependencies.
 source("src/helpers.R", local = TRUE) # formatting, display tables, data reading, UI building blocks
 source("src/ui_components.R", local = TRUE) # data source / plot label / export controls
+source("src/irid_components.R", local = TRUE) # fine-grained reactive components with irid
 source("src/guide_boxes.R", local = TRUE) # "what you get" boxes under each choice
 source("src/ui_screens.R", local = TRUE) # correlation, regression and t-test screens
 source("src/tt_display.R", local = TRUE) # t-test result tables
@@ -580,7 +582,7 @@ ui <- bslib::page_navbar(
           helpText(
             "Standard ANOVA is used by default. After running, the results screen automatically checks assumptions and recommends an alternative above if needed."
           ),
-          uiOutput("aov_method_note"),
+          method_note_ui("aov_method_note"),
           get_boxes("aov_method", aov_method_get)
         ),
         side_step(

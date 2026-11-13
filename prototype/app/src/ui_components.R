@@ -63,7 +63,7 @@ plot_live_ui <- function(id, p) {
           )
         ),
         tags$div(class = "plot-live-header-right",
-          uiOutput(paste0(p, "_live_badge"), inline = TRUE)
+          live_badge_ui(paste0(p, "_live_badge"))
         )
       ),
       tags$div(class = "plot-live-viewport",

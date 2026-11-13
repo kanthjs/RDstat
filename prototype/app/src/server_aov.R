@@ -223,7 +223,7 @@
     session$sendCustomMessage("radio_support", list(id = "aov_method", ok = as.list(s$ok), why = s$why %||% ""))
     if (!(isolate(input$aov_method) %||% "anova") %in% s$ok) updateRadioButtons(session, "aov_method", selected = "anova")
   })
-  output$aov_method_note <- renderUI({ s <- aov_support(); if (!is.null(s$why)) p(class = "text-muted small", icon("circle-info"), " ", s$why, " Greyed-out analyses do not apply.") })
+  output$aov_method_note <- render_method_note(aov_support)
   # Welch's ANOVA chosen where it does not apply: the standard ANOVA is shown, and the screen says why
   welch_fallback <- reactive((input$aov_method %||% "") %in% c("welch", "trimmed") && aov_mode() == "anova")
   aov_trimmed <- reactive(aov_mode() == "trimmed")

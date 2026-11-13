@@ -43,3 +43,11 @@ Each results screen ends with a card that has a plain R script and a Copy button
 - Run the Shinylive export again after changes to `src/` (done once for the t-test: `src/` is bundled and the app works in webR; the other screens were checked natively and in the browser only).
 - Uploaded files with title lines in the generated scripts.
 - RCBD with missing responses has no script.
+
+## Fine-grained reactivity with `irid` (`src/irid_components.R`)
+
+The app introduces fine-grained reactive components powered by the `irid` package:
+- Target areas: High-frequency live feedback widgets, specifically the plot Live View dimension badge (`live_badge_render`), the analysis method constraint note (`aov_method_note`), and copy feedback micro-interactions.
+- Why `irid`: In classic Shiny, `renderUI` destroys and reconstructs the DOM subtree on each dependency change, causing micro-flickering. With `irid`, reactive expressions bind directly to text nodes and DOM attributes, performing surgical in-place DOM updates.
+- Progressive enhancement: Wrapped in `irid_available()` (`requireNamespace("irid", quietly = TRUE)`). When `irid` is available, it uses `irid::renderIrid()` and `irid::When()` control flows; when not installed, it gracefully falls back to standard Shiny `renderUI()` / `uiOutput()`.
+- Testing: Verified compatible with `shiny::testServer()` and the full headless test suite.

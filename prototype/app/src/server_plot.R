@@ -46,22 +46,7 @@
     if (length(lab) && any(nzchar(lab))) paste0("Plot: ", paste(lab[nzchar(lab)], collapse = ". ")) else "Plot of the results"
   }
   live_badge_render <- function(p) {
-    renderUI({
-      d <- input[[paste0(p, "_dim")]] %||% "std"
-      wh_cm <- export_dims(p) * 2.54
-      ratio <- round(wh_cm[1] / wh_cm[2], 2)
-      lbl <- switch(d,
-        std = sprintf("Standard 20 × 14 ซม. (%s:1)", ratio),
-        j1 = sprintf("Journal 1 คอลัมน์ 8.5 × 6.5 ซม. (%s:1)", ratio),
-        j2 = sprintf("Journal 2 คอลัมน์ 17.5 × 12 ซม. (%s:1)", ratio),
-        slide = sprintf("Slide 16:9 25 × 14 ซม. (%s:1)", ratio),
-        custom = sprintf("กำหนดเอง %.1f × %.1f ซม. (%s:1)", wh_cm[1], wh_cm[2], ratio)
-      )
-      tags$span(class = "badge bg-light text-success border border-success-subtle px-2 py-1",
-        title = "ขนาดและสัดส่วนที่จะได้เมื่อบันทึกภาพ",
-        tags$i(class = "fa fa-ruler-combined me-1"), lbl
-      )
-    })
+    render_live_badge(p, input, export_dims)
   }
   output$aov_live_badge <- live_badge_render("aov")
   output$tt_live_badge <- live_badge_render("tt")
