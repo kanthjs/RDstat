@@ -20,6 +20,8 @@
            SplitRCBD = "Split-plot RCBD",
            CombRCBD = "RCBD over sites",
            CombCRD = "CRD over sites",
+           RepCRD = "Repeated measures CRD",
+           RepRCBD = "Repeated measures RCBD",
            "CRD")
   })
   output$dl_template <- downloadHandler(
@@ -66,6 +68,20 @@
           Replication = rep(1:4, times = 12),
           Yield = rep(NA_real_, 48),
           stringsAsFactors = FALSE
+        ),
+        RepCRD = data.frame(
+          Treatment = rep(c("Treatment_A", "Treatment_B", "Treatment_C"), each = 12),
+          Plot = rep(rep(1:4, each = 3), times = 3),
+          Day = rep(c("D30", "D60", "D90"), times = 12),
+          Height = rep(NA_real_, 36),
+          stringsAsFactors = FALSE
+        ),
+        RepRCBD = data.frame(
+          Block = rep(1:4, each = 9),
+          Treatment = rep(rep(c("Treatment_A", "Treatment_B", "Treatment_C"), each = 3), times = 4),
+          Day = rep(c("D30", "D60", "D90"), times = 12),
+          Height = rep(NA_real_, 36),
+          stringsAsFactors = FALSE
         )
       )
       writexl::write_xlsx(list(Template = tbl), file)
@@ -106,7 +122,10 @@
     g <- if (is.null(s)) guess_roles(d, resp_sel) else list(blk = s$blk, env = s$env, trt = s$trt)
     tagList(
       selectInput("resp", "Response variable (numeric)", resp_choices, selected = resp_sel),
-      if (is_split(input$design)) tagList(
+      if (is_rep(input$design)) tagList(
+        selectInput("trt_main", "Treatment factor (between plots)", nm, selected = g$trt[1]),
+        selectInput("trt_sub", "Time: when each plot was measured", nm, selected = if (length(g$trt) > 1) g$trt[2] else nm[min(3, length(nm))]))
+      else if (is_split(input$design)) tagList(
         selectInput("trt_main", "Main-plot factor", nm, selected = g$trt[1]),
         selectInput("trt_sub", "Sub-plot factor", nm, selected = if (length(g$trt) > 1) g$trt[2] else nm[min(3, length(nm))]))
       else if (is_comb(input$design)) tagList(
@@ -119,9 +138,17 @@
       if (input$design == "SplitCRD") tagList(selectInput("blk", "Replication: main-plot number within each main-plot level", nm, selected = g$blk),
                                               helpText("1, 2, 3, ... for the main plots of each level of the main-plot factor. Not a block: in CRD the main plots are not grouped.")),
       if (input$design == "RCBD") selectInput("blk", "Block / replication", nm, selected = g$blk),
+      if (input$design == "RepCRD") tagList(selectInput("blk", "Plot: plot (pot) number within each treatment", nm, selected = g$blk),
+                                            helpText("1, 2, 3, ... for the plots of each treatment; together with the treatment it says which plot each measurement is from.")),
+      if (input$design == "RepRCBD") tagList(selectInput("blk", "Block: group of plots holding every treatment", nm, selected = g$blk),
+                                             helpText("The block (replication) each plot is in. Each block x treatment is one plot, measured at every time.")),
+      if (is_rep(input$design)) tagList(uiOutput("split_check"),
+        help_box("Repeated measures or split plot?",
+          p("When the levels of the second factor are ", strong("times"), " at which the same plot was measured again, they cannot be randomised within the plot, and measurements close in time are usually more alike than those far apart. The analysis is the split plot in time, with Mauchly's test of sphericity; when sphericity fails, the tests of time and treatment x time are corrected (Greenhouse-Geisser, or Huynh-Feldt when its epsilon is above 0.75)."),
+          p("If the second factor was randomised to parts of each plot (e.g. varieties in sub plots), choose a split plot instead."))),
       if (input$design == "SplitRCBD") tagList(selectInput("blk", "Block: group of main plots holding every main-plot level", nm, selected = g$blk),
                                                helpText("The block (replication) each main plot is in, not a number of the main plot itself.")),
-      if (is_split(input$design)) tagList(uiOutput("split_check"),
+      if (is_split(input$design) && !is_rep(input$design)) tagList(uiOutput("split_check"),
         help_box("Block or main-plot number?",
           p(strong("Block (Split plot in RCBD):"), " the field was divided into blocks and each block holds one main plot of every main-plot level. The block column repeats 1, 2, 3 ... across the main-plot levels."),
           p(strong("Main-plot number (Split plot in CRD):"), " there are no blocks; the main plots of each level are simply numbered 1, 2, 3 ..."),
@@ -140,7 +167,8 @@
   output$split_check <- renderUI({
     req(is_split(input$design), input$trt_main, input$trt_sub, input$blk)
     d <- dat(); req(all(c(input$trt_main, input$trt_sub, input$blk) %in% names(d)))
-    split_layout_check(d, input$design, input$trt_main, input$trt_sub, input$blk)
+    if (is_rep(input$design)) rep_layout_check(d, input$design, input$trt_main, input$trt_sub, input$blk)
+    else split_layout_check(d, input$design, input$trt_main, input$trt_sub, input$blk)
   })
 
   # Runs on "Run ANOVA" only. Results are cached by data and settings, so going back to an earlier choice
@@ -153,7 +181,9 @@
     tr <- input$transform %||% "none"
     tryCatch({
       td <- transform_response(dat(), input$resp, tr)
-      r <- if (is_split(input$design)) star_splitplot(td$data, td$resp, input$trt_main, input$trt_sub, blk, test = input$pw,
+      r <- if (is_rep(input$design)) star_repeated(td$data, td$resp, input$trt_main, input$trt_sub, blk, test = input$pw,
+                                                    alpha = as.numeric(input$alpha), design = input$design)
+           else if (is_split(input$design)) star_splitplot(td$data, td$resp, input$trt_main, input$trt_sub, blk, test = input$pw,
                                                       alpha = as.numeric(input$alpha), design = input$design)
            else if (is_comb(input$design)) star_combined(td$data, td$resp, input$trt, input$env, blk, design = sub("^Comb", "", input$design),
                                                          test = input$pw, alpha = as.numeric(input$alpha))
@@ -183,7 +213,7 @@
   aov_support <- reactive({
     d <- input$design %||% "CRD"; one <- length(input$trt %||% 1) == 1
     can_rank <- d %in% c("CRD", "RCBD") && one; can_welch <- d == "CRD" && one
-    why <- if (!d %in% c("CRD", "RCBD")) "Only the standard ANOVA is available for split-plot and combined designs."
+    why <- if (!d %in% c("CRD", "RCBD")) "Only the standard ANOVA is available for split-plot, repeated-measures and combined designs."
            else if (!one) "This analysis needs exactly one treatment factor; with two factors only the standard ANOVA is available."
            else if (!can_welch) "Not available for blocks (RCBD): there is no Welch or trimmed-means version with blocks."
     list(ok = c("anova", if (can_rank) "rank", if (can_welch) c("welch", "trimmed")), why = why)
@@ -377,9 +407,12 @@
       result_card("APA-style report", lapply(r$apa, p), copy = "cp_apa"),
       thai_card(thai_summary_aov(r), "cp_aov_th"),
       result_card("Analysis of variance", html_table(tb$anova), copy = "cp_anova", copy_label = "Copy table",
+                  if (is_rep(r$design)) p(class = "text-muted small mb-0", sprintf("Error(a) is the variation between plots (%s x %s) and tests %s; Error(b) is the variation within plots and tests %s and %s x %s. The p values in this table assume sphericity; the corrected ones are in the next card.",
+                                                                                 r$block, r$main, r$main, r$sub, r$main, r$sub)),
                   if (is_comb(r$design)) p(class = "text-muted small mb-0", sprintf("Environments are fixed effects, as in STAR: %s is tested against %s; the other effects against the pooled error.",
                                                                                   r$env, if (identical(r$design, "CombRCBD")) paste(r$block, "within", r$env) else "the pooled error"))),
       if (is_comb(r$design)) result_card(paste("Analysis of each", r$env), html_table(by_env_display(r)), bartlett_note(r)),
+      if (is_rep(r$design)) result_card("Sphericity and corrected tests (within plots)", html_table(sphericity_display(r)), sphericity_note(r), copy = "cp_sph", copy_label = "Copy table"),
       result_card("Means (publication layout)", copy = "cp_means", copy_label = "Copy means tables",
         if (!is.null(r$transform)) p(class = "text-muted small", icon("circle-info"), sprintf(" The analysis used %s transformed as %s. Means, SE, letters, SE(m), SED and LSD are on the transformed scale; the original-unit column gives the means back-transformed for reporting.",
                                                                                               r$original_response, transforms[[r$transform]]$label)),
@@ -403,7 +436,8 @@
     if (aov_rank() || aov_trimmed()) return(p(class = "text-muted small", sprintf("Box plot of the observations, for the %s (error bars and the classic style do not apply).", method_names[[aov_mode()]])))
     ch <- c(setNames(r$factors, paste("Means of", r$factors)), if (!is.null(r$cells)) c("Interaction (grouped bars)" = "interaction", if (use_gg()) c("Interaction (lines)" = "interaction_line")))
     cur <- isolate(input$plot_effect)   # keep the choice when the style is switched
-    if (length(ch) > 1) selectInput("plot_effect", "Plot", ch, selected = if (!is.null(cur) && cur %in% ch) cur else if (r$interaction_significant) "interaction" else r$factors[1])
+    if (length(ch) > 1) selectInput("plot_effect", "Plot", ch, selected = if (!is.null(cur) && cur %in% ch) cur else if (is_rep(r$design) && "interaction_line" %in% ch) "interaction_line"   # profiles over time
+                                                         else if (r$interaction_significant) "interaction" else r$factors[1])
   })
   plot_effect <- reactive({ r <- ok(); pe <- input$plot_effect; if (is.null(pe) || !(pe %in% c(r$factors, if (!is.null(r$cells)) c("interaction", "interaction_line")))) r$factors[1] else pe })
   use_gg <- reactive(identical(input$plot_style, "gg"))
@@ -429,7 +463,12 @@
     else if (use_gg()) gg_means()
     else star_plot_means(plot_obj(), sub("_line$", "", plot_effect()), main = input$gg_title, xlab = input$gg_xlab, ylab = input$gg_ylab)
   }
-  output$means_plot <- render_live_plot("aov", draw_means)
+  output$means_plot <- render_live_plot("aov", draw_means, alt = function() {
+    r <- plot_obj(); ef <- sub("_line$", "", plot_effect())
+    if (nzchar(input$gg_title %||% "")) input$gg_title
+    else if (ef == "interaction") paste("Mean", r$response, "of", paste(r$factors, collapse = " x "))
+    else paste("Mean", r$response, "by", ef)
+  })
   # cards, messages and flagged table of one set of residuals; `passed` and `messages` describe that set only. Split
   # plots get no recommendation on the Results tab, so their cards do not point to one.
   diag_block <- function(dg, passed, messages, lights = NULL, row_note = "Row = row number in your data.") tagList(
@@ -446,6 +485,11 @@
     lights <- tryCatch(star_assumption_lights(ok()), error = function(e) NULL)
     if (!is_split(ok()$design)) return(diag_block(dg, dg$ok, dg$messages, lights))
     sub_ok <- dg$n_outliers == 0 && !isFALSE(dg$normality$ok) && !isFALSE(dg$homogeneity$ok)
+    if (is_rep(ok()$design)) return(tagList(
+      p(class = "text-muted", icon("circle-info"), " A repeated-measures analysis has two error terms, so the residuals are checked at each level: ",
+        strong("within plots"), " (Error(b), each measurement) and ", strong("between plots"), " (Error(a), the mean of each plot over time; below the first plot). Sphericity is checked on the Results tab."),
+      h4(sprintf("Within plots: %s (Error(b))", ok()$sub)),
+      diag_block(dg, sub_ok, dg$messages_sub, lights)))
     tagList(
       p(class = "text-muted", icon("circle-info"), " A split plot has two error terms, so the residuals are checked at each level: ",
         strong("sub plots"), " (Error(b), single values) and ", strong("main plots"), " (Error(a), the mean of each main plot; below the first plot)."),
@@ -458,8 +502,8 @@
     mp <- dg$main_plot
     tagList(
       hr(),
-      h4(sprintf("Main plots: %s (Error(a))", r$main)),
-      p(class = "text-muted", sprintf("Each point is the mean of one main plot (%s x %s) over the levels of %s.", r$block, r$main, r$sub)),
+      h4(if (is_rep(r$design)) sprintf("Between plots: %s (Error(a))", r$main) else sprintf("Main plots: %s (Error(a))", r$main)),
+      p(class = "text-muted", sprintf(if (is_rep(r$design)) "Each point is the mean of one plot (%s x %s) over the times (%s)." else "Each point is the mean of one main plot (%s x %s) over the levels of %s.", r$block, r$main, r$sub)),
       if (is.null(mp)) div(class = "alert alert-info", tags$ul(lapply(dg$messages_main, tags$li)))
       else tagList(
         diag_block(mp, mp$ok, dg$messages_main, row_note = sprintf("Row = main plot (%s / %s).", r$block, r$main)),
@@ -517,6 +561,7 @@
                      pr <- precision_of(r, f); m$`SE(m)` <- pr[["sem"]]; m$SED <- pr[["sed"]]; m$LSD <- pr[["lsd"]]
                      m
                    })))
+    if (is_rep(r$design)) sheets$Sphericity <- sphericity_sheet(r)
     if (is_comb(r$design)) sheets$`Each environment` <- cbind(r$by_env, `Bartlett p (all environments)` = c(r$bartlett$p, rep(NA, nrow(r$by_env) - 1)))
     if (!is.null(r$cells)) sheets$`Cell means` <- r$cells
     if (length(r$simple)) sheets$`Simple effects` <- do.call(rbind, lapply(names(r$simple), function(nm) {
@@ -563,7 +608,8 @@
   observeEvent(input$cp_aov_th, session$sendCustomMessage("copy_text", list(what = "สรุปผล", text = thai_summary_aov(ok()))))
   design_names <- c(CRD = "Completely randomized design (CRD)", RCBD = "Randomized complete block design (RCBD)",
                     SplitCRD = "Split plot in CRD", SplitRCBD = "Split plot in RCBD",
-                    CombRCBD = "Combined analysis over environments (RCBD)", CombCRD = "Combined analysis over environments (CRD)")
+                    CombRCBD = "Combined analysis over environments (RCBD)", CombCRD = "Combined analysis over environments (CRD)",
+                    RepCRD = "Repeated measures over time (CRD)", RepRCBD = "Repeated measures over time (RCBD)")
   output$dl_doc <- downloadHandler(function() switch(aov_mode(), rank = "rdstat_rank_test_report.doc", welch = "rdstat_welch_anova_report.doc", trimmed = "rdstat_trimmed_means_report.doc", "rdstat_anova_report.doc"), function(file) {
     r <- ok(); np <- np_res(); dg <- r$diagnostics
     if (aov_trimmed()) {
@@ -615,6 +661,7 @@
       w_h2("สรุปผล"), w_p(thai_summary_aov(r)), w_p(r$summary),
       w_h2("Analysis of variance"), word_table(tb$anova),
       if (is_comb(r$design)) c(w_h2(paste("Analysis of each", r$env)), word_table(by_env_display(r)), w_p(.star_bartlett_text(r$bartlett, r$alpha), "small")),
+      if (is_rep(r$design)) c(w_h2("Sphericity and corrected tests (within plots)"), word_table(sphericity_display(r)), w_p(.star_sphericity_text(r$sphericity, r$alpha), "small")),
       w_h2("Means"), unlist(lapply(names(tb$agronomy), function(f) c(w_p(paste("Means of", f)), word_table(tb$agronomy[[f]])))),
       w_p(paste("Means with the same letter are not significantly different.", agronomy_note(r)), "small"),
       if (!is.null(tb$cells)) c(w_p(paste("Cell means:", paste(r$factors, collapse = " x "))), word_table(tb$cells)),
@@ -625,6 +672,7 @@
     word_doc(file, paste(app_name, "- analysis of variance:", r$original_response %||% r$response), blocks, png)
   })
 
+  observeEvent(input$cp_sph, session$sendCustomMessage("copy_text", list(what = "Sphericity table", text = paste(tsv(sphericity_display(ok())), .star_sphericity_text(ok()$sphericity, ok()$alpha), sep = "\n"))))
   observeEvent(input$cp_anova, session$sendCustomMessage("copy_text", list(what = "ANOVA table", text = tsv(tables()$anova))))
   observeEvent(input$cp_means, session$sendCustomMessage("copy_text", list(what = "Means tables", text = paste(
     c(unlist(lapply(names(tables()$agronomy), function(f) c(paste("Means of", f), tsv(tables()$agronomy[[f]]), ""))), agronomy_note(ok()), "",

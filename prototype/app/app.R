@@ -173,7 +173,7 @@ home_ui <- div(
       "chart-column",
       "เปรียบเทียบสิ่งทดลอง",
       "กลุ่มต่าง ๆ ให้ผลผลิตหรือค่าที่วัดแตกต่างกันหรือไม่ วิเคราะห์ความแปรปรวน (ANOVA) พร้อมเปรียบเทียบค่าเฉลี่ย หรือ Kruskal-Wallis / Friedman (แบบ rank)",
-      "เช่น พันธุ์ข้าว อัตราปุ๋ย · CRD, RCBD, split plot, วิเคราะห์ร่วมหลายสถานที่"
+      "เช่น พันธุ์ข้าว อัตราปุ๋ย · CRD, RCBD, split plot, วิเคราะห์ร่วมหลายสถานที่, วัดซ้ำตามเวลา (repeated measures)"
     ),
     home_card(
       "home_corr",
@@ -498,7 +498,7 @@ app_css <- css_fill(
       border-radius: 6px;
       overflow: hidden;
     }
-    .plot-live-viewport .shiny-plot-output {
+    .plot-live-viewport .shiny-image-output {
       display: flex;
       justify-content: center;
       align-items: center;
@@ -558,7 +558,9 @@ ui <- bslib::page_navbar(
               "Split plot in CRD" = "SplitCRD",
               "Split plot in RCBD" = "SplitRCBD",
               "Combined over sites / seasons: CRD" = "CombCRD",
-              "Combined over sites / seasons: RCBD" = "CombRCBD"
+              "Combined over sites / seasons: RCBD" = "CombRCBD",
+              "Repeated measures over time: CRD" = "RepCRD",
+              "Repeated measures over time: RCBD" = "RepRCBD"
             )
           ),
           get_boxes("design", design_get),

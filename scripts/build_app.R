@@ -7,7 +7,7 @@
 needed <- c(
   "star_aov", "star_correlation", "star_diagnostics", "star_ggplot", "star_ggplot_stats", "star_helpers",
   "star_prepare_data", "star_read_table", "star_regression", "star_splitplot", "star_ttest", "star_combined",
-  "star_nonparametric", "star_recommend", "star_trimmed", "star_report")
+  "star_nonparametric", "star_recommend", "star_trimmed", "star_report", "star_repeated")
 # STAR's AOVTest() and combAOVTest() and what they call, for star_report(). If a function is reported missing, add its
 # file here (prototype/tests/test_server.R catches that).
 legacy <- c(

@@ -194,6 +194,47 @@ method_topics <- list(
   ),
 
   method_topic(
+    "repeated",
+    "ANOVA: วัดซ้ำตามเวลา (repeated measures)",
+    "aov",
+    software = c("stats::aov()", "stats::lm()", "stats::mauchly.test()", "stats::pf()"),
+    refs = c(
+      "Gomez KA, Gomez AA (1984)",
+      "Mauchly JW (1940)",
+      "Greenhouse SW, Geisser S (1959)",
+      "Huynh H, Feldt LS (1976)",
+      "Girden ER (1992)"
+    ),
+    p(
+      "แปลง (กระถาง ต้น หรือสัตว์) แต่ละหน่วยได้รับสิ่งทดลอง (T) หนึ่งอย่าง แล้ววัดซ้ำหลายครั้งตามเวลา (Time) ",
+      "วิเคราะห์แบบ split plot in time (Gomez & Gomez, 1984) โดยให้สิ่งทดลองเป็นปัจจัยหลักและเวลาเป็นปัจจัยรอง: ",
+      code("y ~ Block + T * Time + Error(Block:T)"),
+      " สำหรับ RCBD และ ",
+      code("y ~ T * Time + Error(Plot:T)"),
+      " สำหรับ CRD ประมาณด้วย ",
+      code("aov()"),
+      " Error(a) (ระหว่างแปลง) ใช้ทดสอบ T ส่วน Error(b) (ภายในแปลง) ใช้ทดสอบ Time และ T × Time"
+    ),
+    p(
+      "เวลาไม่สามารถสุ่มภายในแปลงได้ ค่าที่วัดในเวลาใกล้กันจึงมักคล้ายกันมากกว่าค่าที่วัดห่างกัน ",
+      "F test ของ Time และ T × Time ต้องการสมมติฐาน sphericity (ความแปรปรวนของผลต่างระหว่างทุกคู่เวลาเท่ากัน) ",
+      "แอปจัดข้อมูลเป็นเมทริกซ์ แปลง × เวลา แปลงเป็น orthonormal contrasts ระหว่างเวลา แล้วหา residual SSCP หลังตัดค่าเฉลี่ยของสิ่งทดลอง ",
+      "(บล็อกรวมอยู่ในความคลาดเคลื่อน เช่นเดียวกับ Error(b)) ทดสอบด้วย Mauchly's test (",
+      code("mauchly.test()"),
+      "; Mauchly, 1940) และคำนวณ epsilon ของ Greenhouse-Geisser (1959) และ Huynh-Feldt (1976) ตรงกับ ",
+      code("anova.mlm(test = \"Spherical\")")
+    ),
+    p(
+      "เมื่อ Mauchly's test มีนัยสำคัญ องศาอิสระของ Time และ T × Time จะคูณด้วย epsilon ของ Greenhouse-Geisser ",
+      "หรือของ Huynh-Feldt เมื่อ epsilon ของ Greenhouse-Geisser มากกว่า 0.75 (Girden, 1992) ",
+      "เมื่อจำนวนแปลงน้อยเกินกว่าจะทดสอบได้ จะใช้ Greenhouse-Geisser เสมอ วัดสองครั้งไม่ต้องปรับ ",
+      "ค่า p ที่ปรับแล้วใช้ตัดสินนัยสำคัญและการให้อักษร ส่วนตาราง ANOVA แสดงค่า p ที่ยังไม่ปรับ ",
+      "การเปรียบเทียบค่าเฉลี่ยเหมือน split plot (Time ใช้ Error(b) ซึ่งยังอิงสมมติฐาน sphericity) ",
+      "ข้อมูลต้องครบ ทุกแปลงต้องมีค่าหนึ่งค่าในทุกเวลา"
+    )
+  ),
+
+  method_topic(
     "combined",
     "Combined analysis ร่วมหลายสถานที่ / ฤดูกาล",
     "aov",
@@ -803,15 +844,19 @@ method_refs <- c(
   "Fisher RA (1935). The Design of Experiments. Oliver and Boyd, Edinburgh.",
   "Friedman M (1937). The use of ranks to avoid the assumption of normality implicit in the analysis of variance. Journal of the American Statistical Association, 32(200), 675-701. https://doi.org/10.1080/01621459.1937.10503522",
   "Games PA, Howell JF (1976). Pairwise multiple comparison procedures with unequal n's and/or variances: a Monte Carlo study. Journal of Educational Statistics, 1(2), 113-125. https://doi.org/10.3102/10769986001002113",
+  "Girden ER (1992). ANOVA: Repeated Measures. Sage University Paper Series on Quantitative Applications in the Social Sciences, 07-084. Sage, Newbury Park.",
   "Gomez KA, Gomez AA (1984). Statistical Procedures for Agricultural Research, 2nd edition. Wiley, New York.",
+  "Greenhouse SW, Geisser S (1959). On methods in the analysis of profile data. Psychometrika, 24(2), 95-112. https://doi.org/10.1007/BF02289823",
   "Hodges JL, Lehmann EL (1963). Estimates of location based on rank tests. The Annals of Mathematical Statistics, 34(2), 598-611. https://doi.org/10.1214/aoms/1177704172",
   "Hollander M, Wolfe DA (1973). Nonparametric Statistical Methods. Wiley, New York.",
   "Holm S (1979). A simple sequentially rejective multiple test procedure. Scandinavian Journal of Statistics, 6(2), 65-70.",
+  "Huynh H, Feldt LS (1976). Estimation of the Box correction for degrees of freedom from sample data in randomized block and split-plot designs. Journal of Educational Statistics, 1(1), 69-82. https://doi.org/10.3102/10769986001001069",
   "Kendall MG (1938). A new measure of rank correlation. Biometrika, 30(1-2), 81-93. https://doi.org/10.2307/2332226",
   "Koenker R (1981). A note on studentizing a test for heteroscedasticity. Journal of Econometrics, 17(1), 107-112. https://doi.org/10.1016/0304-4076(81)90062-2",
   "Kramer CY (1956). Extension of multiple range tests to group means with unequal numbers of replications. Biometrics, 12(3), 307-310. https://doi.org/10.2307/3001469",
   "Kruskal WH, Wallis WA (1952). Use of ranks in one-criterion variance analysis. Journal of the American Statistical Association, 47(260), 583-621. https://doi.org/10.1080/01621459.1952.10483441",
   "Mann HB, Whitney DR (1947). On a test of whether one of two random variables is stochastically larger than the other. The Annals of Mathematical Statistics, 18(1), 50-60. https://doi.org/10.1214/aoms/1177730491",
+  "Mauchly JW (1940). Significance test for sphericity of a normal n-variate distribution. Annals of Mathematical Statistics, 11(2), 204-209. https://doi.org/10.1214/aoms/1177731915",
   "Pearson K (1895). Notes on regression and inheritance in the case of two parents. Proceedings of the Royal Society of London, 58, 240-242.",
   "Satterthwaite FE (1946). An approximate distribution of estimates of variance components. Biometrics Bulletin, 2(6), 110-114. https://doi.org/10.2307/3002019",
   "Shapiro SS, Wilk MB (1965). An analysis of variance test for normality (complete samples). Biometrika, 52(3-4), 591-611. https://doi.org/10.2307/2333709",
@@ -1001,6 +1046,15 @@ method_guides <- list(
       list("F test ของสิ่งทดลอง", "ถ้าไม่มีปฏิสัมพันธ์และ F มีนัยสำคัญ สรุปได้ว่าสิ่งทดลองต่างกันสม่ำเสมอในทุกสภาพแวดล้อม")
     ),
     "ทุกสภาพแวดล้อมต้องใช้สิ่งทดลองชุดเดียวกันและแผนการทดลองเดียวกัน ถ้ามีสภาพแวดล้อมน้อย (2-3 ที่) การทดสอบปฏิสัมพันธ์มีพลังต่ำ"
+  ),
+  repeated = method_guide(
+    "แปลง กระถาง หรือต้นเดียวกันถูกวัดหลายครั้งตามเวลา และต้องการรู้ว่าสิ่งทดลองเปลี่ยนตามเวลาต่างกันไหม",
+    list(
+      list("Mauchly's test (sphericity)", "ถ้า p < 0.05 ความแปรปรวนของผลต่างระหว่างเวลาไม่เท่ากัน F test ของเวลาและสิ่งทดลอง × เวลาจะมีนัยสำคัญง่ายเกินจริง จึงต้องใช้ p ที่ปรับแล้ว"),
+      list("Greenhouse-Geisser และ Huynh-Feldt (epsilon)", "ลด df ของการทดสอบภายในแปลงตาม epsilon (1 = ผ่าน sphericity) แอปใช้ Greenhouse-Geisser และใช้ Huynh-Feldt เมื่อ epsilon ของ Greenhouse-Geisser เกิน 0.75"),
+      list("ปฏิสัมพันธ์สิ่งทดลอง × เวลา", "ถ้ามีนัยสำคัญ เส้นของสิ่งทดลองในกราฟไม่ขนานกัน ให้เปรียบเทียบสิ่งทดลองในแต่ละเวลาแทนค่าเฉลี่ยรวม")
+    ),
+    "สิ่งทดลองทดสอบกับ error ระหว่างแปลงซึ่งมี df น้อย ถ้าเวลาเป็นตัวเลข (วันหลังปลูก) การถดถอยหรือ growth curve ให้ข้อมูลมากกว่าการเปรียบเทียบรายเวลา"
   ),
   transform = method_guide(
     "residual ไม่เป็นการแจกแจงปกติ หรือความแปรปรวนเพิ่มตามค่าเฉลี่ย (เช่น จำนวนแมลง เปอร์เซ็นต์การเกิดโรค)",

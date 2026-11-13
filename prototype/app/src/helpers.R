@@ -127,7 +127,8 @@ agronomy_display <- function(r, f, m_df) {
   rbind(m_df, footer)
 }
 agronomy_note <- function(r) paste0("** significant at p < 0.01, * at p < 0.05, ns not significant. SE(m), SED and LSD use the error mean square that tests each factor",
-                                    if (is_split(r$design)) " (Error(a) for the main plot, Error(b) for the sub plot)"
+                                    if (is_rep(r$design)) sprintf(" (Error(a) for %s, Error(b) for %s; those of %s assume sphericity)", r$main, r$sub, r$sub)
+                                    else if (is_split(r$design)) " (Error(a) for the main plot, Error(b) for the sub plot)"
                                     else if (identical(r$design, "CombRCBD")) sprintf(" (the pooled error for %s, %s within %s for %s)", r$treatment, r$block, r$env, r$env) else "",
                                     if (!is.null(r$transform)) "; they are on the transformed scale, as are the letters" else "", ".")
 
@@ -316,6 +317,52 @@ split_layout_check <- function(d, design, main, sub, blk) {
     if (design == "SplitCRD") sprintf(" = %d x (%d - 1). If each value of %s is a block holding one main plot of every level side by side, choose Split plot in RCBD instead (Error(a) %d df).", a, r, blk, df_rcbd)
     else sprintf(" = (%d - 1) x (%d - 1). If the main plots were not grouped into blocks and %s only numbers them, choose Split plot in CRD instead (Error(a) %d df).", r, a, blk, df_crd))
 }
+# repeated measures: the plot column with the treatment must identify the plots, and each plot needs one value per time
+rep_layout_check <- function(d, design, trt, time, blk) {
+  crd <- design == "RepCRD"
+  if (length(unique(c(trt, time, blk))) < 3) return(div(class = "alert alert-warning small", "Choose three different columns for the treatment, the time and the ", if (crd) "plot number." else "block."))
+  keep <- !star_is_blank(d[[trt]]) & !star_is_blank(d[[time]]) & !star_is_blank(d[[blk]])
+  m <- star_squash_space(as.character(d[[trt]][keep])); s <- star_squash_space(as.character(d[[time]][keep])); b <- star_squash_space(as.character(d[[blk]][keep]))
+  a <- length(unique(m)); r <- length(unique(b)); nt <- length(unique(s))
+  rows_per_plot <- table(b, m); rows_per_plot <- rows_per_plot[rows_per_plot > 0]
+  cnt <- table(b, m, s)
+  bad <- function(...) div(class = "alert alert-warning small mb-2", icon("triangle-exclamation"), " ", ...)
+  if (all(rows_per_plot == 1)) return(bad(strong(blk), " gives a different value to every row within each treatment, so it does not say which plot was measured at each time. Choose the column that numbers the ", if (crd) "plots (pots) within each treatment." else "blocks."))
+  if (r > 1 && all(tapply(m, b, function(v) length(unique(v))) == 1)) return(bad(strong(blk), sprintf(" has %d values and each belongs to a single treatment, so it numbers the plots across the whole trial", r),
+    if (crd) tagList(". Renumber the plots from 1 within each treatment (1, 2, 3, ... for each) so that each number appears once with every treatment.")
+    else tagList(" rather than grouping them into blocks. If the plots were not laid out in blocks, choose ", strong("Repeated measures over time: CRD"), ".")))
+  if (any(cnt != 1)) return(bad(sprintf("Not every plot has exactly one value at each time: %d of the %d %s x %s x %s combinations are missing and %d appear more than once. Check that %s is the %s column; plots with a missing measurement must be removed or filled in.",
+                                        sum(cnt == 0), length(cnt), blk, trt, time, sum(cnt > 1), blk, if (crd) "plot" else "block")))
+  div(class = "alert alert-light border small mb-2",
+    icon("circle-check", class = "text-success"), " ",
+    sprintf("%d %s x %d treatments = %d plots, each measured at %d times. ", r, if (crd) "plots per treatment" else "blocks", a, a * r, nt),
+    strong(sprintf("Error(a) has %d df.", if (crd) a * (r - 1) else (r - 1) * (a - 1))),
+    if (nt > 2 && a * (r - 1) < nt - 1) sprintf(" With %d plots per treatment and %d times there are too few plots to test sphericity, so the Greenhouse-Geisser correction will be used.", r, nt))
+}
+# repeated measures: the within-plot tests with and without the sphericity correction
+sphericity_display <- function(r) {
+  s <- r$sphericity; z <- s$tests
+  out <- data.frame(Effect = sub(":", " x ", z$Effect), F = fmt_n(z$F), DF = sprintf("%d, %d", as.integer(z$DF1), as.integer(z$DF2)),
+                    `p (sphericity assumed)` = fmt_p(z$P), `p (Greenhouse-Geisser)` = fmt_p(z$P_GG), `p (Huynh-Feldt)` = fmt_p(z$P_HF),
+                    check.names = FALSE, stringsAsFactors = FALSE)
+  out$`p used` <- paste0(fmt_p(z$P_used), sig_mark(z$P_used))
+  out
+}
+sphericity_note <- function(r) {
+  s <- r$sphericity; m <- s$mauchly
+  warn <- s$correction != "none"
+  div(class = paste("small mb-0 alert", if (warn) "alert-warning" else "alert-light border"),
+      icon(if (warn) "triangle-exclamation" else "circle-check", class = if (!warn) "text-success"), " ",
+      strong("Sphericity: "), .star_sphericity_text(s, r$alpha),
+      if (s$n_times > 2) sprintf(" Mauchly's test has little power with few plots, so look at the epsilons too: 1 means sphericity holds, %s is the lowest possible value.", fmt_n(1 / (s$n_times - 1), 3)),
+      " The corrected p values decide the letters; the means of ", r$sub, " are compared with Error(b), which assumes sphericity.")
+}
+sphericity_sheet <- function(r) {
+  s <- r$sphericity; z <- s$tests
+  data.frame(z[c("Effect", "F", "DF1", "DF2", "P", "P_GG", "P_HF", "P_used")],
+             `Mauchly W` = c(s$mauchly$W, NA), `Mauchly p` = c(s$mauchly$p, NA), `GG epsilon` = c(s$gg, NA), `HF epsilon` = c(s$hf, NA),
+             Correction = c(s$correction, NA), check.names = FALSE, stringsAsFactors = FALSE)
+}
 # why a means table has no letters (protected test: means are compared only when the F test is significant)
 no_letters_note <- function(r, f) {
   e <- r$effects[r$effects$Effect == f, ]
@@ -388,6 +435,13 @@ Shiny.addCustomMessageHandler('stale', function(msg) {
   el.classList.toggle('is-stale', msg.on);
   el.querySelectorAll('.stale-dim').forEach(function(x) { if (msg.on) x.setAttribute('inert', ''); else x.removeAttribute('inert'); });
 });"
+# Shinylive serves downloads through its service worker. Chrome and Edge do not send the request of a link with a
+# `download` attribute through the service worker (Chromium issue 468227), so it reaches the static host, and the
+# host's "not found" page is saved as .html in place of the file. Without the attribute the link is an ordinary
+# navigation, which the service worker answers; the file name still comes from the Content-Disposition header.
+# This is the workaround in Shiny's documentation; it changes nothing when the app runs on a normal R server.
+downloadButton <- function(...) { tag <- shiny::downloadButton(...); tag$attribs$download <- NULL; tag }
+downloadLink <- function(...) { tag <- shiny::downloadLink(...); tag$attribs$download <- NULL; tag }
 # Download buttons on a tab that was not open yet (the Plot tabs) can miss the download address in Shinylive, so they
 # stay disabled with no href, and a click saves the app page as .html. The address is in Shiny's received values:
 # put it on the button when its tab opens and when it is clicked; with no address yet, block the click.

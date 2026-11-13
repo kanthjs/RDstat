@@ -37,6 +37,9 @@ tests <- c(auto = "HSD", LSD = "LSD", HSD = "HSD", duncan = "duncan")
   for (pw in names(rep_tests)) { run(pw = pw); check(any(grepl(rep_tests[[pw]], output$report)) && grepl("ANOVA TABLE", output$report), paste("Classic STAR report: RCBD 1 factor with", pw)) }
   run(pw = "LSD")
   check(round(ok()$anova$F[2], 2) == 8.54, "RCBD 1 factor: F = 8.54")
+  lv <- output$means_plot
+  check(file.exists(lv$src) || nzchar(lv$src), "Live View: means plot is drawn")
+  check(grepl("^Plot: .*Nitrogen", lv$alt), paste("Live View: alt text names the plot:", lv$alt))
   check(identical(tables()$anova$`Pr(>F)`[2], "0.0022"), "RCBD 1 factor: p formatted 0.0022")
   check(identical(tables()$means$Nitrogen$Group, c("b", "a", "a", "a", "a", "a")), "RCBD 1 factor: letters")
   check(identical(tables()$means$Nitrogen$N, rep("3", 6)), "RCBD 1 factor: N as integers")
@@ -201,6 +204,46 @@ tests <- c(auto = "HSD", LSD = "LSD", HSD = "HSD", duncan = "duncan")
         "Split plot CRD: publication footer rows")
   pr <- precision_of(r, "Irrigation"); ea <- r$anova[r$anova$Source == "Error(a)", ]
   check(isTRUE(all.equal(pr[["sed"]], sqrt(2 * ea$MS / 16))) && pr[["df"]] == 9, "Split plot CRD: SED of the main plot uses Error(a)")
+
+  # ---- repeated measures over time (split plot in time with the sphericity check) ----
+  session$setInputs(design = "RepRCBD", example = "rep_rcbd1", resp = "Height", trt_main = "Fertilizer", trt_sub = "Day", blk = "Block")
+  run(pw = "auto")
+  r <- ok(); s <- r$sphericity
+  check(identical(r$anova$Source, c("Block", "Fertilizer", "Error(a)", "Day", "Fertilizer:Day", "Error(b)", "Total")) && identical(r$anova$DF, c(3, 3, 9, 3, 9, 36, 63)),
+        "Repeated RCBD: split plot in time rows and DF")
+  rd <- read.csv("example_rep_rcbd.csv"); wd <- reshape(rd, idvar = c("Block", "Fertilizer"), timevar = "Day", direction = "wide")
+  ref <- anova(lm(as.matrix(wd[grep("^Height", names(wd))]) ~ factor(wd$Fertilizer)), X = ~1, test = "Spherical")
+  mref <- mauchly.test(lm(as.matrix(wd[grep("^Height", names(wd))]) ~ factor(wd$Fertilizer)), X = ~1)
+  check(isTRUE(all.equal(s$tests$F, ref$F[1:2])) && isTRUE(all.equal(s$tests$P_GG, ref$`G-G Pr`[1:2])) && isTRUE(all.equal(s$tests$P_HF, ref$`H-F Pr`[1:2])) &&
+        isTRUE(all.equal(s$mauchly$p, mref$p.value)) && isTRUE(all.equal(s$tests$F, r$anova$F[r$anova$Source %in% c("Day", "Fertilizer:Day")])),
+        "Repeated RCBD: F, Greenhouse-Geisser and Huynh-Feldt p values and Mauchly's test equal anova.mlm() / mauchly.test()")
+  check(identical(r$means$Day$Treatment, c("D30", "D60", "D90", "D120")), "Repeated RCBD: times in time order, not alphabetical")
+  check(s$correction == "none" && isTRUE(all.equal(r$effects$P, r$anova$P[match(r$effects$Effect, r$anova$Source)])), "Repeated RCBD: sphericity holds (Mauchly p = 0.09), so the usual p values are used")
+  res_html <- html(output$results_ui)
+  check(grepl("Sphericity and corrected tests", res_html) && grepl("Mauchly", res_html) && grepl("วัดซ้ำ|sphericity", thai_summary_aov(r)), "Repeated RCBD: sphericity card and Thai sentence")
+  aov_script_check("repeated measures (RCBD)")
+  e <- run_script(aov_script())
+  check(isTRUE(all.equal(unname(anova(e$mfit, X = ~1, test = "Spherical")$`G-G Pr`[1:2]), s$tests$P_GG)), "Repeated RCBD: script gives the Greenhouse-Geisser p values")
+  check("Sphericity" %in% names(xlsx_sheets()) && file.size(output$dl_doc) > 3000, "Repeated RCBD: Excel sheet and Word report")
+  check(grepl("STAR has no repeated-measures analysis", paste(output$report, collapse = " ")),"Repeated RCBD: Classic STAR report says it is the split plot in time")
+  session$setInputs(plot_effect = "interaction_line", plot_style = "gg"); check(file.size(output$dl_aov_plot) > 5000, "Repeated RCBD: profile plot (lines over time)")
+  session$setInputs(plot_style = "classic")
+
+  session$setInputs(design = "RepCRD", example = "rep_crd1", resp = "Height", trt_main = "Fertilizer", trt_sub = "Day", blk = "Pot")
+  run(pw = "auto")
+  r <- ok(); s <- r$sphericity
+  check(identical(r$anova$DF, c(3, 16, 3, 9, 48, 79)), "Repeated CRD: DF (no block), Error(a) = a(r-1) = 16")
+  check(s$correction == "GG" && s$mauchly$p < 0.05 && s$gg < 0.75 && isTRUE(all.equal(r$effects$P[2:3], s$tests$P_GG)),
+        "Repeated CRD: sphericity rejected, Greenhouse-Geisser p values decide significance")
+  check(grepl("Greenhouse-Geisser corrected", r$summary) && any(grepl("epsilon", r$apa)) && grepl("F(1.63, 26.08) = ", r$apa[2], fixed = TRUE),
+        "Repeated CRD: summary and APA give the corrected test and degrees of freedom")
+  aov_script_check("repeated measures (CRD)")
+  ck <- paste(as.character(rep_layout_check(read.csv("example_rep_crd.csv"), "RepCRD", "Fertilizer", "Day", "Pot")), collapse = "")
+  check(grepl("20 plots, each measured at 4 times", ck) && grepl("Error(a) has 16 df", ck, fixed = TRUE), "Repeated check: plots and Error(a) df")
+  bad <- read.csv("example_rep_crd.csv"); bad$Row <- seq_len(nrow(bad))
+  check(grepl("does not say which plot", paste(as.character(rep_layout_check(bad, "RepCRD", "Fertilizer", "Day", "Row")), collapse = "")), "Repeated check: a row number chosen as plot is caught")
+  check(grepl("not complete", tryCatch({ star_repeated(read.csv("example_rep_crd.csv")[-1, ], "Height", "Fertilizer", "Day", "Pot", design = "RepCRD"); "" }, error = conditionMessage)),
+        "Repeated CRD: a plot missing one time is refused with a message")
 
   # ---- publication layout and transformation ----
   session$setInputs(design = "RCBD", example = "rcbd1", resp = "Yield", trt = "Nitrogen", blk = "Rep", transform = "none"); run(pw = "LSD")

@@ -14,8 +14,10 @@ star_report <- function(x) {
     fun <- "combAOVTest"
     args <- c(args, list(design = sub("^Comb", "", x$design), factor1 = x$treatment, set = x$env))
     if (x$design == "CombRCBD") args$rep1 <- x$block
-  } else if (x$design %in% c("SplitRCBD", "SplitCRD")) {
-    args <- c(args, list(design = x$design, factor1 = x$main, factor2 = x$sub, rep1 = x$block))
+  } else if (x$design %in% c("SplitRCBD", "SplitCRD", "RepRCBD", "RepCRD")) {
+    # STAR has no repeated-measures analysis: a repeated-measures result is printed as the split plot in time it is
+    # (without the sphericity correction)
+    args <- c(args, list(design = sub("^Rep", "Split", x$design), factor1 = x$main, factor2 = x$sub, rep1 = x$block))
   } else {
     args <- c(args, list(design = x$design, factor1 = x$factors))
     if (x$design == "RCBD") args$rep1 <- x$block
@@ -25,10 +27,15 @@ star_report <- function(x) {
     args$pwTest <- x$test
     args$pwVar <- x$response
   }
-  tryCatch(
+  out <- tryCatch(
     utils::capture.output(do.call(.star_legacy_fun(fun), args)),
     error = function(e) "The classic STAR report could not be produced for this data."
   )
+  if (isTRUE(x$design %in% c("RepRCBD", "RepCRD"))) {
+    out <- c("Note: STAR has no repeated-measures analysis. This is its split plot in time (treatment = main plot, time = sub plot),",
+             "with uncorrected F tests; see the Results tab for the sphericity check and the corrected tests.", "", out)
+  }
+  out
 }
 
 # A STAR function: from the app's `star_legacy` environment when there is one, else from the engine namespace

@@ -1,5 +1,5 @@
 # Results in other forms: a summary in Thai and a report that opens in Microsoft Word.
-# Sourced by app.R (needs fmt_n, fmt_p, transforms, is_comb).
+# Sourced by app.R (needs fmt_n, fmt_p, transforms, is_comb, is_rep).
 
 # ---- summary in Thai ---------------------------------------------------------------------------------------------
 th_p <- function(p) if (is.na(p)) "p = NA" else if (p < 0.0001) "p < 0.0001" else paste("p =", formatC(p, format = "f", digits = 4))
@@ -34,6 +34,15 @@ thai_summary_aov <- function(r) {
   }
   out <- c(out, if (is.null(r$cv_a)) sprintf("ค่าสัมประสิทธิ์ความแปรปรวน (CV) = %.1f%%", r$cv)
                 else sprintf("ค่าสัมประสิทธิ์ความแปรปรวน CV(a) = %.1f%% และ CV(b) = %.1f%%", r$cv_a, r$cv_b))
+  if (is_rep(r$design)) {
+    sp <- r$sphericity; m <- sp$mauchly
+    cor_th <- c(GG = "Greenhouse-Geisser", HF = "Huynh-Feldt")
+    out <- c(out, if (sp$n_times == 2) "วัดซ้ำเพียงสองครั้ง จึงไม่ต้องทดสอบ sphericity"
+      else if (sp$correction == "none") sprintf("ทดสอบ sphericity ด้วย Mauchly's test (W = %.3f, %s) ไม่ปฏิเสธสมมติฐาน จึงใช้ F test ตามปกติสำหรับ %s และปฏิสัมพันธ์", m$W, th_p(m$p), r$sub)
+      else sprintf("%s จึงปรับองศาอิสระของการทดสอบ %s และปฏิสัมพันธ์ด้วยวิธี %s (epsilon = %.3f) ค่า p ข้างต้นเป็นค่าที่ปรับแล้ว",
+                   if (is.na(m$p)) "จำนวนแปลงน้อยเกินกว่าจะทดสอบ sphericity ได้" else sprintf("Mauchly's test พบว่าข้อมูลไม่เป็นไปตาม sphericity (W = %.3f, %s)", m$W, th_p(m$p)),
+                   r$sub, cor_th[[sp$correction]], sp$epsilon))
+  }
   if (is_comb(r$design) && !is.na(r$bartlett$p)) {
     out <- c(out, if (r$bartlett$p >= r$alpha) sprintf("ความแปรปรวนของความคลาดเคลื่อนในแต่ละ %s ไม่แตกต่างกัน (Bartlett, %s) จึงรวมวิเคราะห์ได้", r$env, th_p(r$bartlett$p))
                   else sprintf("ความแปรปรวนของความคลาดเคลื่อนในแต่ละ %s แตกต่างกัน (Bartlett, %s) การรวมวิเคราะห์อาจไม่เหมาะสม ควรรายงานผลแยกแต่ละ %s หรือแปลงข้อมูล", r$env, th_p(r$bartlett$p), r$env))

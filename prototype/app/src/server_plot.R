@@ -28,14 +28,23 @@
   # Live View (WYSIWYG): the plot is laid out at the downloaded size in inches, so text, points and margins take the
   # same share of the figure as in the file, then drawn at the resolution that makes it fit the card on screen.
   # renderPlot() cannot do this, because its `res` is fixed, so a 9 pt label on an 8.5 cm figure would look half size.
-  render_live_plot <- function(p, draw) renderImage({
+  render_live_plot <- function(p, draw, alt = NULL) renderImage({
     d <- live_plot_dims(p)
     pr <- session$clientData$pixelratio %||% 1
     f <- tempfile(fileext = ".png")
     # `draw` returns a ggplot (printed here, with its subtitle wrapped to the figure) or draws a base-graphics plot
-    shiny::plotPNG(function() { g <- draw(); if (inherits(g, "ggplot")) print(star_gg_fit_width(g, d$inches[1])) }, f, width = d$width * pr, height = d$height * pr, res = d$width * pr / d$inches[1])
-    list(src = f, width = d$width, height = d$height, contentType = "image/png", alt = "Plot")
+    g <- NULL
+    shiny::plotPNG(function() { g <<- draw(); if (inherits(g, "ggplot")) print(star_gg_fit_width(g, d$inches[1])) }, f, width = d$width * pr, height = d$height * pr, res = d$width * pr / d$inches[1])
+    list(src = f, width = d$width, height = d$height, contentType = "image/png", alt = plot_alt_text(g, alt))
   }, deleteFile = TRUE)
+  # what a screen reader says for a Live View plot: a ggplot's title and the note under it; a base-graphics plot has
+  # none, so its caller passes `alt`, a function giving the text
+  plot_alt_text <- function(g, alt = NULL) {
+    lab <- if (inherits(g, "ggplot")) g$labels[c("title", "subtitle")] else list()
+    lab <- unlist(lapply(lab, function(s) if (is.character(s) && length(s) == 1 && nzchar(s)) gsub("\\s*\n\\s*", " ", s)), use.names = FALSE)
+    if (!length(lab) && is.function(alt)) lab <- alt()
+    if (length(lab) && any(nzchar(lab))) paste0("Plot: ", paste(lab[nzchar(lab)], collapse = ". ")) else "Plot of the results"
+  }
   live_badge_render <- function(p) {
     renderUI({
       d <- input[[paste0(p, "_dim")]] %||% "std"

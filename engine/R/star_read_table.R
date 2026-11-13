@@ -49,11 +49,22 @@ star_excel_cells <- function(path) {
   if (!requireNamespace("readxl", quietly = TRUE)) stop("Reading Excel files needs the 'readxl' package.")
   cells <- readxl::read_excel(path, sheet = 1, col_names = FALSE, col_types = "list", .name_repair = "minimal",
                               range = readxl::cell_limits(c(1, 1), c(NA, NA)))
-  as.data.frame(lapply(cells, \(col) vapply(col, \(v) {
-    if (is.null(v) || length(v) != 1 || is.na(v)) NA_character_
-    else if (is.numeric(v)) format(v, digits = 15, scientific = FALSE, trim = TRUE)
-    else as.character(v)
-  }, character(1))), stringsAsFactors = FALSE, col.names = paste0("V", seq_along(cells)))
+  as.data.frame(lapply(cells, star_cell_text), stringsAsFactors = FALSE, col.names = paste0("V", seq_along(cells)))
+}
+## one column of readxl's list cells as text: numbers with 15 significant digits and no exponent (2.32, 100000),
+## dates and logicals as as.character() writes them, empty cells NA. The numbers are formatted in one formatC() call,
+## because format() cell by cell takes seconds on a large sheet (much longer in the browser).
+star_cell_text <- function(col) {
+  out <- rep(NA_character_, length(col))
+  single <- lengths(col) == 1L
+  num <- single & vapply(col, is.numeric, NA)
+  if (any(num)) {
+    x <- unlist(col[num], use.names = FALSE)
+    out[num] <- ifelse(is.na(x), NA_character_, trimws(formatC(x, digits = 15, format = "fg")))
+  }
+  other <- single & !num
+  if (any(other)) out[other] <- vapply(col[other], \(v) if (is.na(v)) NA_character_ else as.character(v), character(1))
+  out
 }
 
 ## merged ranges of the first sheet of an .xlsx file, as a matrix with columns r1, c1, r2, c2 (none if the file
