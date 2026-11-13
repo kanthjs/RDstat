@@ -6,6 +6,17 @@ app_maintainer <- "Kanthanawit Jaisong"
 feedback_form_url <- Sys.getenv("RDSTAT_FEEDBACK_URL", "https://docs.google.com/forms/d/e/1FAIpQLScjlgyby2p30Czp8L3MDcIyHSQ03c3ja07yieUgIeR79M7PQw/viewform")
 # short explanation folded away until wanted (for users who are not statisticians)
 help_box <- function(title, ...) tags$details(class = "help-box", tags$summary(title), div(class = "help-body", ...))
+# "what you get" box shown under the choice the user made (Thai): when to use it, what it gives, what it does not give,
+# and the question it answers. Used on the screens (under each choice) and at the top of the Methods topics.
+get_box <- function(use, gets, not = NULL, answers = NULL) div(class = "get-box", lang = "th",
+  p(strong("ใช้เมื่อ: "), use),
+  p(strong("จะได้:")),
+  tags$ul(lapply(gets, tags$li)),
+  if (!is.null(not)) p(strong("ไม่ได้ / ข้อควรระวัง: "), not),
+  if (!is.null(answers)) p(class = "get-q", icon("circle-question"), " ", answers))
+# one get_box per choice of a radio button, each shown only while that choice is selected
+get_boxes <- function(id, boxes) tagList(lapply(names(boxes), function(k)
+  conditionalPanel(sprintf("input.%s == '%s'", id, k), boxes[[k]])))
 # version of this build (written by scripts/build_app.R); shown in the About tab and written to every result file
 app_version <- local({
   v <- if (file.exists("VERSION")) readLines("VERSION") else character()
@@ -424,6 +435,27 @@ Shiny.addCustomMessageHandler('stale', function(msg) {
   el.classList.toggle('is-stale', msg.on);
   el.querySelectorAll('.stale-dim').forEach(function(x) { if (msg.on) x.setAttribute('inert', ''); else x.removeAttribute('inert'); });
 });"
+# Download buttons on a tab that was not open yet (the Plot tabs) can miss the download address in Shinylive, so they
+# stay disabled with no href, and a click saves the app page as .html. The address is in Shiny's received values:
+# put it on the button when its tab opens and when it is clicked; with no address yet, block the click.
+download_fix_js <- "
+(function() {
+  function fix(a) {
+    var app = window.Shiny && Shiny.shinyapp; if (!app || !a.id) return;
+    var url = app.$values && app.$values[a.id];
+    if (url && a.getAttribute('href') !== url) { a.setAttribute('href', url); a.classList.remove('disabled'); a.removeAttribute('aria-disabled'); a.removeAttribute('tabindex'); }
+  }
+  function fixAll(root) { (root || document).querySelectorAll('a.shiny-download-link').forEach(fix); }
+  document.addEventListener('shown.bs.tab', function() { fixAll(); });
+  document.addEventListener('shiny:value', function() { setTimeout(fixAll, 0); });
+  document.addEventListener('shiny:visualchange', function() { fixAll(); });
+  document.addEventListener('click', function(e) {
+    var a = e.target.closest && e.target.closest('a.shiny-download-link'); if (!a) return;
+    fix(a);
+    var h = a.getAttribute('href');
+    if (!h || h === '#' ) { e.preventDefault(); e.stopPropagation(); if (window.Shiny) Shiny.notifications && Shiny.notifications.show({ html: 'The file is not ready yet. Please wait a moment and click again.', type: 'warning', duration: 4000 }); }
+  }, true);
+})();"
 # the results below are greyed out and cannot be copied or downloaded until the analysis is run again (see stale_js)
 stale_note <- function(button) div(class = "alert alert-warning d-flex justify-content-between align-items-center gap-2",
   span(icon("triangle-exclamation"), " ", strong("The settings have changed since the last run."),

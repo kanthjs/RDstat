@@ -92,6 +92,7 @@ if (
 # Code is split by role into ./src; each file is sourced in the same order as before, so definitions keep their dependencies.
 source("src/helpers.R", local = TRUE) # formatting, display tables, data reading, UI building blocks
 source("src/ui_components.R", local = TRUE) # data source / plot label / export controls
+source("src/guide_boxes.R", local = TRUE) # "what you get" boxes under each choice
 source("src/ui_screens.R", local = TRUE) # correlation, regression and t-test screens
 source("src/tt_display.R", local = TRUE) # t-test result tables
 source("src/designs.R", local = TRUE) # example datasets and design helpers
@@ -401,6 +402,9 @@ app_css <- css_fill(
     details.help-box { margin: 4px 0 12px; font-size: 13px; }
     details.help-box summary { cursor: pointer; color: #5c6e5d; font-weight: 500; }
     details.help-box summary:hover { color: %1$s; }
+    .get-box { background: #f5f9f5; border-left: 3px solid %1$s; border-radius: 6px; padding: 8px 10px; margin: 4px 0 12px; font-size: 12.5px; line-height: 1.5; }
+    .get-box p { margin: 0 0 4px; } .get-box ul { margin: 0 0 6px; padding-left: 18px; } .get-box li { margin-bottom: 2px; }
+    .get-box .get-q { margin: 6px 0 0; color: %1$s; font-weight: 500; }
     .help-body { padding: 6px 0 6px 10px; border-left: 2px solid #e0e8e0; margin-top: 4px; color: #555; }
     details.plot-labels { margin-bottom: 12px; } details.plot-labels summary { cursor: pointer; color: #5c6e5d; margin-bottom: 8px; font-size: 13.5px; }
     
@@ -532,6 +536,7 @@ ui <- bslib::page_navbar(
   header = tags$head(
     tags$script(HTML(copy_js)),
     tags$script(HTML(stale_js)),
+    tags$script(HTML(download_fix_js)),
     tags$style(HTML(app_css)),
     useBusyIndicators()
   ),
@@ -558,37 +563,7 @@ ui <- bslib::page_navbar(
               "Repeated measures over time: RCBD" = "RepRCBD"
             )
           ),
-          help_box(
-            "Which design?",
-            p(
-              strong("CRD:"),
-              "treatments were assigned completely at random, no blocks."
-            ),
-            p(
-              strong("RCBD:"),
-              "plots were grouped into blocks (replications) of similar conditions and every treatment appears once in each block."
-            ),
-            p(
-              strong("Split plot:"),
-              "one factor (main plot) is applied to large plots and a second factor (sub plot) within each. ",
-              strong("In CRD"),
-              " the main plots were assigned at random with no blocks; ",
-              strong("in RCBD"),
-              " the main plots were grouped into blocks."
-            ),
-            p(
-              strong("Combined:"),
-              "the same trial (one treatment factor, CRD or RCBD) was repeated at several sites, seasons or years, and the data of all of them are in one file with a column naming the environment. Tests whether the treatments differ overall and whether their ranking changes between environments (treatment x environment interaction)."
-            ),
-            p(
-              strong("Repeated measures:"),
-              "the same plots (pots, plants, animals) were measured several times, e.g. plant height at 30, 60 and 90 days. One row per plot per time. Tests the treatments, the change over time and whether the treatments change differently over time (treatment x time), with Mauchly's test of sphericity and the Greenhouse-Geisser / Huynh-Feldt correction. ",
-              strong("In CRD"),
-              " the plots were assigned at random; ",
-              strong("in RCBD"),
-              " they were grouped into blocks."
-            )
-          ),
+          get_boxes("design", design_get),
           # the analyses that do not exist for the chosen design are greyed out (see aov_support in the server): a rank-based
           # test needs one treatment factor in CRD (Kruskal-Wallis) or RCBD (Friedman); Welch and trimmed means need CRD with one factor
           radioButtons(
@@ -606,31 +581,7 @@ ui <- bslib::page_navbar(
             "Standard ANOVA is used by default. After running, the results screen automatically checks assumptions and recommends an alternative above if needed."
           ),
           uiOutput("aov_method_note"),
-          conditionalPanel(
-            "input.design == 'CRD' || input.design == 'RCBD'",
-            help_box(
-              "ANOVA, Welch or rank-based?",
-              p(
-                strong("ANOVA"),
-                " (the default) compares the treatment means. It assumes normal residuals and equal variances; the results screen checks them and recommends another method if they fail."
-              ),
-              p(
-                strong("Welch's ANOVA"),
-                " also compares means but does not assume equal variances; its means are compared with the Games-Howell test. When the variances are equal it gives almost the same result as the standard ANOVA, so it is safe to choose when the variances or the group sizes differ. It exists for CRD with one factor only (there is no version for blocks)."
-              ),
-              p(
-                strong("Trimmed means"),
-                " compare means after setting aside the lowest and highest 20% of each group, so skewed data and a few extreme values do not drive the result; no normal distribution or equal variances are assumed, and bootstrap intervals are given. CRD with one factor only."
-              ),
-              p(
-                strong("Rank-based"),
-                " compares the ranks of the values instead, so it does not need those assumptions. Use it when the checks fail and a transformation does not help, or for scores and ranks. It needs one treatment factor; in RCBD each treatment must appear exactly once in every block (Friedman). It gives medians and a chi-square test instead of means, an ANOVA table and a CV."
-              ),
-              p(
-                "Choose the method before looking at the results, not the one that gives the smaller p value."
-              )
-            )
-          )
+          get_boxes("aov_method", aov_method_get)
         ),
         side_step(
           2,
