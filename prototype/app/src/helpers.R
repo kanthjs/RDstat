@@ -435,6 +435,13 @@ Shiny.addCustomMessageHandler('stale', function(msg) {
   el.classList.toggle('is-stale', msg.on);
   el.querySelectorAll('.stale-dim').forEach(function(x) { if (msg.on) x.setAttribute('inert', ''); else x.removeAttribute('inert'); });
 });"
+# Shinylive serves downloads through its service worker. Chrome and Edge do not send the request of a link with a
+# `download` attribute through the service worker (Chromium issue 468227), so it reaches the static host, and the
+# host's "not found" page is saved as .html in place of the file. Without the attribute the link is an ordinary
+# navigation, which the service worker answers; the file name still comes from the Content-Disposition header.
+# This is the workaround in Shiny's documentation; it changes nothing when the app runs on a normal R server.
+downloadButton <- function(...) { tag <- shiny::downloadButton(...); tag$attribs$download <- NULL; tag }
+downloadLink <- function(...) { tag <- shiny::downloadLink(...); tag$attribs$download <- NULL; tag }
 # Download buttons on a tab that was not open yet (the Plot tabs) can miss the download address in Shinylive, so they
 # stay disabled with no href, and a click saves the app page as .html. The address is in Shiny's received values:
 # put it on the button when its tab opens and when it is clicked; with no address yet, block the click.
