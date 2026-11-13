@@ -13,6 +13,7 @@ if (FALSE) {
   nortest::lillie.test
   lmtest::bptest
   mctest::imcdiag
+  ragg::agg_png  # PNG plots drawn in R; webR's own png() draws on the browser canvas, which Brave blocks
 }
 for (f in sort(list.files("star", pattern = "[.]R$", full.names = TRUE))) {
   source(f, local = FALSE)

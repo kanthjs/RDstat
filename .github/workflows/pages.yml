@@ -24,7 +24,7 @@ jobs:
         with:
           use-public-rspm: true
       - name: Install shiny and shinylive
-        run: Rscript -e 'install.packages(c("shiny", "shinylive", "ggplot2", "writexl", "readxl", "agricolae", "lmtest", "mctest", "svglite", "lattice"))'
+        run: Rscript -e 'install.packages(c("shiny", "shinylive", "ggplot2", "writexl", "readxl", "agricolae", "lmtest", "mctest", "svglite", "lattice", "ragg"))'
       - name: Copy engine into the app
         run: Rscript scripts/build_app.R
         env:
