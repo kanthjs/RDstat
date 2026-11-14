@@ -106,6 +106,67 @@ msg_th_rules <- c(
   "The time factor needs at least two times\\." = "ปัจจัยเวลาต้องมีอย่างน้อย 2 ครั้ง",
   "The layout is not complete: each plot \\((.+?)\\) must have exactly one value at each level of (.+?)\\.(?= |$)" = "ผังข้อมูลไม่ครบ: แต่ละแปลง (\\1) ต้องมีค่าพอดี 1 ค่าในแต่ละระดับของ \\2",
 
+  # ---- shared column checks ----
+  "Column '([^']*)' not found\\." = "ไม่พบคอลัมน์ '\\1'",
+  "(.+?) must be different columns\\." = "\\1 ต้องเป็นคนละคอลัมน์กัน",
+
+  # ---- t test ----
+  "A paired t test needs two numeric columns \\(the two measurements on each unit\\)\\." = "paired t-test ต้องมีคอลัมน์ตัวเลข 2 คอลัมน์ (ค่าที่วัด 2 ครั้งจากหน่วยเดียวกัน)",
+  "(\\d+) row\\(s\\) without both '([^']*)' and '([^']*)' were left out \\(e\\.g\\. row (\\d+)\\)\\." = "ไม่นำ \\1 แถวที่ไม่มีค่าครบทั้ง '\\2' และ '\\3' มาวิเคราะห์ (เช่น แถวที่ \\4)",
+  "A paired t test needs at least two complete pairs\\." = "paired t-test ต้องมีข้อมูลครบคู่อย่างน้อย 2 คู่",
+  "All differences are equal, so the paired t test cannot be computed\\." = "ผลต่างทุกคู่เท่ากัน จึงคำนวณ paired t-test ไม่ได้",
+  "An independent t test needs a numeric response and a group column\\." = "independent t-test ต้องมีคอลัมน์ผลตอบสนองที่เป็นตัวเลข และคอลัมน์กลุ่ม",
+  "The group column '([^']*)' has (\\d+) groups; choose the two to compare \\(or use analysis of variance for more than two\\)\\." =
+    "คอลัมน์กลุ่ม '\\1' มี \\2 กลุ่ม โปรดเลือก 2 กลุ่มที่จะเปรียบเทียบ (ถ้ามากกว่า 2 กลุ่มให้ใช้การวิเคราะห์ความแปรปรวน)",
+  "Choose exactly two different groups to compare\\." = "โปรดเลือก 2 กลุ่มที่ต่างกันเพื่อเปรียบเทียบ",
+  "Group '([^']*)' is not in the column '([^']*)'\\." = "ไม่พบกลุ่ม '\\1' ในคอลัมน์ '\\2'",
+  "(\\d+) row\\(s\\) without a value of '([^']*)' were left out \\(e\\.g\\. row (\\d+)\\)\\." = "ไม่นำ \\1 แถวที่ไม่มีค่าของ '\\2' มาวิเคราะห์ (เช่น แถวที่ \\3)",
+  "Only groups '([^']*)' and '([^']*)' of '([^']*)' are compared; the other (\\d+) group\\(s\\) were left out\\." =
+    "เปรียบเทียบเฉพาะกลุ่ม '\\1' และ '\\2' ของ '\\3' ส่วนอีก \\4 กลุ่มไม่ได้นำมาวิเคราะห์",
+  "(\\d+) row\\(s\\) without a group were left out\\." = "ไม่นำ \\1 แถวที่ไม่มีกลุ่มมาวิเคราะห์",
+  "Each group needs at least two observations\\." = "แต่ละกลุ่มต้องมีข้อมูลอย่างน้อย 2 ค่า",
+  "Both groups are constant, so the t test cannot be computed\\." = "ทั้งสองกลุ่มมีค่าเท่ากันทุกตัว จึงคำนวณ t-test ไม่ได้",
+  "A one-sample t test needs a numeric response\\." = "one-sample t-test ต้องมีคอลัมน์ผลตอบสนองที่เป็นตัวเลข",
+  "The test value must be a single number\\." = "ค่าที่ใช้ทดสอบต้องเป็นตัวเลขเพียงค่าเดียว",
+  "A one-sample t test needs at least two observations\\." = "one-sample t-test ต้องมีข้อมูลอย่างน้อย 2 ค่า",
+  "All values are equal, so the t test cannot be computed\\." = "ทุกค่าเท่ากัน จึงคำนวณ t-test ไม่ได้",
+
+  # ---- correlation ----
+  "The variable '([^']*)' contains no numbers\\." = "ตัวแปร '\\1' ไม่มีค่าที่เป็นตัวเลข",
+  "The variable '([^']*)' is mostly text \\(e\\.g\\. (.*?)\\); choose a numeric column\\." = "ตัวแปร '\\1' ส่วนใหญ่เป็นข้อความ (เช่น \\2) โปรดเลือกคอลัมน์ที่เป็นตัวเลข",
+  "Variable '([^']*)': (\\d+) value\\(s\\) are not numbers and were treated as missing \\(e\\.g\\. (.*?), row (\\d+)\\)\\." =
+    "ตัวแปร '\\1': มี \\2 ค่าที่ไม่ใช่ตัวเลข จึงถือเป็นค่าว่าง (เช่น \\3 แถวที่ \\4)",
+  "Variable '([^']*)': (\\d+) infinite value\\(s\\) were treated as missing\\." = "ตัวแปร '\\1': ค่าอนันต์ \\2 ค่าถือเป็นค่าว่าง",
+  "Choose at least two variables\\." = "โปรดเลือกตัวแปรอย่างน้อย 2 ตัว",
+  "The variable '([^']*)' is constant \\(or has fewer than two values\\); it cannot be correlated\\." = "ตัวแปร '\\1' มีค่าเท่ากันทุกแถว (หรือมีน้อยกว่า 2 ค่า) จึงหาสหสัมพันธ์ไม่ได้",
+  "Some pairs have fewer than 10 observations; correlations from so few points are unreliable\\." = "บางคู่มีข้อมูลน้อยกว่า 10 ค่า สหสัมพันธ์ที่คำนวณจากข้อมูลน้อยขนาดนี้เชื่อถือได้ต่ำ",
+  "Some correlations could not be computed \\(fewer than 3 complete pairs\\)\\." = "บางคู่คำนวณสหสัมพันธ์ไม่ได้ (มีข้อมูลครบคู่น้อยกว่า 3 คู่)",
+  "Rows with a missing value are left out pair by pair, so N differs between pairs\\." = "แถวที่มีค่าว่างถูกตัดออกทีละคู่ จำนวนข้อมูล (N) ของแต่ละคู่จึงไม่เท่ากัน",
+
+  # ---- regression ----
+  "Choose at least one predictor\\." = "โปรดเลือกตัวแปรอิสระอย่างน้อย 1 ตัว",
+  "A polynomial \\(degree > 1\\) needs exactly one predictor\\." = "สมการพหุนาม (กำลังมากกว่า 1) ต้องมีตัวแปรอิสระเพียง 1 ตัว",
+  "(\\d+) of (\\d+) rows have a missing value and were left out \\(row (.*?)\\)\\.(?= |$)" = "ตัด \\1 จาก \\2 แถวที่มีค่าว่างออก (แถวที่ \\3)",
+  "Too few complete rows \\((\\d+)\\) for a model with (\\d+) predictor term\\(s\\); at least (\\d+) are needed\\." =
+    "ข้อมูลที่ครบมีเพียง \\1 แถว น้อยเกินไปสำหรับโมเดลที่มี \\2 พจน์ ต้องมีอย่างน้อย \\3 แถว",
+  "The variable '([^']*)' is constant; it cannot be used in a regression\\." = "ตัวแปร '\\1' มีค่าเท่ากันทุกแถว จึงใช้ในการถดถอยไม่ได้",
+  "The predictors are perfectly collinear \\((.*?) add no information\\); remove one of them\\." = "ตัวแปรอิสระสัมพันธ์กันสมบูรณ์ (\\1 ไม่ได้เพิ่มข้อมูลใหม่) โปรดตัดตัวใดตัวหนึ่งออก",
+  "Variance inflation factor above 10 for (.*?): these predictors are strongly correlated with the others, so their individual estimates are unstable\\." =
+    "ค่า VIF เกิน 10 สำหรับ \\1 ตัวแปรเหล่านี้สัมพันธ์กับตัวแปรอื่นสูงมาก ค่าประมาณของแต่ละตัวจึงไม่เสถียร",
+  "Only (\\d+) rows for (\\d+) predictor term\\(s\\); fewer than 10 rows per term makes the estimates unreliable\\." =
+    "มีข้อมูลเพียง \\1 แถวสำหรับ \\2 พจน์ น้อยกว่า 10 แถวต่อพจน์ ค่าประมาณจึงเชื่อถือได้ต่ำ",
+
+  # ---- rank-based tests, trimmed means, Welch ----
+  "The rank-based test needs exactly one treatment factor\\." = "การทดสอบแบบอันดับต้องมีปัจจัยกรรมวิธี 1 ปัจจัยพอดี",
+  "The treatment needs at least two levels\\." = "กรรมวิธีต้องมีอย่างน้อย 2 ระดับ",
+  "The Friedman test needs exactly one observation of each treatment in each block\\." = "Friedman test ต้องมีข้อมูลกรรมวิธีละ 1 ค่าพอดีในทุกบล็อก",
+  "The trimmed-means comparison needs exactly one treatment factor\\." = "การเปรียบเทียบค่าเฉลี่ยตัดปลายต้องมีปัจจัยกรรมวิธี 1 ปัจจัยพอดี",
+  "Too few observations per treatment for trimmed means \\(at least 3 are needed\\)\\." = "ข้อมูลต่อกรรมวิธีน้อยเกินไปสำหรับค่าเฉลี่ยตัดปลาย (ต้องมีอย่างน้อย 3 ค่า)",
+  "Too few observations for trimmed means \\(at least 3 per group\\)\\." = "ข้อมูลน้อยเกินไปสำหรับค่าเฉลี่ยตัดปลาย (ต้องมีอย่างน้อยกลุ่มละ 3 ค่า)",
+  "Too few observations for trimmed means \\(at least 3\\)\\." = "ข้อมูลน้อยเกินไปสำหรับค่าเฉลี่ยตัดปลาย (ต้องมีอย่างน้อย 3 ค่า)",
+  "Welch's ANOVA needs exactly one treatment factor\\." = "Welch's ANOVA ต้องมีปัจจัยกรรมวิธี 1 ปัจจัยพอดี",
+  "Welch's ANOVA needs at least two observations of every treatment\\." = "Welch's ANOVA ต้องมีข้อมูลอย่างน้อย 2 ค่าในทุกกรรมวิธี",
+
   # ---- prefixes the screens put before an engine message ----
   "^Welch's ANOVA could not be run: " = "วิเคราะห์ Welch's ANOVA ไม่ได้: ",
   "^The trimmed-means comparison could not be run: " = "เปรียบเทียบค่าเฉลี่ยตัดปลายไม่ได้: ",

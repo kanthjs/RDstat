@@ -43,6 +43,7 @@
       result_card("Model fit", html_table(tb$fit)),
       result_card("Analysis of variance", html_table(tb$anova), copy = "cp_reg_anova", copy_label = "Copy table"),
       result_card("Parameter estimates", html_table(tb$coef), copy = "cp_reg_coef", copy_label = "Copy table"),
+      thai_card(thai_summary_reg(r), "cp_reg_th"),
       result_card("APA-style report", p(r$apa), copy = "cp_reg_apa"),
       code_card(reg_script(), "cp_reg_script"))
   })
@@ -94,6 +95,7 @@
   copy_button("cp_reg_anova", "ANOVA table", function() tsv(reg_tables()$anova))
   copy_button("cp_reg_coef", "Parameter estimates", function() tsv(reg_tables()$coef))
   copy_button("cp_reg_apa", "APA text", function() reg_ok()$apa)
+  copy_button("cp_reg_th", "สรุปผล", function() thai_summary_reg(reg_ok()))
   reg_file_name <- reactive(script_file(input$reg_src == "up", if (input$reg_src == "up") input$reg_file$name else reg_setup[[input$reg_example]]$file))
   reg_script <- reactive(script_reg(reg_ok(), reg_file_name()))
   copy_button("cp_reg_script", "R code", function() reg_script())

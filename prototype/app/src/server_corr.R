@@ -35,6 +35,7 @@
                                                   if (r$adjust != "none") paste0(" (", r$adjust, "-adjusted)") else "")),
         copy = "cp_corr_matrix", copy_label = "Copy table"),
       result_card("All pairs", html_table(tb$pairs), copy = "cp_corr_pairs", copy_label = "Copy table"),
+      thai_card(thai_summary_corr(r), "cp_corr_th"),
       result_card("APA-style report", lapply(r$apa, p), copy = "cp_corr_apa"),
       code_card(corr_script(), "cp_corr_script"))
   })
@@ -68,6 +69,7 @@
   copy_button("cp_corr_matrix", "Correlation matrix", function() tsv(corr_tables()$matrix))
   copy_button("cp_corr_pairs", "Pairs table", function() tsv(corr_tables()$pairs))
   copy_button("cp_corr_apa", "APA text", function() paste(corr_ok()$apa, collapse = " "))
+  copy_button("cp_corr_th", "สรุปผล", function() thai_summary_corr(corr_ok()))
   corr_file_name <- reactive(script_file(input$corr_src == "up", if (input$corr_src == "up") input$corr_file$name else corr_setup[[input$corr_example]]$file))
   corr_script <- reactive(script_corr(corr_ok(), corr_file_name()))
   copy_button("cp_corr_script", "R code", function() corr_script())

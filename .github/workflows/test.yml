@@ -1,8 +1,12 @@
 name: Test
 
-# Runs the app tests on every pull request, so a failure shows on the PR before it is merged.
+# Runs the app tests on every pull request, so a failure shows on the PR before it is merged, and on every push to
+# main, since changes are also pushed there directly.
 # Deploying stays in pages.yml, which runs only on main.
 on:
+  push:
+    branches: [main]
+    paths: ["prototype/**", "engine/**", "scripts/build_app.R", ".github/workflows/test.yml"]
   pull_request:
     paths: ["prototype/**", "engine/**", "scripts/build_app.R", ".github/workflows/test.yml"]
   workflow_dispatch:

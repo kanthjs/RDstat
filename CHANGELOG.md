@@ -3,6 +3,9 @@
 Changes to the RDstat web app that can affect results are marked **(results)**. The version is shown in the app's About tab and in every downloaded file.
 
 ## 0.1.0 (unreleased)
+- Correlation and regression get the "สรุปผล (ภาษาไทย)" card with a Copy button, as the analysis of variance and t test have: the number of significant pairs and the strongest pair with its direction; whether the model is significant, the share of variation explained, the significant terms and the optimum of a curve.
+- The Thai wording of messages now also covers the t test, correlation, regression, Welch's ANOVA, the rank-based tests and trimmed means.
+- The app tests also run on every push to main (they ran only on pull requests).
 - Data checks, notes on what was read from the file and the reasons an analysis of variance (CRD, RCBD, split plot, combined, repeated measures) stops are shown in Thai, with the English original in small text beneath; messages without a Thai wording yet stay in English. The analysis code, the R scripts and the Word / Excel reports keep English. The wording is in `src/messages_th.R`.
 - An RCBD whose only gaps are rows the file does not have (a mistyped label, the wrong block column) now reports the incomplete layout first, instead of opening with "Too many missing values".
 - The results are checked against independent software on every change (`prototype/tests/test_reference.R`, run in CI): Games-Howell against rstatix, Dunn's test against dunn.test, the trimmed-means ANOVA and Yuen's tests against WRS2, Welch's ANOVA and Kruskal-Wallis against base R, the split plot against `aov()` with `Error(Rep/Main)`, and the missing-plot estimate against a direct minimisation of the error sum of squares. The About tab lists what each analysis is compared with.

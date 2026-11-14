@@ -148,3 +148,38 @@ word_doc <- function(file, title, blocks, png = NULL) {
 b64_lines <- function(raw) { s <- jsonlite::base64_enc(raw); s <- gsub("\\s", "", s); substring(s, seq(1, nchar(s), 76), pmin(nchar(s), seq(76, nchar(s) + 75, 76))) }
 w_h2 <- function(x) sprintf("<h2>%s</h2>", htmltools::htmlEscape(x))
 w_p <- function(x, cls = NULL) sprintf("<p%s>%s</p>", if (is.null(cls)) "" else sprintf(" class=%s", cls), htmltools::htmlEscape(x))
+
+th_strength <- c(negligible = "แทบไม่มีความสัมพันธ์", weak = "ความสัมพันธ์ระดับต่ำ", moderate = "ความสัมพันธ์ระดับปานกลาง", strong = "ความสัมพันธ์ระดับสูง",
+                 `very strong` = "ความสัมพันธ์ระดับสูงมาก")
+# correlation: how many pairs are significant, and the strongest pair in words (direction and strength)
+thai_summary_corr <- function(r) {
+  pr <- r$pairs[!is.na(r$pairs$r), , drop = FALSE]
+  if (!nrow(pr)) return("ไม่สามารถคำนวณสหสัมพันธ์ได้")
+  adj <- if (r$adjust != "none") sprintf(" (ปรับค่า p ด้วยวิธี %s)", r$adjust) else ""
+  top <- pr[which.max(abs(pr$r)), ]
+  dir <- if (top$r < 0) "ทางลบ (ค่าหนึ่งเพิ่ม อีกค่าหนึ่งมีแนวโน้มลด)" else "ทางบวก (เพิ่มขึ้นไปด้วยกัน)"
+  head <- sprintf("สหสัมพันธ์แบบ %s ของ %d คู่ตัวแปร มี %d คู่ที่สัมพันธ์กันอย่างมีนัยสำคัญที่ระดับ %s%s",
+                  r$method_name, nrow(pr), sum(pr$Significant), format(r$alpha), adj)
+  best <- sprintf("คู่ที่สัมพันธ์กันมากที่สุดคือ %s กับ %s (%s = %.2f, %s) เป็น%s%s",
+                  top$Variable1, top$Variable2, r$symbol, top$r, th_p(top$PAdj), th_strength[[top$Strength]],
+                  if (top$Significant) paste0(dir, " อย่างมีนัยสำคัญ") else " แต่ไม่มีนัยสำคัญทางสถิติ")
+  paste0(head, " ", best, " ทั้งนี้สหสัมพันธ์บอกว่าตัวแปรเปลี่ยนแปลงไปด้วยกัน ไม่ได้บอกว่าตัวหนึ่งเป็นสาเหตุของอีกตัว")
+}
+
+# regression: whether the model is significant, the share of the variation it explains, the significant terms and the
+# optimum of a curve (e.g. the seeding rate that gives the highest yield)
+thai_summary_reg <- function(r) {
+  f <- r$fit
+  st <- sprintf("F = %.2f, df = %d และ %d, %s", f$f, f$df1, f$df2, th_p(f$p))
+  head <- sprintf("สมการถดถอย%s (%s) อธิบายความแปรปรวนของ %s ได้ %.1f%% (R² = %.3f, adjusted R² = %.3f)",
+                  if (r$significant) "มีนัยสำคัญทางสถิติ" else "ไม่มีนัยสำคัญทางสถิติ", st, r$response, 100 * f$r2, f$r2, f$adj_r2)
+  cf <- r$coefficients[-1, , drop = FALSE]
+  terms <- if (any(cf$Significant)) sprintf("พจน์ที่มีนัยสำคัญ: %s", paste(sprintf("%s (%s %s)", cf$Term[cf$Significant],
+                                                                                  ifelse(cf$Estimate[cf$Significant] < 0, "ค่าสัมประสิทธิ์ลบ", "ค่าสัมประสิทธิ์บวก"),
+                                                                                  fmt_sig(cf$Estimate[cf$Significant])), collapse = ", "))
+           else "ไม่มีพจน์ใดมีนัยสำคัญเมื่อพิจารณาแยกทีละพจน์"
+  opt <- if (!is.null(r$optimum)) sprintf(" เส้นโค้งมีจุด%sที่ %s = %s (ค่าทำนายของ %s = %s)%s", if (r$optimum$type == "maximum") "สูงสุด" else "ต่ำสุด",
+                                          r$predictors, fmt_sig(r$optimum$x), r$response, fmt_sig(r$optimum$y),
+                                          if (r$optimum$inside) "" else " ซึ่งอยู่นอกช่วงของข้อมูล จึงเป็นการคาดคะเนเกินข้อมูล ควรใช้อย่างระมัดระวัง") else ""
+  paste0(head, " ", terms, opt)
+}

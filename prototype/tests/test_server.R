@@ -158,6 +158,24 @@ tests <- c(auto = "HSD", LSD = "LSD", HSD = "HSD", duncan = "duncan")
   layout_msgs <- c(layout_msgs[nzchar(layout_msgs)], r$data_notes)
   left <- Filter(function(z) grepl("[A-Za-z]+ [a-z]{2,} [a-z]{2,}", gsub("\\([^()]*=[^()]*\\)", "", z)), vapply(layout_msgs, msg_th, ""))
   check(length(layout_msgs) >= 7 && !length(left), paste("Layout check: every message is translated into Thai", if (length(left)) paste("| left:", left[[1]]) else ""))
+  # the other screens' errors and notes are translated too
+  cars <- mtcars; cars$txt <- c("a", rep("1", 31)); cars$k <- 1
+  other <- c(
+    err_msg(star_ttest(cars, "independent", "mpg", "cyl")), err_msg(star_ttest(cars, "independent", "mpg", "am", levels = c("0", "0"))),
+    err_msg(star_ttest(cars, "one", "k", mu = 0)), err_msg(star_ttest(cars, "paired", x = "k", y = "k")),
+    err_msg(star_correlation(cars, "mpg")), err_msg(star_correlation(cars, c("mpg", "k"))),
+    err_msg(star_regression(cars, "mpg", character())), err_msg(star_regression(cars, "mpg", c("wt", "hp"), degree = 2)),
+    err_msg(star_regression(cars, "mpg", "k")), err_msg(star_regression(transform(cars, wt2 = 2 * wt), "mpg", c("wt", "wt2"))),
+    err_msg(star_welch(data.frame(T = c("a", "a", "b"), y = 1:3), "y", "T")),
+    err_msg(star_trimmed(data.frame(T = rep(c("a", "b"), each = 2), y = 1:4), "y", "T")),
+    err_msg(star_nonparametric(data.frame(T = rep(c("a", "b"), 3), B = c(1, 1, 2, 2, 3, 3), y = c(1:5, 9))[-1, ], "y", "T", block = "B")),
+    attr(star_prepare_data(data.frame(T = c(" a", "a", "b", "b", NA), y = c("1", "2", "x", "4,5", "6")), "y", "T"), "notes"),
+    star_correlation(transform(cars, mpg = replace(mpg, 1, NA)), c("mpg", "wt"))$data_notes,
+    star_regression(cars[1:8, ], "mpg", c("wt", "hp", "disp"))$data_notes)
+  other <- other[nzchar(other)]
+  left <- Filter(function(z) grepl("[A-Za-z]+ [a-z]{2,} [a-z]{2,}", z), vapply(other, msg_th, ""))
+  check(length(other) >= 18 && !length(left), paste("Messages: t test, correlation, regression, Welch, ranks and trimmed means are translated into Thai",
+                                                    length(other), if (length(left)) paste("| left:", left[[1]]) else ""))
   check(grepl("พบเพียงในบางระดับของ Rep", msg_th(layout_msgs[1]), fixed = TRUE) && grepl("ต่างกันแค่ตัวพิมพ์ใหญ่/เล็ก", msg_th(layout_msgs[1]), fixed = TRUE),
         "Layout check: the Thai wording keeps the cells and labels of the English message")
   rc <- star_recommend_aov(star_aov(het, "y", "T", "B", design = "RCBD"))
@@ -336,6 +354,7 @@ tests <- c(auto = "HSD", LSD = "LSD", HSD = "HSD", duncan = "duncan")
   session$setInputs(corr_src = "ex", corr_example = "cars", corr_vars = c("mpg", "hp", "wt"), corr_method = "pearson", corr_alt = "two.sided",
                     corr_adjust = "none", corr_alpha = "0.05", go_corr = 1)
   check(round(corr_ok()$r["mpg", "wt"], 4) == -0.8677, "Correlation: r(mpg, wt) = -0.8677 (original STAR)")
+  th <- thai_summary_corr(corr_ok()); check(grepl("คู่ที่สัมพันธ์กันมากที่สุดคือ", th) && grepl("ทางลบ", th) && grepl("สรุปผล (ภาษาไทย)", html(output$corr_results_ui), fixed = TRUE), "Correlation: Thai summary names the strongest pair and its direction")
   check(identical(corr_tables()$matrix$mpg, c("1", "-0.776***", "-0.868***")), "Correlation: matrix with significance stars")
   check(identical(names(corr_tables()$pairs)[c(3, 5)], c("r", "p")) && corr_tables()$pairs$p[1] == "<0.0001", "Correlation: pairs table")
   ui <- html(output$corr_results_ui); check(grepl("3 of 3", ui) && grepl("r = -0.868", ui, fixed = TRUE), "Correlation: key numbers")
@@ -359,6 +378,7 @@ tests <- c(auto = "HSD", LSD = "LSD", HSD = "HSD", duncan = "duncan")
   # ---- regression screen ----
   session$setInputs(reg_src = "ex", reg_example = "cars_multi", reg_resp = "mpg", reg_pred = c("wt", "hp"), reg_degree = "1", reg_alpha = "0.05", go_reg = 1)
   check(round(reg_ok()$anova$F[1], 2) == 69.21 && round(reg_ok()$fit$adj_r2, 4) == 0.8148, "Regression: F = 69.21, adjusted R-squared = 0.8148 (original STAR)")
+  th <- thai_summary_reg(reg_ok()); check(grepl("มีนัยสำคัญทางสถิติ", th) && grepl("82.7%", th, fixed = TRUE) && grepl("wt (ค่าสัมประสิทธิ์ลบ", th, fixed = TRUE) && grepl("สรุปผล (ภาษาไทย)", html(output$reg_results_ui), fixed = TRUE), "Regression: Thai summary gives R-squared and the significant terms")
   check(identical(reg_tables()$coef$Term, c("(Intercept)", "wt", "hp")) && "VIF" %in% names(reg_tables()$coef), "Regression: coefficient table with VIF")
   r <- reg_ok()
   e <- run_script(reg_script()); check(isTRUE(all.equal(unname(coef(e$fit)), unname(coef(r$model)))) && isTRUE(all.equal(unname(summary(e$fit)$fstatistic[1]), r$fit$f)) && isTRUE(all.equal(summary(e$fit)$adj.r.squared, r$fit$adj_r2)) && isTRUE(all.equal(AIC(e$fit), r$fit$aic)) && isTRUE(all.equal(unname(confint(e$fit)[, 1]), r$coefficients$Lower)) && isTRUE(all.equal(unname(e$vif), r$coefficients$VIF[-1])) && isTRUE(all.equal(unname(e$beta), r$coefficients$StdBeta[-1])), "Regression script: multiple regression reproduces the app (coefficients, F, AIC, CI, VIF, beta)")
@@ -367,6 +387,7 @@ tests <- c(auto = "HSD", LSD = "LSD", HSD = "HSD", duncan = "duncan")
   x <- output$dl_reg_xlsx; check(identical(readxl::excel_sheets(x), c("Model", "ANOVA", "Coefficients", "Residuals")), "Regression: xlsx sheets")
   session$setInputs(reg_example = "seeding", reg_resp = "GrainYield", reg_pred = "SeedingRate", reg_degree = "2", go_reg = 2)
   check(!is.null(reg_ok()$optimum) && reg_ok()$optimum$inside, "Regression: quadratic finds an optimum inside the range")
+  check(grepl("เส้นโค้งมีจุดสูงสุดที่ SeedingRate", thai_summary_reg(reg_ok()), fixed = TRUE), "Regression: Thai summary gives the optimum of the curve")
   r <- reg_ok()
   e <- run_script(reg_script()); check(isTRUE(all.equal(unname(coef(e$fit)), unname(coef(r$model)))) && isTRUE(all.equal(unname(summary(e$fit)$fstatistic[1]), r$fit$f)) && isTRUE(all.equal(summary(e$fit)$adj.r.squared, r$fit$adj_r2)) && isTRUE(all.equal(AIC(e$fit), r$fit$aic)) && isTRUE(all.equal(unname(confint(e$fit)[, 1]), r$coefficients$Lower)) && isTRUE(all.equal(unname(e$x_opt), r$optimum$x)) && isTRUE(all.equal(e$y_opt, r$optimum$y)), "Regression script: quadratic reproduces the app and its optimum")
   session$setInputs(reg_degree = "3", go_reg = 21); r <- reg_ok()
