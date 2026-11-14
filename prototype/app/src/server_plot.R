@@ -104,6 +104,7 @@
   output$methods_topics <- renderUI(methods_topics_ui())
   for (t in method_topics) local({ tp <- t
     observeEvent(input[[paste0("cp_topic_", tp$id)]], session$sendCustomMessage("copy_text", list(what = tp$title, text = topic_copy_text(tp)))) })
+  observeEvent(input$cp_refs_about, session$sendCustomMessage("copy_text", list(what = "References", text = paste(package_refs(), collapse = "\n\n"))))
   observeEvent(input$cp_refs, session$sendCustomMessage("copy_text", list(what = "References", text = paste(package_refs(), collapse = "\n\n"))))
 observeEvent(input$cp_mrefs, session$sendCustomMessage("copy_text", list(what = "Method references", text = paste(method_refs, collapse = "
 
