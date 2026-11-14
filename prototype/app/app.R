@@ -92,6 +92,7 @@ if (
 
 # Code is split by role into ./src; each file is sourced in the same order as before, so definitions keep their dependencies.
 source("src/helpers.R", local = TRUE) # formatting, display tables, data reading, UI building blocks
+source("src/messages_th.R", local = TRUE) # Thai wording of the analysis code's messages
 source("src/ui_components.R", local = TRUE) # data source / plot label / export controls
 source("src/guide_boxes.R", local = TRUE) # "what you get" boxes under each choice
 source("src/ui_screens.R", local = TRUE) # correlation, regression and t-test screens

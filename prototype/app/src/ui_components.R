@@ -7,8 +7,8 @@ data_source_ui <- function(p, examples, help = NULL) tagList(
 # what the file reader skipped (title lines above the column names, summary rows below the data), so it is not a surprise
 read_note_ui <- function(d) {
   notes <- attr(d, "notes")
-  if (length(notes)) div(class = "alert alert-info small", icon("circle-info"), " ", strong("Read from the file: "),
-                         tags$ul(class = "mb-0", lapply(notes, tags$li)))
+  if (length(notes)) div(class = "alert alert-info small", icon("circle-info"), " ", strong("อ่านจากไฟล์ (Read from the file): "),
+                         tags$ul(class = "mb-0", lapply(notes, function(n) tags$li(msg_ui(n)))))
 }
 # the label boxes are folded away until wanted, so that the plot comes first on a small screen
 plot_labels_ui <- function(p) tags$details(class = "plot-labels",

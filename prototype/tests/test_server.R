@@ -134,11 +134,12 @@ tests <- c(auto = "HSD", LSD = "LSD", HSD = "HSD", duncan = "duncan")
   check(identical(rc$switch_to, "welch") && grepl("numbers of observations differ", rc$observed), "Guidance: unequal variances and unequal group sizes also suggest Welch's ANOVA")
 
   # ---- incomplete or mistyped layouts: the message names the cells and the likely cause ----
-  err_msg <- function(expr) tryCatch({ expr; "" }, error = conditionMessage)
+  layout_msgs <- character()   # every message below, to check its Thai wording
+  err_msg <- function(expr) { m <- tryCatch({ expr; "" }, error = conditionMessage); layout_msgs <<- c(layout_msgs, m); m }
   lay <- expand.grid(Rep = factor(1:3), N = factor(c("N0", "N1", "N2", "N3"))); lay$Y <- c(48, 52, 50, 55, 57, 54, 60, 62, 59, 58, 61, 63)
   typo <- lay; typo$N <- as.character(typo$N); typo$N[typo$N == "N2"][1:2] <- "n2"
   m <- err_msg(star_aov(typo, "Y", "N", block = "Rep", design = "RCBD"))
-  check(grepl("have no row", m) && grepl("(Rep = 3, N = n2)", m, fixed = TRUE) && grepl("'n2' and 'N2' differ only in upper/lower case", m, fixed = TRUE),
+  check(grepl("^The layout is not complete", m) && !grepl("Too many missing", m) && grepl("have no row", m) && grepl("(Rep = 3, N = n2)", m, fixed = TRUE) && grepl("'n2' and 'N2' differ only in upper/lower case", m, fixed = TRUE),
         "Layout check: a treatment label typed in lower case is named, with the cells it leaves empty")
   m <- err_msg(star_aov(data.frame(Rep = factor(1:6), N = factor(rep(c("a", "b"), 3)), Y = c(5, 7, 6, 8, 5, 9)), "Y", "N", block = "Rep", design = "RCBD"))
   check(grepl("check that the right columns are chosen", m), "Layout check: a block column with one treatment per block points to the column choice")
@@ -153,6 +154,12 @@ tests <- c(auto = "HSD", LSD = "LSD", HSD = "HSD", duncan = "duncan")
   cmb <- expand.grid(Rep = factor(1:3), V = factor(c("A", "B", "C")), Site = factor(c("S1", "S2"))); cmb$Y <- seq(3, 6.4, by = 0.2)
   m <- err_msg(star_combined(cmb[!(cmb$Site == "S2" & cmb$V == "C"), ], "Y", "V", env = "Site", block = "Rep", design = "RCBD"))
   check(grepl("(Site = S2, V = C)", m, fixed = TRUE) && grepl("In V, 'C' appear", m, fixed = TRUE), "Layout check: combined analysis names the treatment missing at a site")
+  # the screen shows these in Thai: no English sentence (three English words in a row) may be left untranslated
+  layout_msgs <- c(layout_msgs[nzchar(layout_msgs)], r$data_notes)
+  left <- Filter(function(z) grepl("[A-Za-z]+ [a-z]{2,} [a-z]{2,}", gsub("\\([^()]*=[^()]*\\)", "", z)), vapply(layout_msgs, msg_th, ""))
+  check(length(layout_msgs) >= 7 && !length(left), paste("Layout check: every message is translated into Thai", if (length(left)) paste("| left:", left[[1]]) else ""))
+  check(grepl("พบเพียงในบางระดับของ Rep", msg_th(layout_msgs[1]), fixed = TRUE) && grepl("ต่างกันแค่ตัวพิมพ์ใหญ่/เล็ก", msg_th(layout_msgs[1]), fixed = TRUE),
+        "Layout check: the Thai wording keeps the cells and labels of the English message")
   rc <- star_recommend_aov(star_aov(het, "y", "T", "B", design = "RCBD"))
   check(identical(rc$switch_to, "rank") && grepl("no Welch version for blocks", rc$advice), "Guidance: unequal variances in RCBD suggest a transformation or Friedman")
   ui <- as.character(advice_ui(rc, "anova", "rec", FALSE, "ANOVA"))

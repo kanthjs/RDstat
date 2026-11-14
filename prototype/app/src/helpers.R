@@ -469,7 +469,7 @@ stale_note <- function(button) div(class = "alert alert-warning d-flex justify-c
        " The results below are from the earlier settings, so they are greyed out and copying and downloading are paused."),
   tags$button(type = "button", class = "btn btn-warning btn-sm flex-none", onclick = sprintf("document.getElementById('%s').click()", button), icon("rotate-right"), " Run again"))
 error_box <- function(msg) div(class = "alert alert-danger d-flex justify-content-between align-items-center gap-2",
-  div(icon("triangle-exclamation", class = "me-2"), strong("พบข้อผิดพลาด: "), msg),
+  div(icon("triangle-exclamation", class = "me-2"), strong("พบข้อผิดพลาด: "), msg_ui(msg)),
   tags$button(type = "button", class = "btn btn-sm btn-outline-danger bg-white flex-none", onclick = "var el = document.getElementById('open_feedback'); if (el) el.click();", icon("comment-dots"), " แจ้งปัญหานี้"))
 
 # columns that hold numbers (also numbers stored as text such as "1,250.5"); candidates for correlation / regression

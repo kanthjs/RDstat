@@ -133,6 +133,12 @@ star_aov <- function(data, response, treatment, block = NULL, design = c("CRD", 
   }
   miss <- is.na(d[[response]])
   if (mean(miss) > 0.1) {
+    # when every "missing" plot is a row the file does not have, the layout (a mistyped label, the wrong block column) is
+    # the problem the user must fix, so it comes first; empty responses are reported as missing values
+    if (absent_only == sum(miss)) {
+      stop("The layout is not complete: an RCBD needs every treatment in every block. ", .star_layout_problem(d0, keys),
+           sprintf(" (Plots with no row are treated as missing, and at most 10%% can be estimated; here %d of %d.)", sum(miss), length(miss)), call. = FALSE)
+    }
     stop(sprintf("Too many missing values: %d of %d plots (more than 10%%) have no response. Missing values can be estimated for up to 10%% of the plots.", sum(miss), length(miss)),
          if (absent_only > 0) paste0(" ", absent_only, " of them have no row in the data. ", .star_layout_problem(d0, keys)) else "", call. = FALSE)
   }
