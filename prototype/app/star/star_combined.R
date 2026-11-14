@@ -28,11 +28,11 @@ star_combined <- function(data, response, treatment, env, block = NULL, design =
     data_notes <- c(data_notes, sprintf("The %d row(s) with a missing response were left out of the analysis.", sum(is.na(d[[response]]))))
     d <- d[!is.na(d[[response]]), , drop = FALSE]
   }
-  if (any(table(d[c(env, treatment)]) == 0)) stop("Every treatment must appear in every environment.", call. = FALSE)
+  if (any(table(d[c(env, treatment)]) == 0)) stop("Every treatment must appear in every environment. ", .star_layout_problem(unique(d[c(env, treatment)]), c(env, treatment)), call. = FALSE)
   if (design == "RCBD" && any(table(d[c(env, block, treatment)]) != 1)) {
     stop("The layout is not complete and balanced: each environment x block x treatment combination must appear exactly once.",
          if (any(table(d[c(env, block, treatment)]) == 0)) " Some are missing (a missing yield also counts); estimate or remove them and try again." else "",
-         call. = FALSE)
+         " ", .star_layout_problem(d, c(env, block, treatment)), call. = FALSE)
   }
   y <- d[[response]]
 

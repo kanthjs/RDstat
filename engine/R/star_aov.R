@@ -41,6 +41,16 @@ star_aov <- function(data, response, treatment, block = NULL, design = c("CRD", 
     F = raw[[4]], P = raw[[5]], row.names = NULL, stringsAsFactors = FALSE
   )
   err <- anova[anova$Source == "Error", ]
+  if (!nrow(err) || err$DF < 1) stop("There are no error degrees of freedom: each treatment needs more than one plot (replication) to test differences.", call. = FALSE)
+  if (err$SS <= 1e-10 * sum((y - mean(y, na.rm = TRUE))^2, na.rm = TRUE)) {
+    stop("The error variance is zero: every plot equals the mean of its treatment, so F and P cannot be computed. Check that the response column holds the plot values and not treatment means repeated on each row.", call. = FALSE)
+  }
+  n_obs <- as.data.frame(table(d[!is.na(y), factors, drop = FALSE]), stringsAsFactors = FALSE)
+  single <- n_obs[n_obs$Freq == 1, factors, drop = FALSE]
+  if (design == "CRD" && nrow(single)) {
+    data_notes <- c(data_notes, sprintf("%d treatment(s) have a single observation (%s); their means have no replication and the comparisons involving them are weak.",
+                                        nrow(single), paste(utils::head(do.call(paste, c(single, sep = " x ")), 4), collapse = ", ")))
+  }
   inter_name <- if (length(factors) == 2) paste(factors, collapse = ":") else NULL
   effect_names <- c(factors, inter_name)
   effects <- anova[match(effect_names, anova$Source), c("Source", "DF", "F", "P")]
@@ -108,10 +118,12 @@ star_aov <- function(data, response, treatment, block = NULL, design = c("CRD", 
 # estimates and the error df of the model fitted to the observed data, which the ANOVA of the completed data uses.
 .star_estimate_missing <- function(d, response, factors, block) {
   keys <- c(block, factors)
+  d0 <- d # as read, before the absent plots are added
   n_cell <- table(d[keys])
   if (any(n_cell > 1)) {
-    stop("The data are unbalanced: some ", paste(keys, collapse = " x "), " combinations have more than one row. An RCBD needs one plot per treatment in each block.", call. = FALSE)
+    stop("The data are unbalanced: an RCBD needs one plot per treatment in each block. ", .star_layout_problem(d, keys), call. = FALSE)
   }
+  absent_only <- sum(n_cell == 0) # plots with no row at all, as opposed to a row with an empty response
   if (any(n_cell == 0)) { # add the absent plots as missing values
     absent <- as.data.frame(n_cell, stringsAsFactors = FALSE)
     absent <- absent[absent$Freq == 0, keys, drop = FALSE]
@@ -121,7 +133,8 @@ star_aov <- function(data, response, treatment, block = NULL, design = c("CRD", 
   }
   miss <- is.na(d[[response]])
   if (mean(miss) > 0.1) {
-    stop(sprintf("Too many missing values: %d of %d plots (more than 10%%) have no response. Missing values can be estimated for up to 10%% of the plots.", sum(miss), length(miss)), call. = FALSE)
+    stop(sprintf("Too many missing values: %d of %d plots (more than 10%%) have no response. Missing values can be estimated for up to 10%% of the plots.", sum(miss), length(miss)),
+         if (absent_only > 0) paste0(" ", absent_only, " of them have no row in the data. ", .star_layout_problem(d0, keys)) else "", call. = FALSE)
   }
   fit <- stats::lm(.star_aov_formula(response, factors, block), data = d[!miss, , drop = FALSE])
   pred <- suppressWarnings(stats::predict(fit, newdata = d[miss, , drop = FALSE]))
@@ -148,6 +161,50 @@ star_aov <- function(data, response, treatment, block = NULL, design = c("CRD", 
 .star_is_balanced <- function(cols) {
   counts <- table(cols)
   all(counts == counts[1])
+}
+
+# What is wrong with a layout that needs each combination of `keys` exactly once, in words the user can act on: the
+# combinations with no row and those with more than one (the first few of each), a label of one column found with only
+# some levels of another (a typing error, or the wrong column chosen), and labels that differ only in upper/lower case.
+# "" when the layout is complete.
+.star_layout_problem <- function(d, keys, max_show = 4) {
+  cnt <- table(d[keys])
+  if (all(cnt == 1)) return("")
+  cells <- as.data.frame(cnt, stringsAsFactors = FALSE)
+  show <- function(rows) {
+    lab <- apply(rows[keys], 1, function(r) paste(paste(keys, "=", r), collapse = ", "))
+    paste0(paste0("(", utils::head(lab, max_show), ")", collapse = "; "), if (length(lab) > max_show) sprintf("; and %d more", length(lab) - max_show) else "")
+  }
+  out <- character()
+  absent <- cells[cells$Freq == 0, , drop = FALSE]
+  if (nrow(absent)) out <- c(out, sprintf("%d combination(s) have no row: %s.", nrow(absent), show(absent)))
+  extra <- cells[cells$Freq > 1, , drop = FALSE]
+  if (nrow(extra)) out <- c(out, sprintf("%d combination(s) have more than one row: %s.", nrow(extra), show(extra)))
+  # the likeliest cause of absent cells: a few labels of one column seen with only some levels of another (a typing
+  # error; the column with the fewest such labels is named), or every label so (the wrong column chosen)
+  if (nrow(absent)) {
+    best <- NULL; whole <- NULL
+    for (k in keys) for (o in setdiff(keys, k)) {
+      seen <- rowSums(table(d[[k]], d[[o]]) > 0)
+      part <- names(seen)[seen < nlevels(d[[o]])]
+      if (length(part) == nlevels(d[[k]])) { if (is.null(whole)) whole <- c(k, o) }
+      else if (length(part) && (is.null(best) || length(part) <= length(best$part))) best <- list(k = k, o = o, part = part)
+    }
+    if (!is.null(best)) {
+      out <- c(out, sprintf("In %s, %s appear(s) with only some levels of %s: check these labels for a typing error.",
+                            best$k, paste0("'", utils::head(best$part, max_show), "'", collapse = ", "), best$o))
+    } else if (!is.null(whole)) {
+      out <- c(out, sprintf("No level of %s appears with every level of %s: check that the right columns are chosen (in a complete layout every block holds every treatment).",
+                            whole[1], whole[2]))
+    }
+  }
+  for (k in keys) {
+    lv <- levels(d[[k]]); low <- tolower(lv)
+    dup <- unique(low[duplicated(low)])
+    if (length(dup)) out <- c(out, sprintf("In %s, %s differ only in upper/lower case and are read as different labels.", k,
+                                           paste(vapply(dup, function(z) paste0("'", lv[low == z], "'", collapse = " and "), ""), collapse = "; ")))
+  }
+  paste(out, collapse = " ")
 }
 
 .star_aov_summary <- function(anova, effects, means, factors, response, interaction_sig, tests_used, alpha, cv) {

@@ -41,7 +41,8 @@ star_repeated <- function(data, response, treatment, time, block,
   if (nlevels(d[[time]]) < 2) stop("The time factor needs at least two times.", call. = FALSE)
   cnt <- table(d[[block]], d[[treatment]], d[[time]])
   if (any(cnt != 1)) {
-    stop("The layout is not complete: each plot (", if (crd) "plot number" else "block", " x ", treatment, ") must have exactly one value at each level of ", time, ".", call. = FALSE)
+    stop("The layout is not complete: each plot (", if (crd) "plot number" else "block", " x ", treatment, ") must have exactly one value at each level of ", time, ". ",
+         .star_layout_problem(d, c(block, treatment, time)), call. = FALSE)
   }
 
   sph <- .star_sphericity(d, response, treatment, time, block, alpha, correction)

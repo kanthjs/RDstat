@@ -33,7 +33,8 @@ star_splitplot <- function(data, response, main, sub, block,
   }
   cnt <- table(d[[block]], d[[main]], d[[sub]])
   if (any(cnt != 1)) {
-    stop("The layout is not complete and balanced: each ", if (crd) "replication" else "block", " x ", main, " x ", sub, " combination must appear exactly once.", call. = FALSE)
+    stop("The layout is not complete and balanced: each ", if (crd) "replication" else "block", " x ", main, " x ", sub, " combination must appear exactly once. ",
+         .star_layout_problem(d, c(block, main, sub)), call. = FALSE)
   }
 
   # whole-plot unit = block (replication) x main-plot level

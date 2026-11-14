@@ -3,6 +3,8 @@
 Changes to the RDstat web app that can affect results are marked **(results)**. The version is shown in the app's About tab and in every downloaded file.
 
 ## 0.1.0 (unreleased)
+- Clearer messages for an incomplete or mistyped layout (RCBD, split plot, combined analysis, repeated measures): the message names the combinations with no row or with more than one row, the labels found in only some blocks or environments (a typing error such as `n2` for `N2`), and says when no block holds every treatment (the wrong column chosen as block). Earlier an RCBD with a mistyped treatment label stopped with "Too many missing values" although no value was missing.
+- The analysis of variance stops with an explanation when the error variance is zero (every plot equal to its treatment mean, e.g. means repeated on each row) or there are no error degrees of freedom, and a CRD notes the treatments that have a single observation.
 - The app asks to be cited through R and the packages it uses, not by its own name: the About tab lists their references with a Copy button, and the methods paragraph in Word reports now starts "Data were analysed in R x.y (R Core Team)" without the app's name or version (the version is still in each file's header).
 - A notice that the app is not suited to mobile phones appears at the top of every page on screens narrower than 992 px, and the About tab says so too.
 - Downloads (plots, Excel, Word, TXT, the blank template) work in Chrome and Edge on the web version. The browser was fetching the file from the web host instead of the app, so a click saved an error page as .html. The download buttons no longer carry the `download` attribute (the workaround in Shiny's documentation for Shinylive); the file names are unchanged.
