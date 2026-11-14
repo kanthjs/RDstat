@@ -244,6 +244,27 @@ about_ui <- div(
     strong("beta version "),
     "ผลลัพธ์ได้ตรวจเทียบกับโปรแกรม STAR ด้วยข้อมูลตัวอย่างในแอปแล้ว แต่อยู่ระหว่างการพัฒนา ดังนั้นผลวิเคราะห์ที่ได้ควรตรวจสอบด้วยโปรแกรมอื่นหรือปรึกษานักสถิติ และสามารถแจ้งเมื่อพบผลที่ดูผิดปกติ"
   ),
+  h4("การตรวจสอบความถูกต้องของผล"),
+  p(
+    "ผลของแอปถูกเทียบกับโปรแกรมหรือวิธีคำนวณอิสระด้านล่างด้วยการทดสอบอัตโนมัติ ",
+    "ข้อมูลที่ใช้เทียบส่วนใหญ่มาจากตัวอย่างในหนังสือ Gomez & Gomez (1984) ",
+    "นอกจากนี้ โค้ด R ที่แอปสร้างให้ (การ์ด \"R code to repeat this analysis\") ก็ถูกรันแยกและต้องให้ตัวเลขเดียวกับหน้าจอ"
+  ),
+  tags$table(
+    class = "table table-sm table-bordered small",
+    tags$thead(tags$tr(tags$th("การวิเคราะห์"), tags$th("เทียบกับ"))),
+    tags$tbody(
+      tags$tr(tags$td("ANOVA ของ CRD และ RCBD (1-2 ปัจจัย), LSD, Tukey HSD, DMRT, CV"), tags$td("โปรแกรม STAR 2.0.2 ต้นฉบับของ IRRI")),
+      tags$tr(tags$td("Split plot ใน RCBD และ CRD"), tags$td("STAR 2.0.2 และ ", code("aov()"), " แบบ ", code("Error(Rep/Main)"), " ของ R")),
+      tags$tr(tags$td("การวิเคราะห์รวมหลายสถานที่/ฤดู"), tags$td("STAR 2.0.2 (", code("combAOVTest()"), ")")),
+      tags$tr(tags$td("วัดซ้ำตามเวลา (Greenhouse-Geisser, Huynh-Feldt, Mauchly)"), tags$td(code("anova.mlm()"), " และ ", code("mauchly.test()"), " ของ R")),
+      tags$tr(tags$td("ประมาณค่าแปลงที่หายใน RCBD"), tags$td("ค่าที่ทำให้ SS ของความคลาดเคลื่อนต่ำสุด (วิธีของ Yates) คำนวณแยกด้วย ", code("optimize()"))),
+      tags$tr(tags$td("Welch's ANOVA และ Games-Howell"), tags$td(code("oneway.test()"), " ของ R และแพ็กเกจ rstatix")),
+      tags$tr(tags$td("Kruskal-Wallis และ Dunn's test"), tags$td("STAR 2.0.2, ", code("kruskal.test()"), " และแพ็กเกจ dunn.test")),
+      tags$tr(tags$td("ค่าเฉลี่ยตัดปลาย (Wilcox, Yuen)"), tags$td("แพ็กเกจ WRS2")),
+      tags$tr(tags$td("t-test, สหสัมพันธ์, การถดถอย"), tags$td("STAR 2.0.2"))
+    )
+  ),
   h4("ข้อมูลของคุณ"),
   p("ไฟล์ของคุณถูกอ่านและวิเคราะห์ภายในเบราว์เซอร์เท่านั้น ไม่ได้ถูกอัปโหลดไปยังเซิร์ฟเวอร์ใด"),
   h4("คอมพิวเตอร์ที่แนะนำ"),

@@ -23,8 +23,10 @@ jobs:
         with:
           use-public-rspm: true
       - name: Install packages
-        run: Rscript -e 'install.packages(c("shiny", "ggplot2", "writexl", "readxl", "agricolae", "lmtest", "mctest", "svglite", "lattice"))'
+        run: Rscript -e 'install.packages(c("shiny", "ggplot2", "writexl", "readxl", "agricolae", "lmtest", "mctest", "svglite", "lattice", "rstatix", "dunn.test", "WRS2"))'
       - name: Copy engine into the app
         run: Rscript scripts/build_app.R
       - name: Test the app
         run: Rscript prototype/tests/test_server.R
+      - name: Compare with reference software
+        run: Rscript prototype/tests/test_reference.R
