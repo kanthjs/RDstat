@@ -2,6 +2,9 @@
 here <- dirname(normalizePath(sub("--file=", "", grep("--file=", commandArgs(FALSE), value = TRUE))))
 setwd(file.path(here, "..", "app"))
 suppressMessages(library(shiny))
+# a package the app needs but this R lacks makes the analyses that use it stop with an empty "Error:" (req() on an error), so name it
+missing <- Filter(function(p) !requireNamespace(p, quietly = TRUE), c("agricolae", "lmtest", "mctest", "ggplot2", "readxl", "writexl"))
+if (length(missing)) stop("Install these packages first: ", paste(missing, collapse = ", "), call. = FALSE)
 app <- source("app.R")$value
 check <- function(cond, msg) if (!isTRUE(cond)) stop("FAILED: ", msg, call. = FALSE) else cat("ok  ", msg, "\n")
 

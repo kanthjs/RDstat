@@ -539,7 +539,7 @@ ui <- bslib::page_navbar(
   fillable = FALSE,
   lang = "th",
   navbar_options = bslib::navbar_options(bg = brand[["main"]], theme = "dark"),
-  header = tags$head(
+  header = tagList(tags$head(
     tags$script(HTML(copy_js)),
     tags$script(HTML(stale_js)),
     tags$script(HTML(download_fix_js)),
@@ -554,7 +554,7 @@ ui <- bslib::page_navbar(
     icon("desktop"), " ",
     strong("แอปนี้ไม่เหมาะกับการใช้บนโทรศัพท์มือถือ"),
     " หน่วยความจำอาจไม่พอและตารางผลลัพธ์จะแสดงไม่ครบ โปรดเปิดบนโน้ตบุ๊กหรือคอมพิวเตอร์ตั้งโต๊ะ (ดูรายละเอียดที่แท็บ About)"
-  ),
+  )),
   tabPanel("Home", home_ui),
   tabPanel("Two groups", tt_ui, value = "t-test"),
   tabPanel(
